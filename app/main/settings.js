@@ -22,7 +22,7 @@ const DEFAULTS = Object.freeze({
 });
 
 // idiomas suportados pela casca (devem existir em renderer/i18n/locales.js)
-const LANGUAGES = ['pt-BR', 'en', 'es'];
+const LANGUAGES = ['pt-BR', 'en', 'es', 'fr', 'de', 'it', 'nl', 'pl', 'ru', 'ja', 'ko', 'zh-CN'];
 
 let filePath = null;
 let state = { ...DEFAULTS };

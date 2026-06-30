@@ -22,27 +22,29 @@
     return n.toFixed(n >= 10 || i === 0 ? 0 : 1) + ' ' + u[i];
   }
 
-  // itens do menu ⋮ (label, ação dispatch, atalho exibido)
+  // itens do menu ⋮ (label fallback, chave i18n, ação dispatch, atalho exibido)
   const MENU_ITEMS = [
-    { label: 'Nova aba', action: 'new-tab', key: '⌘T' },
-    { label: 'Nova janela', action: 'new-window', key: '⌘N' },
+    { label: 'Nova aba', i18n: 'menu.newTab', action: 'new-tab', key: '⌘T' },
+    { label: 'Nova janela', i18n: 'menu.newWindow', action: 'new-window', key: '⌘N' },
     { sep: true },
-    { label: 'Localizar na página', action: 'find', key: '⌘F' },
-    { label: 'Modo leitor', action: 'reader', key: '⌥⌘R' },
-    { label: 'Traduzir página', action: 'translate', key: '' },
-    { label: 'Imprimir', action: 'print', key: '⌘P' },
-    { label: 'Mais zoom', action: 'zoom-in', key: '⌘+' },
-    { label: 'Menos zoom', action: 'zoom-out', key: '⌘-' },
-    { label: 'Zoom padrão', action: 'zoom-reset', key: '⌘0' },
+    { label: 'Localizar na página', i18n: 'menu.find', action: 'find', key: '⌘F' },
+    { label: 'Modo leitor', i18n: 'menu.reader', action: 'reader', key: '⌥⌘R' },
+    { label: 'Traduzir página', i18n: 'menu.translate', action: 'translate', key: '' },
+    { label: 'Imprimir', i18n: 'menu.print', action: 'print', key: '⌘P' },
+    { label: 'Mais zoom', i18n: 'menu.zoomIn', action: 'zoom-in', key: '⌘+' },
+    { label: 'Menos zoom', i18n: 'menu.zoomOut', action: 'zoom-out', key: '⌘-' },
+    { label: 'Zoom padrão', i18n: 'menu.zoomReset', action: 'zoom-reset', key: '⌘0' },
     { sep: true },
-    { label: 'Histórico', action: 'history', key: '⌘Y' },
-    { label: 'Downloads', action: 'downloads', key: '⌘⇧J' },
-    { label: 'Extensões', action: 'extensions', key: '' },
-    { label: 'Configurações', action: 'settings', key: '⌘,' },
+    { label: 'Histórico', i18n: 'menu.history', action: 'history', key: '⌘Y' },
+    { label: 'Downloads', i18n: 'menu.downloads', action: 'downloads', key: '⌘⇧J' },
+    { label: 'Extensões', i18n: 'menu.extensions', action: 'extensions', key: '' },
+    { label: 'Configurações', i18n: 'menu.settings', action: 'settings', key: '⌘,' },
     { sep: true },
-    { label: 'Ferramentas do desenvolvedor', action: 'devtools', key: '⌘⌥I' },
-    { label: 'Sobre o Logica Pilot', action: 'about', key: '' },
+    { label: 'Ferramentas do desenvolvedor', i18n: 'menu.devtools', action: 'devtools', key: '⌘⌥I' },
+    { label: 'Sobre o Logica Pilot', i18n: 'menu.about', action: 'about', key: '' },
   ];
+  // rótulo traduzido do item (cai no label PT-BR se o i18n não estiver pronto)
+  const miLabel = (it) => (window.i18n && it.i18n ? window.i18n.t(it.i18n) : it.label);
 
   class Overlays {
     constructor() {
@@ -95,7 +97,7 @@
     // nativo do SO fica SEMPRE acima dela. Fallback: menu HTML.
     openMenuNative() {
       if (window.pilot && window.pilot.showAppMenu) {
-        const items = MENU_ITEMS.map((it) => (it.sep ? { sep: true } : { label: it.label, action: it.action, key: it.key }));
+        const items = MENU_ITEMS.map((it) => (it.sep ? { sep: true } : { label: miLabel(it), action: it.action, key: it.key }));
         const r = this.menuBtn.getBoundingClientRect();
         const dark = document.documentElement.getAttribute('data-theme') !== 'light';
         window.pilot.showAppMenu({
@@ -114,7 +116,7 @@
       for (const it of MENU_ITEMS) {
         if (it.sep) { this.appMenu.appendChild(el('div', 'menu-sep')); continue; }
         const item = el('div', 'menu-item',
-          '<span>' + escapeHtml(it.label) + '</span>' + (it.key ? '<span class="mi-key">' + escapeHtml(it.key) + '</span>' : ''));
+          '<span>' + escapeHtml(miLabel(it)) + '</span>' + (it.key ? '<span class="mi-key">' + escapeHtml(it.key) + '</span>' : ''));
         item.addEventListener('click', (e) => { e.stopPropagation(); this.closeMenu(); this.dispatch(it.action); });
         this.appMenu.appendChild(item);
       }
