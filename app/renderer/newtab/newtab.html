@@ -39,6 +39,7 @@
         type="text"
         name="q"
         placeholder="Pesquise na web ou digite um endereço"
+        data-i18n-ph="home.search"
         aria-label="Pesquisar ou digitar endereço"
         spellcheck="false"
         autofocus />
@@ -59,7 +60,7 @@
         <span class="pilot-card-mark" aria-hidden="true">◢</span>
         <div class="pilot-card-titles">
           <strong class="pilot-card-title">Pilot</strong>
-          <span class="pilot-card-sub">Diga um objetivo — eu navego, clico e leio por você.</span>
+          <span class="pilot-card-sub" data-i18n="home.pilotSub">Diga um objetivo — eu navego, clico e leio por você.</span>
         </div>
       </div>
       <form class="pilot-card-form" id="pilot-form" autocomplete="off">
@@ -68,9 +69,10 @@
           class="pilot-card-input"
           rows="2"
           placeholder="O que você quer que eu faça? Ex: pesquise o preço do RTX 4090"
+          data-i18n-ph="home.pilotPlaceholder"
           aria-label="Objetivo para o Pilot"
           spellcheck="false"></textarea>
-        <button type="submit" class="pilot-card-go" id="pilot-go">Pilotar ▸</button>
+        <button type="submit" class="pilot-card-go" id="pilot-go" data-i18n="pilot.run">Pilotar ▸</button>
       </form>
     </section>
 
@@ -82,7 +84,7 @@
          fetch pilot://newtab/_data/news?cat=. Estilo Edge/MSN: abas + grade. -->
     <section class="news" id="news" aria-label="Notícias">
       <div class="news-head">
-        <h2 class="news-title">Notícias</h2>
+        <h2 class="news-title" data-i18n="home.newsTitle">Notícias</h2>
         <div class="news-tabs" id="news-tabs" role="tablist" aria-label="Categorias de notícias"></div>
       </div>
       <div class="news-grid" id="news-grid" aria-live="polite"></div>
@@ -91,7 +93,7 @@
 
   <footer class="foot">
     <span class="foot-dot" aria-hidden="true">·</span>
-    <span class="foot-text">Navegação inteligente · Logica Pilot</span>
+    <span class="foot-text" data-i18n="home.footer">Navegação inteligente · Logica Pilot</span>
   </footer>
 
   <script src="newtab.js"></script>

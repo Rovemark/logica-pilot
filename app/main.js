@@ -471,6 +471,35 @@ async function readJsonBody(request) {
  * Despacha rotas pilot://<host>/_data/... (GET) e /_action/... (POST).
  * Retorna sempre uma Response JSON. Erros viram {ok:false}.
  */
+// Carrega o catálogo de traduções (renderer/i18n/locales.js) no processo principal
+// p/ servir à home isolada (pilot://). Cache; lê via VM com shim de window.
+let _uiLocales = null;
+function loadLocales() {
+  if (_uiLocales) return _uiLocales;
+  try {
+    const src = fs.readFileSync(path.join(__dirname, 'renderer', 'i18n', 'locales.js'), 'utf8');
+    const sandbox = { window: {} };
+    require('vm').runInNewContext(src, sandbox, { timeout: 1000 });
+    _uiLocales = sandbox.window.LP_LOCALES || {};
+  } catch (e) {
+    console.warn('[i18n] loadLocales falhou:', e && e.message);
+    _uiLocales = {};
+  }
+  return _uiLocales;
+}
+
+// Resolve o idioma da UI: 'auto'/vazio → idioma do SO (app.getLocale), com fallback
+// inteligente (en-US→en, pt-PT→pt-BR) p/ um locale suportado.
+function resolveUiLang(setting) {
+  const codes = Object.keys(loadLocales());
+  let want = setting;
+  if (!want || want === 'auto') { try { want = app.getLocale(); } catch { want = 'en'; } }
+  if (codes.includes(want)) return want;
+  const base = String(want || '').toLowerCase().split('-')[0];
+  const hit = codes.find((c) => c.toLowerCase().split('-')[0] === base);
+  return hit || (codes.includes('en') ? 'en' : (codes[0] || 'en'));
+}
+
 async function handlePilotApi(host, pathname, method, request) {
   const q = (new URL(request.url)).searchParams;
 
@@ -486,6 +515,12 @@ async function handlePilotApi(host, pathname, method, request) {
       const cat = (q.get('cat') || 'top').toLowerCase();
       const data = await newsFeed.getNews(cat);
       return jsonResponse(data, data.ok ? 200 : 200); // 200 sempre; o front trata ok:false
+    }
+    // i18n da home: a home é isolada (pilot://) e não compartilha window com a casca,
+    // então o main entrega o idioma resolvido + o mapa de strings (lê locales.js).
+    if (method === 'GET' && pathname === '/_data/i18n') {
+      const lang = resolveUiLang(settingsStore.get().language);
+      return jsonResponse({ ok: true, lang, map: loadLocales()[lang] || {} });
     }
   }
 

@@ -4,6 +4,19 @@
 (function () {
   'use strict';
 
+  // ── i18n da home: a home é isolada (pilot://), então o main entrega o idioma
+  // resolvido + o mapa de strings via fetch _data/i18n. t()=traduz com fallback. ──
+  var LP_I18N = {};
+  function t(key, fallback) { return (LP_I18N[key] != null) ? LP_I18N[key] : fallback; }
+  function applyI18n() {
+    document.querySelectorAll('[data-i18n]').forEach(function (e) {
+      var v = LP_I18N[e.getAttribute('data-i18n')]; if (v != null) e.textContent = v;
+    });
+    document.querySelectorAll('[data-i18n-ph]').forEach(function (e) {
+      var v = LP_I18N[e.getAttribute('data-i18n-ph')]; if (v != null) e.setAttribute('placeholder', v);
+    });
+  }
+
   // ── Detecção de URL vs termo de busca ──────────────────────────
   // Heurística no estilo omnibox do Chrome: decide se o texto digitado
   // deve virar uma navegação direta ou uma pesquisa no Google.
@@ -346,7 +359,7 @@
     if (!newsGridEl) return;
     newsGridEl.textContent = '';
     if (!items || !items.length) {
-      renderNewsState('Não consegui carregar as notícias agora.');
+      renderNewsState(t('news.error', 'Não consegui carregar as notícias agora.'));
       return;
     }
     var frag = document.createDocumentFragment();
@@ -373,12 +386,12 @@
           newsCache[cat] = items;
           renderNewsItems(items);
         } else {
-          renderNewsState('Não consegui carregar as notícias agora.');
+          renderNewsState(t('news.error', 'Não consegui carregar as notícias agora.'));
         }
       })
       .catch(function () {
         if (token !== newsReqToken) return;
-        renderNewsState('Não consegui carregar as notícias agora.');
+        renderNewsState(t('news.error', 'Não consegui carregar as notícias agora.'));
       });
   }
 
@@ -404,7 +417,7 @@
       b.setAttribute('data-cat', c.id);
       b.setAttribute('aria-selected', 'false');
       b.tabIndex = -1;
-      b.textContent = c.label;
+      b.textContent = t('news.cat.' + c.id, c.label);
       b.addEventListener('click', function () {
         if (newsCurrentCat === c.id) return;
         setActiveTab(c.id);
@@ -419,4 +432,16 @@
     buildNewsTabs();
     loadNews(newsCurrentCat);
   }
+
+  // idioma + traduções (entregues pelo main) → reaplica na home isolada.
+  fetch('pilot://newtab/_data/i18n', { headers: { accept: 'application/json' } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d || !d.ok || !d.map) return;
+      LP_I18N = d.map;
+      try { document.documentElement.lang = d.lang || 'pt-BR'; } catch (e) {}
+      applyI18n();
+      if (newsTabsEl) buildNewsTabs(); // re-renderiza as abas de categoria traduzidas
+    })
+    .catch(function () {});
 })();
