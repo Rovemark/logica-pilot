@@ -26,7 +26,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { webContents, BrowserWindow, ipcMain } = require('electron');
+const { webContents, BrowserWindow, ipcMain, dialog } = require('electron');
 
 let ElectronChromeExtensions = null;
 let webStore = null;
@@ -290,6 +290,40 @@ function send(win, channel, payload) {
     try { win.webContents.send(channel, payload); } catch {}
   }
 }
+
+/** Instala uma extensão da Chrome Web Store pelo ID (programático — NÃO depende
+ *  da loja reconhecer o browser; bypassa o bloqueio "não é Chrome"). */
+async function installById(id, opts = {}) {
+  if (!webStore || typeof webStore.installExtension !== 'function') {
+    throw new Error('Suporte à Chrome Web Store indisponível.');
+  }
+  if (!/^[a-p]{32}$/.test(String(id || ''))) throw new Error('ID de extensão inválido.');
+  return webStore.installExtension(id, { session: _session || undefined, ...opts });
+}
+
+// Handler IPC: instala da Web Store pelo ID (registrado aqui p/ não tocar no main.js).
+ipcMain.handle('ext:install-id', async (evt, { id } = {}) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  try {
+    const ext = await installById(id);
+    const name = (ext && (ext.name || (ext.manifest && ext.manifest.name))) || 'extensão';
+    try {
+      dialog.showMessageBox(win || undefined, {
+        type: 'info', title: 'Logica Pilot',
+        message: 'Extensão instalada', detail: name + ' está ativa. O ícone aparece na barra de extensões.',
+      });
+    } catch {}
+    return { ok: true, name };
+  } catch (e) {
+    try {
+      dialog.showMessageBox(win || undefined, {
+        type: 'error', title: 'Logica Pilot',
+        message: 'Não consegui instalar da Web Store', detail: e.message,
+      });
+    } catch {}
+    return { ok: false, error: e.message };
+  }
+});
 
 /** Carrega uma extensão desempacotada de uma pasta escolhida pelo usuário. */
 async function loadUnpacked(dir) {

@@ -8,8 +8,11 @@
     um <webview> isolado (sem acesso a window.pilot). NADA de <script> inline:
     o JS vem por <script src>. Favicons vêm do Google s2 (img-src).
   -->
+  <!-- img-src libera https: para as miniaturas das notícias (vêm de CDNs variados:
+       glbimg, cnnbrasil, infomoney…). connect-src 'self' cobre o fetch a
+       pilot://newtab/_data/* (mesma origem). -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https://www.google.com data:; connect-src 'self'; base-uri 'none'; form-action 'none';" />
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https: data:; connect-src 'self'; base-uri 'none'; form-action 'none';" />
   <title>Nova aba</title>
   <link rel="stylesheet" href="newtab.css" />
 </head>
@@ -48,9 +51,42 @@
       </button>
     </form>
 
+    <!-- Card Pilot (IA): pede à casca para abrir o painel autônomo já preenchido.
+         A home é isolada (sem window.pilot); fala com a casca via window.lpHome
+         exposto pelo webview-preload (guardado por protocolo pilot://). -->
+    <section class="pilot-card" aria-label="Pilot — controle autônomo">
+      <div class="pilot-card-head">
+        <span class="pilot-card-mark" aria-hidden="true">◢</span>
+        <div class="pilot-card-titles">
+          <strong class="pilot-card-title">Pilot</strong>
+          <span class="pilot-card-sub">Diga um objetivo — eu navego, clico e leio por você.</span>
+        </div>
+      </div>
+      <form class="pilot-card-form" id="pilot-form" autocomplete="off">
+        <textarea
+          id="pilot-input"
+          class="pilot-card-input"
+          rows="2"
+          placeholder="O que você quer que eu faça? Ex: pesquise o preço do RTX 4090"
+          aria-label="Objetivo para o Pilot"
+          spellcheck="false"></textarea>
+        <button type="submit" class="pilot-card-go" id="pilot-go">Pilotar ▸</button>
+      </form>
+    </section>
+
     <!-- Atalhos rápidos / Mais visitados (grade dinâmica, populada por newtab.js).
          Cai para a lista padrão quando ainda não há histórico. -->
     <nav class="shortcuts" id="shortcuts" aria-label="Atalhos rápidos"></nav>
+
+    <!-- Feed de notícias (PT-BR/Brasil). Carregado por newtab.js via
+         fetch pilot://newtab/_data/news?cat=. Estilo Edge/MSN: abas + grade. -->
+    <section class="news" id="news" aria-label="Notícias">
+      <div class="news-head">
+        <h2 class="news-title">Notícias</h2>
+        <div class="news-tabs" id="news-tabs" role="tablist" aria-label="Categorias de notícias"></div>
+      </div>
+      <div class="news-grid" id="news-grid" aria-live="polite"></div>
+    </section>
   </main>
 
   <footer class="foot">

@@ -39,11 +39,47 @@ const downloadsStore = require('./main/downloads-store');
 const settingsStore = require('./main/settings');
 const searchEngines = require('./main/search-engines');
 const bookmarksStore = require('./main/bookmarks-store');
+const newsFeed = require('./main/news');
 
 const pkg = require('../package.json');
 
+// ── Guarda anti-crash do processo principal ─────────────────────────────────
+// Bug conhecido da electron-chrome-extensions@4.1.1: em navegação rápida o frame
+// é descartado ANTES do handler onBeforeNavigate acessar o WebFrameMain, lançando
+// "Render frame was disposed before WebFrameMain could be accessed" como exceção
+// NÃO-capturada → o Electron derruba o app inteiro (diálogo "A JavaScript error…").
+// É uma corrida benigna (o frame já morreu; nada a fazer). Engolimos SÓ esse erro
+// e seguimos vivos; qualquer outra exceção continua sendo logada para diagnóstico.
+process.on('uncaughtException', (err) => {
+  const msg = String((err && err.message) || err);
+  if (
+    /Render frame was disposed before WebFrameMain could be accessed/i.test(msg) ||
+    /WebFrameMain could be accessed/i.test(msg)
+  ) {
+    console.warn('[safe] frame descartado durante navegação (ignorado):', msg);
+    return;
+  }
+  console.error('[uncaughtException]', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
+
 // flags Chromium úteis (não-fatais se ignoradas)
 app.commandLine.appendSwitch('disable-features', 'AutomationControlled');
+
+// Apresentar como Google Chrome: UA limpo (sem "Electron/Logica Pilot") pra sites
+// não quebrarem E pra a Chrome Web Store reconhecer o browser (some o aviso
+// "mude para o Chrome"). A instalação real é programática (installExtension),
+// mas o UA limpo deixa a loja amigável.
+try {
+  const _chrome = process.versions.chrome || '130.0.0.0';
+  const _os = process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7'
+    : process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64'
+    : 'X11; Linux x86_64';
+  app.userAgentFallback =
+    `Mozilla/5.0 (${_os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${_chrome} Safari/537.36`;
+} catch {}
 
 const PARTITION = webviewManager.PARTITION; // 'persist:logica-pilot'
 const RENDERER_DIR = path.join(__dirname, 'renderer');
@@ -249,6 +285,27 @@ async function runUiTest(win) {
 
   console.log('[UITEST] probe: ' + JSON.stringify(probe));
 
+  // diagnóstico do FEED — pega o webContents do GUEST (home pilot://newtab) direto
+  // e faz o fetch da rota DENTRO do contexto/partition da home.
+  let news = {};
+  try {
+    let guest = null;
+    for (let i = 0; i < 25 && !guest; i++) {
+      guest = webContents.getAllWebContents().find((w) => { try { return /pilot:\/\/newtab/.test(w.getURL()); } catch { return false; } });
+      if (!guest) await new Promise((r) => setTimeout(r, 200));
+    }
+    if (!guest) {
+      news = { noGuest: true, urls: webContents.getAllWebContents().map((w) => { try { return w.getURL(); } catch { return '?'; } }) };
+    } else {
+      for (let i = 0; i < 25; i++) {
+        news = await guest.executeJavaScript(`(async function(){var o={url:location.href,grid:((document.getElementById('news-grid')||{}).children||[]).length,has:!!document.getElementById('news-grid')};try{var resp=await fetch('pilot://newtab/_data/news?cat=top');o.st=resp.status;var j=await resp.json();o.items=(j.items||[]).length;o.ok=j.ok;}catch(e){o.err=String(e&&e.message||e);}return o;})()`).catch((e) => ({ evalErr: e.message }));
+        if (news && (news.grid > 0 || news.items > 0 || news.err || news.evalErr)) break;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
+  } catch (e) { news = { outerErr: e.message }; }
+  console.log('[UITEST] news: ' + JSON.stringify(news));
+
   // diagnóstico do menu ⋮ — simula o clique e reporta o estado
   let menu = {};
   try {
@@ -294,7 +351,7 @@ function jsonResponse(obj, status = 200) {
 }
 
 function registerPilotProtocol() {
-  protocol.handle('pilot', async (request) => {
+  const pilotProtocolHandler = async (request) => {
     let url;
     try { url = new URL(request.url); } catch { return new Response('Bad Request', { status: 400 }); }
     const host = url.hostname;
@@ -326,7 +383,21 @@ function registerPilotProtocol() {
     } catch {
       return new Response('Not Found', { status: 404 });
     }
-  });
+  };
+
+  // Sessão DEFAULT — cobre navegações pilot:// app-wide.
+  protocol.handle('pilot', pilotProtocolHandler);
+
+  // Sessão da PARTITION dos webviews — CRÍTICO p/ o feed. O handle global serve a
+  // sessão default, mas o fetch() de DENTRO do webview roda na partition
+  // persist:logica-pilot; sem o handler registrado NAQUELA sessão, o fetch dava erro
+  // de rede opaco (era o bug do feed "não consegui carregar"). Provado no harness
+  // exp-registry: pilot://_data/news → FEED-OK numa WebContentsView dessa sessão.
+  try {
+    session.fromPartition('persist:logica-pilot').protocol.handle('pilot', pilotProtocolHandler);
+  } catch (e) {
+    console.warn('[pilot://] registro na sessão da partition falhou:', e && e.message);
+  }
 }
 
 /** Lê o corpo JSON de um request POST (tolerante a corpo vazio/ inválido). */
@@ -346,6 +417,13 @@ async function handlePilotApi(host, pathname, method, request) {
     if (method === 'GET' && pathname === '/_data/topsites') {
       const limit = clampInt(q.get('limit'), 8, 1, 24);
       return jsonResponse({ ok: true, items: historyStore.topSites(limit) });
+    }
+    // Feed de notícias PT-BR/Brasil — o main busca RSS server-side (sem CORS) e
+    // devolve JSON. ?cat=top|brasil|mundo|tecnologia|esportes|economia|entretenimento
+    if (method === 'GET' && pathname === '/_data/news') {
+      const cat = (q.get('cat') || 'top').toLowerCase();
+      const data = await newsFeed.getNews(cat);
+      return jsonResponse(data, data.ok ? 200 : 200); // 200 sempre; o front trata ok:false
     }
   }
 

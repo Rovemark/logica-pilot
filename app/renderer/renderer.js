@@ -54,6 +54,10 @@ function makeWebview(url) {
   // como no Chrome). Sem isto o <webview> só oferece o PDF para download.
   wv.setAttribute('plugins', '');
   wv.setAttribute('webpreferences', 'plugins=true');
+  // Preload do guest (canal home → casca). É GUARDADO por protocolo dentro do
+  // próprio preload (só páginas pilot:// recebem window.lpHome), então é seguro
+  // colocá-lo em TODAS as webviews — sites normais não recebem nenhuma API.
+  if (window.pilot && window.pilot.webviewPreload) wv.setAttribute('preload', window.pilot.webviewPreload);
   return wv;
 }
 
@@ -120,7 +124,28 @@ function equipWebview(wv, url) {
     try { t.zoomLevel = wv.getZoomLevel(); } catch {}
     if (t.id === strip.activeId) showZoom(t.zoomLevel);
   });
+
+  // Canal home → casca: a home/dashboard (pilot://newtab, isolada, sem window.pilot)
+  // pede via webview-preload (window.lpHome → sendToHost). Aqui a casca atende.
+  // O preload é guardado por protocolo, então só páginas pilot:// disparam isto.
+  wv.addEventListener('ipc-message', (e) => {
+    if (e.channel === 'home:pilot') launchPilotFromHome(e.args[0]);
+    else if (e.channel === 'home:open' && e.args[0]) strip.create(e.args[0]);
+  });
   return wv;
+}
+
+// Abre o painel Pilot já preenchido com o objetivo vindo da home/dashboard.
+// PREFILL + FOCO apenas — NÃO auto-roda (mais seguro: o usuário aperta "Pilotar").
+// Além disso, a aba ativa aqui É a home (pilot://newtab), onde rodar não faz
+// sentido. Auto-run é opção FUTURA (ex.: abrir nova aba e pilotar nela).
+function launchPilotFromHome(objective) {
+  togglePilot(true); // garante o painel visível
+  const goalEl = $('#goal');
+  if (goalEl) {
+    goalEl.value = String(objective == null ? '' : objective);
+    try { goalEl.focus(); } catch {}
+  }
 }
 
 function onActivateTab(tab) {
@@ -288,6 +313,7 @@ function dispatchMenu(name, arg) {
     case 'extensions': openExtensions(); break;
     case 'ext-store': extStore(); break;
     case 'ext-install-unpacked': extInstallUnpacked(); break;
+    case 'ext-install-current': { const t = active(); const id = t ? storeIdFromUrl(t.url) : null; if (id) extInstallById(id); break; }
     case 'reader': toggleReader(); break;
     case 'translate': translatePage(); break;
     case 'settings': openPanelOrOverlay('settings'); break;
@@ -325,17 +351,42 @@ function openInternal(url) {
 //    "Chrome Web Store". Instalar da loja dentro de <webview> é frágil (a loja
 //    detecta "não-Chrome"); a pasta desempacotada é o caminho garantido. ──────
 function openExtensions() {
-  const items = [
-    { label: 'Instalar extensão (escolher pasta)…', action: 'ext-install-unpacked' },
-    { label: 'Abrir Chrome Web Store', action: 'ext-store' },
-  ];
+  const items = [];
+  const t = active();
+  const sid = t ? storeIdFromUrl(t.url) : null;
+  if (sid) {
+    let nm = ((t.title || '').replace(/\s*[-–|]\s*Chrome.*$/i, '').trim()) || 'esta extensão';
+    if (nm.length > 34) nm = nm.slice(0, 34) + '…';
+    items.push({ label: '⬇ Instalar “' + nm + '” aqui', action: 'ext-install-current' });
+    items.push({ sep: true });
+  }
+  items.push({ label: 'Instalar extensão (escolher pasta)…', action: 'ext-install-unpacked' });
+  items.push({ label: 'Abrir Chrome Web Store', action: 'ext-store' });
   const btn = $('#ext-btn');
   if (window.pilot && window.pilot.showAppMenu && btn) {
     const r = btn.getBoundingClientRect();
     const dark = document.documentElement.getAttribute('data-theme') !== 'light';
     window.pilot.showAppMenu({ items, rect: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, dark });
+  } else if (sid) {
+    extInstallById(sid);
   } else {
     extInstallUnpacked();
+  }
+}
+
+// extrai o ID (32 chars a-p) de uma URL de detalhe da Chrome Web Store
+function storeIdFromUrl(url) {
+  try {
+    const u = new URL(url);
+    if (!/(^|\.)chromewebstore\.google\.com$/.test(u.host) && u.host !== 'chrome.google.com') return null;
+    const m = u.pathname.match(/\/detail\/[^/]+\/([a-p]{32})/) || u.pathname.match(/\/([a-p]{32})(?:[/?#]|$)/);
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+
+function extInstallById(id) {
+  if (window.pilot && window.pilot.extInstallById && id) {
+    try { window.pilot.extInstallById({ id }); } catch {}
   }
 }
 

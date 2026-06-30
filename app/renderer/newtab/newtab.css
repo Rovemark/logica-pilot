@@ -83,21 +83,30 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* ── Layout central ─────────────────────────────────────────── */
+/* ── Layout ──────────────────────────────────────────────────
+   Estilo Edge: a primeira dobra (marca + busca + Pilot + atalhos) ocupa a
+   altura visível, limpa e centrada; ao ROLAR aparece o feed de notícias mais
+   largo. Por isso a página deixa de ser centralizada por flex e passa a ser
+   um fluxo scrollável; o "miolo" central fica capado em 720px e o feed em
+   ~1040px. */
 .page {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 36px;
-  padding: 48px 24px 24px;
+  padding: 0 24px 64px;
   width: 100%;
-  max-width: 720px;
+  max-width: 1040px;
   margin: 0 auto;
-  /* Empurra o bloco levemente acima do centro óptico */
-  transform: translateY(-4vh);
 }
+
+/* Dobra inicial: empurra o miolo para perto do centro óptico da 1ª tela,
+   mantendo a sensação de "home limpa" antes de rolar para as notícias. */
+.brand { margin-top: clamp(48px, 16vh, 168px); }
+
+/* O miolo (busca, Pilot, atalhos) permanece estreito e centrado. */
+.search, .pilot-card, .shortcuts { align-self: center; }
 
 /* ── Marca ──────────────────────────────────────────────────── */
 .brand {
@@ -135,6 +144,7 @@ body {
 /* ── Busca (glass + foco gradiente) ─────────────────────────── */
 .search {
   width: 100%;
+  max-width: 640px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -198,6 +208,109 @@ body {
 .search-go:hover { filter: brightness(1.08); box-shadow: var(--shadow-accent), var(--glow); }
 .search-go:active { transform: scale(.95); }
 .search-go:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-brand) 50%, transparent);
+  outline-offset: 2px;
+}
+
+/* ── Card Pilot (IA) ────────────────────────────────────────── */
+/* Leve destaque accent: borda em gradiente sutil + fundo glass. Sem glow
+   exagerado — fica claramente "especial" sem competir com a busca. */
+.pilot-card {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 18px 16px;
+  border-radius: var(--radius);
+  background:
+    linear-gradient(var(--glass-bg), var(--glass-bg)) padding-box,
+    var(--accent-grad) border-box;
+  border: 1px solid transparent;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.pilot-card:hover {
+  box-shadow: var(--shadow-accent);
+  transform: translateY(-1px);
+}
+.pilot-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pilot-card-mark {
+  font-size: 26px;
+  line-height: 1;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--accent-brand);   /* fallback */
+  flex-shrink: 0;
+}
+.pilot-card-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pilot-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--text-strong);
+}
+.pilot-card-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+.pilot-card-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.pilot-card-input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.pilot-card-input::placeholder { color: var(--muted-2); }
+.pilot-card-input:focus {
+  border-color: color-mix(in srgb, var(--accent-brand) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 12%, transparent);
+}
+.pilot-card-go {
+  flex-shrink: 0;
+  height: 42px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent-grad);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: var(--shadow-accent);
+  transition: filter .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+.pilot-card-go:hover { filter: brightness(1.08); box-shadow: var(--shadow-accent), var(--glow); }
+.pilot-card-go:active { transform: scale(.97); }
+.pilot-card-go:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent-brand) 50%, transparent);
   outline-offset: 2px;
 }
@@ -266,6 +379,209 @@ body {
   max-width: 100%;
 }
 
+/* ── Notícias (feed estilo Edge/MSN) ────────────────────────── */
+.news {
+  width: 100%;
+  max-width: 1040px;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.news-head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.news-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--text-strong);
+  padding-left: 2px;
+}
+
+/* Abas de categoria (chips) */
+.news-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.news-tab {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: .1px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .16s ease, color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .12s ease;
+}
+.news-tab:hover {
+  color: var(--text-strong);
+  border-color: color-mix(in srgb, var(--accent-brand) 38%, var(--border));
+  transform: translateY(-1px);
+}
+.news-tab.is-active {
+  color: #fff;
+  border-color: transparent;
+  background: var(--accent-grad);
+  box-shadow: var(--shadow-accent);
+}
+.news-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-brand) 50%, transparent);
+  outline-offset: 2px;
+}
+
+/* Grade de cards responsiva (auto-fill, multi-coluna) */
+.news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.news-card {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform .16s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.news-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: color-mix(in srgb, var(--accent-brand) 30%, var(--glass-border));
+}
+.news-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-brand) 50%, transparent);
+  outline-offset: 2px;
+}
+
+/* Mídia no topo (16:9 fixo p/ alinhar a grade) */
+.news-card-media {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.news-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform .25s ease;
+}
+.news-card:hover .news-card-img { transform: scale(1.04); }
+
+/* Placeholder gradiente com inicial da fonte (quando não há imagem) */
+.news-ph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.news-ph-letter {
+  font-size: 40px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, .92);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .25);
+  user-select: none;
+}
+
+/* Corpo do card */
+.news-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 13px 14px 14px;
+  flex: 1;
+}
+.news-card-headline {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-strong);
+  /* 3 linhas + ellipsis */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.news-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: auto;
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+}
+.news-card-source {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--accent-brand) 62%, var(--muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 62%;
+}
+.news-card-dot { color: var(--muted-2); }
+.news-card-time { white-space: nowrap; color: var(--muted-2); }
+
+/* Estado vazio / erro (discreto) */
+.news-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--muted-2);
+  font-size: 13.5px;
+  padding: 40px 16px;
+}
+
+/* Skeletons (loading) */
+.news-card-skeleton {
+  pointer-events: none;
+  cursor: default;
+}
+.news-card-skeleton .news-card-media {
+  background: linear-gradient(100deg,
+    var(--surface-2) 30%,
+    color-mix(in srgb, var(--surface-2) 60%, var(--hover)) 50%,
+    var(--surface-2) 70%);
+  background-size: 200% 100%;
+  animation: news-shimmer 1.3s ease-in-out infinite;
+}
+.sk-line {
+  height: 11px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  background-image: linear-gradient(100deg,
+    var(--surface-2) 30%,
+    color-mix(in srgb, var(--surface-2) 60%, var(--hover)) 50%,
+    var(--surface-2) 70%);
+  background-size: 200% 100%;
+  animation: news-shimmer 1.3s ease-in-out infinite;
+}
+.sk-line-short { width: 55%; }
+@keyframes news-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* ── Rodapé ─────────────────────────────────────────────────── */
 .foot {
   display: flex;
@@ -298,11 +614,19 @@ body {
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; }
 
+@media (max-width: 640px) {
+  .news-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .news-card-headline { font-size: 13px; -webkit-line-clamp: 3; }
+}
+
 @media (max-width: 520px) {
   .shortcuts { grid-template-columns: repeat(2, 1fr); max-width: 320px; }
   .brand-mark { font-size: 62px; }
   .brand-name { font-size: 26px; }
   .search { height: 54px; }
+  .pilot-card-form { flex-direction: column; align-items: stretch; }
+  .pilot-card-go { width: 100%; }
+  .brand { margin-top: clamp(36px, 10vh, 90px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

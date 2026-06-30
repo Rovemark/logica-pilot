@@ -14,3 +14,6 @@ screenshots/
 docs/CHROME-PARITY-SPEC.md
 docs/CHROME-PARITY-AUDIT.json
 docs/REVIEW-FIXES.md
+
+# harness/spikes de validação da migração WebContentsView (scratch, não-produto)
+_wcv-spike/

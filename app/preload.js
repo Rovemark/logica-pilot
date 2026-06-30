@@ -6,6 +6,9 @@
  */
 
 const { contextBridge, ipcRenderer } = require('electron');
+// preload roda em Node (sandbox:false) → path disponível p/ montar o file:// do
+// preload das <webview> (canal home → casca).
+const path = require('path');
 
 // ── Extensões do Chrome: API do <browser-action-list> ──────────────────────────
 // A lib (electron-chrome-extensions) injeta `window.browserAction` + define os
@@ -24,6 +27,12 @@ contextBridge.exposeInMainWorld('pilot', {
   // ── Motor Pilot (INTACTO) ───────────────────────────────────────────────
   run: (payload) => ipcRenderer.invoke('pilot:run', payload),
   stop: (payload) => ipcRenderer.invoke('pilot:stop', payload),
+
+  // ── Preload das <webview> (canal home → casca) ──────────────────────────
+  // file:// do preload GUARDADO por protocolo (só páginas pilot:// recebem a API).
+  // O renderer seta este preload em TODAS as <webview>; a guarda interna garante
+  // que sites normais NUNCA recebam window.lpHome.
+  webviewPreload: 'file://' + path.join(__dirname, 'renderer', 'webview-preload.js'),
   winControl: (action) => ipcRenderer.invoke('win:control', action),
   openExternal: (url) => ipcRenderer.invoke('open:external', url),
 
@@ -74,6 +83,8 @@ contextBridge.exposeInMainWorld('pilot', {
   openExtensions: (payload) => ipcRenderer.invoke('ext:open', payload || {}),
   // instala extensão desempacotada de uma pasta (seletor) — sempre funciona
   extInstallUnpacked: () => ipcRenderer.invoke('ext:install-unpacked'),
+  // instala da Chrome Web Store pelo ID (bypassa o bloqueio "não é Chrome")
+  extInstallById: (payload) => ipcRenderer.invoke('ext:install-id', payload),
 
   // ── Histórico ────────────────────────────────────────────────────────────
   // pass-through: o renderer manda o objeto-payload da spec; o main desestrutura.

@@ -59,6 +59,35 @@
     });
   }
 
+  // ── Card Pilot (IA) ────────────────────────────────────────────
+  // A home é isolada (sem window.pilot). Pede à casca para abrir o painel Pilot
+  // já preenchido via window.lpHome.pilot(objetivo) — exposto pelo webview-preload,
+  // guardado por protocolo pilot://. Se a API faltar (preload ausente), é no-op.
+  var pilotForm = document.getElementById('pilot-form');
+  var pilotInput = document.getElementById('pilot-input');
+
+  if (pilotForm && pilotInput) {
+    var submitPilot = function () {
+      var goal = (pilotInput.value || '').trim();
+      if (!goal) return;
+      if (window.lpHome && typeof window.lpHome.pilot === 'function') {
+        window.lpHome.pilot(goal);
+      }
+      // sem API → no-op silencioso (não quebra a home)
+    };
+    pilotForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      submitPilot();
+    });
+    // Cmd/Ctrl+Enter no textarea também envia (consistência com o painel da casca).
+    pilotInput.addEventListener('keydown', function (e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        submitPilot();
+      }
+    });
+  }
+
   // ── Atalhos rápidos / Mais visitados ───────────────────────────
   // Default estático (mostrado enquanto não há histórico suficiente).
   var DEFAULT_SHORTCUTS = [
@@ -148,4 +177,246 @@
       }
     })
     .catch(function () { /* sem histórico/offline → mantém defaults */ });
+
+  // ── Feed de notícias (PT-BR/Brasil) ────────────────────────────────────────
+  // Abas de categoria + grade de cards estilo Edge/MSN. O main busca RSS
+  // server-side e devolve JSON via pilot://newtab/_data/news?cat=.
+  var NEWS_CATEGORIES = [
+    { id: 'top',            label: 'Para você' },
+    { id: 'brasil',         label: 'Brasil' },
+    { id: 'mundo',          label: 'Mundo' },
+    { id: 'tecnologia',     label: 'Tecnologia' },
+    { id: 'esportes',       label: 'Esportes' },
+    { id: 'economia',       label: 'Economia' },
+    { id: 'entretenimento', label: 'Entretenimento' }
+  ];
+
+  var newsTabsEl = document.getElementById('news-tabs');
+  var newsGridEl = document.getElementById('news-grid');
+  var newsCurrentCat = 'top';
+  var newsReqToken = 0; // ignora respostas de requisições antigas (race)
+  // cache de catálogo já buscado nesta sessão (troca instantânea de aba)
+  var newsCache = Object.create(null);
+
+  // Cores estáveis por inicial (placeholder quando o item não tem imagem).
+  var PLACEHOLDER_GRADS = [
+    ['#7c5cff', '#4da3ff'], ['#ff7eb3', '#ff5f6d'], ['#11998e', '#38ef7d'],
+    ['#f7971e', '#ffd200'], ['#2193b0', '#6dd5ed'], ['#c94b4b', '#4b134f'],
+    ['#0083B0', '#00B4DB'], ['#8E2DE2', '#4A00E0']
+  ];
+  function gradForSource(src) {
+    var s = String(src || '?');
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return PLACEHOLDER_GRADS[h % PLACEHOLDER_GRADS.length];
+  }
+  function initialOf(src) {
+    var s = String(src || '?').trim();
+    return (s ? s[0] : '?').toUpperCase();
+  }
+
+  // Tempo relativo em PT-BR ("agora", "há 2 min", "há 3 h", "ontem", "há 4 d").
+  function relTime(ts) {
+    var n = Number(ts);
+    if (!n || !isFinite(n)) return '';
+    var diff = Date.now() - n;
+    if (diff < 0) diff = 0;
+    var min = Math.floor(diff / 60000);
+    if (min < 1) return 'agora';
+    if (min < 60) return 'há ' + min + ' min';
+    var h = Math.floor(min / 60);
+    if (h < 24) return 'há ' + h + ' h';
+    var d = Math.floor(h / 24);
+    if (d === 1) return 'ontem';
+    if (d < 7) return 'há ' + d + ' d';
+    var w = Math.floor(d / 7);
+    if (w < 5) return 'há ' + w + ' sem';
+    var mo = Math.floor(d / 30);
+    if (mo < 12) return 'há ' + mo + ' mês' + (mo > 1 ? 'es' : '');
+    return 'há ' + Math.floor(d / 365) + ' a';
+  }
+
+  function buildNewsCard(item) {
+    var a = document.createElement('a');
+    a.className = 'news-card';
+    a.href = item.link;
+    a.title = item.title;
+
+    // Mídia (imagem ou placeholder gradiente com a inicial da fonte)
+    var media = document.createElement('span');
+    media.className = 'news-card-media';
+    if (item.image) {
+      var img = document.createElement('img');
+      img.className = 'news-card-img';
+      img.src = item.image;
+      img.alt = '';
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      // imagem quebrada → vira placeholder, sem ícone de erro
+      img.addEventListener('error', function () {
+        media.removeChild(img);
+        media.appendChild(buildPlaceholder(item.source));
+        media.classList.add('is-ph');
+      });
+      media.appendChild(img);
+    } else {
+      media.appendChild(buildPlaceholder(item.source));
+      media.classList.add('is-ph');
+    }
+
+    var body = document.createElement('span');
+    body.className = 'news-card-body';
+
+    var h = document.createElement('span');
+    h.className = 'news-card-headline';
+    h.textContent = item.title;
+
+    var foot = document.createElement('span');
+    foot.className = 'news-card-foot';
+    var srcEl = document.createElement('span');
+    srcEl.className = 'news-card-source';
+    srcEl.textContent = item.source || '';
+    foot.appendChild(srcEl);
+    var t = relTime(item.ts);
+    if (t) {
+      var sep = document.createElement('span');
+      sep.className = 'news-card-dot';
+      sep.setAttribute('aria-hidden', 'true');
+      sep.textContent = '·';
+      var timeEl = document.createElement('span');
+      timeEl.className = 'news-card-time';
+      timeEl.textContent = t;
+      foot.appendChild(sep);
+      foot.appendChild(timeEl);
+    }
+
+    body.appendChild(h);
+    body.appendChild(foot);
+    a.appendChild(media);
+    a.appendChild(body);
+
+    // Navegação explícita (abre a notícia na própria aba).
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      location.href = item.link;
+    });
+    return a;
+  }
+
+  function buildPlaceholder(source) {
+    var ph = document.createElement('span');
+    ph.className = 'news-ph';
+    var g = gradForSource(source);
+    ph.style.background = 'linear-gradient(135deg, ' + g[0] + ' 0%, ' + g[1] + ' 100%)';
+    var letter = document.createElement('span');
+    letter.className = 'news-ph-letter';
+    letter.textContent = initialOf(source);
+    ph.appendChild(letter);
+    return ph;
+  }
+
+  function renderNewsSkeletons() {
+    if (!newsGridEl) return;
+    newsGridEl.textContent = '';
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < 8; i++) {
+      var sk = document.createElement('div');
+      sk.className = 'news-card news-card-skeleton';
+      var m = document.createElement('span'); m.className = 'news-card-media';
+      var b = document.createElement('span'); b.className = 'news-card-body';
+      var l1 = document.createElement('span'); l1.className = 'sk-line';
+      var l2 = document.createElement('span'); l2.className = 'sk-line sk-line-short';
+      b.appendChild(l1); b.appendChild(l2);
+      sk.appendChild(m); sk.appendChild(b);
+      frag.appendChild(sk);
+    }
+    newsGridEl.appendChild(frag);
+  }
+
+  function renderNewsState(message) {
+    if (!newsGridEl) return;
+    newsGridEl.textContent = '';
+    var msg = document.createElement('div');
+    msg.className = 'news-empty';
+    msg.textContent = message;
+    newsGridEl.appendChild(msg);
+  }
+
+  function renderNewsItems(items) {
+    if (!newsGridEl) return;
+    newsGridEl.textContent = '';
+    if (!items || !items.length) {
+      renderNewsState('Não consegui carregar as notícias agora.');
+      return;
+    }
+    var frag = document.createDocumentFragment();
+    items.forEach(function (it) {
+      if (it && it.title && it.link) frag.appendChild(buildNewsCard(it));
+    });
+    newsGridEl.appendChild(frag);
+  }
+
+  function loadNews(cat) {
+    newsCurrentCat = cat;
+    var token = ++newsReqToken;
+
+    if (newsCache[cat]) { renderNewsItems(newsCache[cat]); return; }
+    renderNewsSkeletons();
+
+    fetch('pilot://newtab/_data/news?cat=' + encodeURIComponent(cat),
+          { headers: { accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (token !== newsReqToken) return; // resposta velha → ignora
+        var items = data && data.ok && data.items ? data.items : [];
+        if (items.length) {
+          newsCache[cat] = items;
+          renderNewsItems(items);
+        } else {
+          renderNewsState('Não consegui carregar as notícias agora.');
+        }
+      })
+      .catch(function () {
+        if (token !== newsReqToken) return;
+        renderNewsState('Não consegui carregar as notícias agora.');
+      });
+  }
+
+  function setActiveTab(cat) {
+    if (!newsTabsEl) return;
+    var chips = newsTabsEl.querySelectorAll('.news-tab');
+    for (var i = 0; i < chips.length; i++) {
+      var on = chips[i].getAttribute('data-cat') === cat;
+      chips[i].classList.toggle('is-active', on);
+      chips[i].setAttribute('aria-selected', on ? 'true' : 'false');
+      chips[i].tabIndex = on ? 0 : -1;
+    }
+  }
+
+  function buildNewsTabs() {
+    if (!newsTabsEl) return;
+    newsTabsEl.textContent = '';
+    NEWS_CATEGORIES.forEach(function (c) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'news-tab';
+      b.setAttribute('role', 'tab');
+      b.setAttribute('data-cat', c.id);
+      b.setAttribute('aria-selected', 'false');
+      b.tabIndex = -1;
+      b.textContent = c.label;
+      b.addEventListener('click', function () {
+        if (newsCurrentCat === c.id) return;
+        setActiveTab(c.id);
+        loadNews(c.id);
+      });
+      newsTabsEl.appendChild(b);
+    });
+    setActiveTab(newsCurrentCat);
+  }
+
+  if (newsTabsEl && newsGridEl) {
+    buildNewsTabs();
+    loadNews(newsCurrentCat);
+  }
 })();
