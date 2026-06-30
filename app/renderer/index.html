@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <!-- crx: liberado em img-src para os ícones das browser actions das extensões
+       (electron-chrome-extensions serve via crx://extension-icon/...). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: crx:; script-src 'self';" />
+  <title>Logica Pilot</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="bookmarks.css" />
+  <!-- tema aplicado o mais cedo possível p/ minimizar flash (CSP: arquivo .js, sem inline) -->
+  <script src="theme.js"></script>
+</head>
+<body>
+  <!-- Barra de título / abas (região arrastável) -->
+  <header class="titlebar" id="titlebar">
+    <div class="brand" title="Logica Pilot">
+      <span class="brand-mark">◢</span>
+      <span class="brand-name">Logica&nbsp;Pilot</span>
+    </div>
+    <div class="tabs" id="tabs"></div>
+    <button class="tab-new" id="tab-new" title="Nova aba (⌘T)">+</button>
+    <div class="spacer"></div>
+    <div class="win-controls" id="win-controls">
+      <button data-win="min" class="wc">—</button>
+      <button data-win="max" class="wc">▢</button>
+      <button data-win="close" class="wc wc-close">✕</button>
+    </div>
+  </header>
+
+  <!-- Toolbar: navegação + endereço + toggle do Pilot -->
+  <div class="toolbar">
+    <div class="nav-group">
+      <button id="nav-back" class="nav-btn" title="Voltar">
+        <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <button id="nav-fwd" class="nav-btn" title="Avançar">
+        <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+      <button id="nav-reload" class="nav-btn" title="Recarregar">
+        <svg viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      </button>
+    </div>
+
+    <form id="address-form" class="address-wrap">
+      <span class="lock" id="lock">
+        <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      </span>
+      <input id="address" class="address" type="text" spellcheck="false"
+             placeholder="Buscar ou digitar endereço" autocomplete="off" />
+      <!-- estrela de favorito (bookmarks.js liga o clique; preenche quando favoritada) -->
+      <button type="button" id="star-btn" class="star-btn" title="Favoritar (⌘D)" aria-label="Favoritar página">
+        <svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.6 1.1 6.5L12 17.9l-5.8 3.05 1.1-6.5-4.7-4.6 6.5-.95z"/></svg>
+      </button>
+      <!-- dropdown de sugestões (omnibox.js) -->
+      <div id="omni-suggest" class="omni-suggest" hidden></div>
+    </form>
+
+    <!-- Selo do modo anônimo (renderer mostra só na janela anônima) -->
+    <span id="incognito-badge" class="incognito-badge" title="Janela anônima — sem histórico, perfil em memória" hidden>
+      <svg viewBox="0 0 24 24"><circle cx="7.5" cy="15" r="3.5"/><circle cx="16.5" cy="15" r="3.5"/><path d="M11 15h2M4 11l1.6-4.2A2 2 0 0 1 7.5 5.5h9a2 2 0 0 1 1.9 1.3L20 11M2 11h20"/></svg>
+      <span>Anônima</span>
+    </span>
+
+    <button id="theme-btn" class="nav-btn" title="Tema (⌘⇧L)" aria-label="Alternar tema"></button>
+
+    <!-- Fileira de botões das extensões do Chrome (electron-chrome-extensions).
+         O preload injeta a API que define este custom element. partition deve
+         bater com a das <webview>. -->
+    <browser-action-list id="ext-actions" partition="persist:logica-pilot"></browser-action-list>
+
+    <!-- Botão de extensões (🧩) → abre a Chrome Web Store / gerência -->
+    <button id="ext-btn" class="nav-btn" title="Extensões" aria-label="Extensões">
+      <svg viewBox="0 0 24 24"><path d="M20.5 11H19V7a2 2 0 0 0-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4a2 2 0 0 0-2 2v3.8h1.5a2.7 2.7 0 0 1 0 5.4H2V20a2 2 0 0 0 2 2h3.8v-1.5a2.7 2.7 0 0 1 5.4 0V22H17a2 2 0 0 0 2-2v-4h1.5a2.5 2.5 0 0 0 0-5z"/></svg>
+    </button>
+
+    <button id="pilot-toggle" class="pilot-toggle" title="Painel do Pilot">
+      <svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.9L21 11l-6.6 2.1L12 20l-2.4-6.9L3 11l6.6-2.1z"/></svg>
+      <span>Pilot</span>
+    </button>
+
+    <button id="menu-btn" class="nav-btn" title="Menu" aria-label="Menu">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/></svg>
+    </button>
+    <!-- dropdown ⋮ (overlays.js preenche os itens) -->
+    <div id="app-menu" class="menu-popover" hidden></div>
+
+    <!-- barra de progresso de carregamento -->
+    <div id="progress" class="progress" hidden></div>
+  </div>
+
+  <!-- Barra de favoritos (toggle ⌘⇧B; bookmarks.js preenche os itens) -->
+  <div id="bookmarks-bar" class="bookmarks-bar" hidden></div>
+
+  <!-- Conteúdo: webviews + painel do Pilot -->
+  <main class="content">
+    <div class="views" id="views"></div>
+
+    <!-- findbar (findbar.js) -->
+    <div id="findbar" class="findbar" hidden>
+      <input id="find-input" type="text" placeholder="Localizar na página" spellcheck="false" autocomplete="off" />
+      <span id="find-count">0/0</span>
+      <button id="find-prev" title="Anterior (⇧Enter)">▲</button>
+      <button id="find-next" title="Próximo (Enter)">▼</button>
+      <button id="find-close" title="Fechar (Esc)">✕</button>
+    </div>
+
+    <!-- indicador de zoom (renderer.js mostra/some) -->
+    <div id="zoom-pill" class="zoom-pill" hidden><span id="zoom-pct">100%</span></div>
+
+    <!-- prompt de permissão (renderer.js preenche) -->
+    <div id="perm-prompt" class="perm-prompt" hidden></div>
+
+    <aside class="pilot" id="pilot">
+      <div class="pilot-head">
+        <div class="pilot-title">
+          <span class="brand-mark sm">◢</span>
+          <div>
+            <strong>Logica Pilot</strong>
+            <small>controle autônomo · CDP</small>
+          </div>
+        </div>
+        <span class="status-dot" id="status-dot" title="cérebro"></span>
+      </div>
+
+      <div class="pilot-input">
+        <textarea id="goal" rows="3"
+          placeholder="O que você quer que eu faça? Ex: &quot;pesquise o preço do iPhone 15 no Google e me diga o mais barato&quot;"></textarea>
+        <div class="pilot-controls">
+          <label class="switch" title="Manda screenshots pro modelo (mais caro, vê sites opacos)">
+            <input type="checkbox" id="vision" />
+            <span>visão</span>
+          </label>
+          <div class="grow"></div>
+          <button id="run" class="btn-run">Pilotar ▸</button>
+          <button id="stop" class="btn-stop" hidden>parar ◼</button>
+        </div>
+      </div>
+
+      <div class="timeline" id="timeline">
+        <div class="empty" id="timeline-empty">
+          <span class="brand-mark big">◢</span>
+          <p>Dê um objetivo e eu navego sozinho —<br/>clico, digito, rolo e leio a página<br/>por intenção, não por pixel.</p>
+        </div>
+      </div>
+
+      <div class="result" id="result" hidden></div>
+    </aside>
+  </main>
+
+  <!-- shelf de downloads (overlays.js controla) -->
+  <div id="downloads-shelf" class="dl-shelf" hidden></div>
+
+  <!-- Overlays (overlays.js preenche e controla abrir/fechar) -->
+  <div id="settings-overlay" class="overlay" hidden></div>
+  <div id="about-overlay" class="overlay" hidden></div>
+  <div id="history-overlay" class="overlay" hidden></div>
+  <div id="downloads-overlay" class="overlay" hidden></div>
+  <div id="bookmarks-overlay" class="overlay" hidden></div>
+
+  <!-- ordem importa: módulos antes do renderer.js (que orquestra) -->
+  <script src="tabs.js"></script>
+  <script src="omnibox.js"></script>
+  <script src="findbar.js"></script>
+  <script src="overlays.js"></script>
+  <script src="bookmarks.js"></script>
+  <!-- Modo leitor: fonte do @mozilla/readability (string) + módulo window.Reader -->
+  <script src="reader/readability-source.js"></script>
+  <script src="reader/reader.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

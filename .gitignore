@@ -1,0 +1,16 @@
+node_modules/
+dist/
+out/
+*.log
+.DS_Store
+.env
+.env.*
+# perfis/temp do browser
+.user-data/
+logica-pilot-*/
+screenshots/
+
+# artefatos internos do processo de build (não fazem parte do produto)
+docs/CHROME-PARITY-SPEC.md
+docs/CHROME-PARITY-AUDIT.json
+docs/REVIEW-FIXES.md

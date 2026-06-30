@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    CSP própria desta start page. Servida via protocolo pilot://newtab dentro de
+    um <webview> isolado (sem acesso a window.pilot). NADA de <script> inline:
+    o JS vem por <script src>. Favicons vêm do Google s2 (img-src).
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https://www.google.com data:; connect-src 'self'; base-uri 'none'; form-action 'none';" />
+  <title>Nova aba</title>
+  <link rel="stylesheet" href="newtab.css" />
+</head>
+<body>
+  <main class="page">
+    <!-- Marca Logica -->
+    <header class="brand">
+      <span class="brand-mark" aria-hidden="true">◢</span>
+      <h1 class="brand-name">Logica<span class="brand-name-accent">Pilot</span></h1>
+    </header>
+
+    <!-- Busca central -->
+    <form class="search" id="search-form" autocomplete="off" role="search">
+      <span class="search-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </span>
+      <input
+        id="search-input"
+        class="search-input"
+        type="text"
+        name="q"
+        placeholder="Pesquise na web ou digite um endereço"
+        aria-label="Pesquisar ou digitar endereço"
+        spellcheck="false"
+        autofocus />
+      <button class="search-go" id="search-go" type="submit" aria-label="Pesquisar">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+          <polyline points="12 5 19 12 12 19"></polyline>
+        </svg>
+      </button>
+    </form>
+
+    <!-- Atalhos rápidos / Mais visitados (grade dinâmica, populada por newtab.js).
+         Cai para a lista padrão quando ainda não há histórico. -->
+    <nav class="shortcuts" id="shortcuts" aria-label="Atalhos rápidos"></nav>
+  </main>
+
+  <footer class="foot">
+    <span class="foot-dot" aria-hidden="true">·</span>
+    <span class="foot-text">Navegação inteligente · Logica Pilot</span>
+  </footer>
+
+  <script src="newtab.js"></script>
+</body>
+</html>

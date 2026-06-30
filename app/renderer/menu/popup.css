@@ -1,0 +1,49 @@
+/* Menu ⋮ flutuante — identidade Logica (cantos arredondados, tema, limpo). */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:          #12151f;
+  --text:        #e9ebf2;
+  --muted:       #5c6478;
+  --border:      rgba(255, 255, 255, .08);
+  --accent:      #8e7bff;
+  --accent-soft: rgba(124, 92, 255, .18);
+}
+body.light {
+  --bg:          #ffffff;
+  --text:        #161a26;
+  --muted:       #8b93a7;
+  --border:      #e9edf7;
+  --accent:      #6a4bff;
+  --accent-soft: rgba(124, 92, 255, .12);
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+}
+
+.menu { padding: 6px; }
+
+.mi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 33px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: default;
+  transition: background .1s ease, color .1s ease;
+}
+.mi:hover { background: var(--accent-soft); color: var(--accent); }
+.mi .l { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mi .k { font-size: 11.5px; color: var(--muted); }
+
+.sep { height: 1px; margin: 5px 8px; background: var(--border); }

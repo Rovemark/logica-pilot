@@ -1,0 +1,218 @@
+/*
+  Página de downloads (pilot://downloads) — AUTOSSUFICIENTE.
+  Roda dentro de um <webview> isolado, sem o sistema de tema do host (styles.css).
+  Tokens claro/escuro via @media (prefers-color-scheme) — copiados do newtab.css
+  para manter a identidade Logica (roxo→azul, glass/blur, glow sutil).
+*/
+
+/* ===== ESCURO (default) ===== */
+:root {
+  --bg:            #0a0c12;
+  --bg-2:          #0e111b;
+  --surface:       #12151f;
+  --surface-2:     #181c28;
+  --text:          #e9ebf2;
+  --text-strong:   #f2f4fa;
+  --muted:         #8b93a7;
+  --muted-2:       #5c6478;
+  --border:        #232a3a;
+  --border-soft:   #1a2030;
+  --hover:         #181c28;
+  --accent:        #8e7bff;
+  --accent-soft:   rgba(124,92,255,.14);
+  --accent-brand:  #7c5cff;
+  --accent-brand-2:#4da3ff;
+  --accent-grad:   linear-gradient(135deg, #7c5cff 0%, #4da3ff 100%);
+  --focus-ring:    #7c5cff;
+  --glow:          0 0 18px rgba(124,92,255,.32);
+  --shadow-sm:     0 1px 3px rgba(0,0,0,.4);
+  --shadow-lg:     0 18px 50px rgba(0,0,0,.55);
+  --shadow-accent: 0 6px 26px rgba(124,92,255,.34);
+  --glass-bg:      rgba(18,21,31,.62);
+  --glass-border:  rgba(255,255,255,.08);
+  --glass-blur:    blur(20px) saturate(150%);
+  --ok:            #46d39a;
+  --danger:        #ff5d6c;
+  --danger-soft:   rgba(255,93,108,.12);
+  --track:         #20283a;
+  --scrollbar-thumb:#2a3346;
+  --radius:        16px;
+  --radius-sm:     11px;
+  --radius-pill:   999px;
+}
+
+/* ===== CLARO ===== */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:            #eef1f8;
+    --bg-2:          #ffffff;
+    --surface:       #ffffff;
+    --surface-2:     #f4f6fc;
+    --text:          #161a26;
+    --text-strong:   #0e1220;
+    --muted:         #5b6376;
+    --muted-2:       #8b93a7;
+    --border:        #dfe4f0;
+    --border-soft:   #e9edf7;
+    --hover:         #eef1fb;
+    --accent:        #6a4bff;
+    --accent-soft:   rgba(124,92,255,.10);
+    --accent-brand:  #7c5cff;
+    --accent-brand-2:#4da3ff;
+    --accent-grad:   linear-gradient(135deg, #7c5cff 0%, #4da3ff 100%);
+    --focus-ring:    #7c5cff;
+    --glow:          0 0 16px rgba(124,92,255,.22);
+    --shadow-sm:     0 1px 3px rgba(60,64,90,.12);
+    --shadow-lg:     0 18px 50px rgba(60,64,100,.18);
+    --shadow-accent: 0 6px 24px rgba(124,92,255,.26);
+    --glass-bg:      rgba(255,255,255,.66);
+    --glass-border:  rgba(124,92,255,.14);
+    --glass-blur:    blur(20px) saturate(150%);
+    --ok:            #1aa974;
+    --danger:        #d83a48;
+    --danger-soft:   rgba(216,58,72,.10);
+    --track:         #e3e8f4;
+    --scrollbar-thumb:#c4cbdc;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  background:
+    radial-gradient(120% 50% at 50% -16%, color-mix(in srgb, var(--accent-brand) 16%, transparent) 0%, transparent 60%),
+    var(--bg);
+  color: var(--text);
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 36px 24px 64px;
+}
+
+/* ── Cabeçalho ──────────────────────────────────────────────── */
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 26px;
+}
+.head-brand { display: flex; align-items: center; gap: 12px; flex: 1; }
+.brand-mark {
+  font-size: 26px; line-height: 1;
+  background: var(--accent-grad);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--accent-brand);
+  filter: drop-shadow(0 0 14px rgba(124,92,255,.45));
+}
+.page-title { font-size: 24px; font-weight: 700; letter-spacing: -0.4px; color: var(--text-strong); }
+
+/* ── Botões ─────────────────────────────────────────────────── */
+.btn-soft, .dl-act {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  color: var(--text);
+  font-size: 13px; font-weight: 600; font-family: inherit;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, transform .1s ease, box-shadow .15s ease;
+}
+.btn-soft:hover, .dl-act:hover {
+  border-color: color-mix(in srgb, var(--accent-brand) 40%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+.btn-soft:active, .dl-act:active { transform: scale(.97); }
+.dl-act.danger {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+/* ── Lista ──────────────────────────────────────────────────── */
+.list { display: flex; flex-direction: column; gap: 10px; }
+
+.dl-item {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 14px 16px;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.dl-icon {
+  grid-row: 1 / span 2;
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--accent);
+}
+.dl-icon svg { width: 20px; height: 20px; }
+.dl-icon.ok { color: var(--ok); }
+.dl-icon.err { color: var(--danger); }
+
+.dl-main { min-width: 0; }
+.dl-name {
+  font-size: 14px; font-weight: 600; color: var(--text-strong);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dl-meta {
+  font-size: 12px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.dl-actions { grid-row: 1 / span 2; display: flex; gap: 8px; }
+
+/* barra de progresso (ocupa toda a largura abaixo do nome) */
+.dl-bar {
+  grid-column: 2 / span 2;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--track);
+  overflow: hidden;
+}
+.dl-bar > i {
+  display: block; height: 100%;
+  background: var(--accent-grad);
+  border-radius: var(--radius-pill);
+  transition: width .25s ease;
+}
+
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 60px 20px;
+  font-size: 14.5px;
+}
+
+/* ── Acessibilidade / scrollbar ─────────────────────────────── */
+:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring);
+  border-radius: 8px;
+}
+:focus:not(:focus-visible) { outline: none; }
+* { scrollbar-color: var(--scrollbar-thumb) transparent; scrollbar-width: thin; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition: none !important; }
+}

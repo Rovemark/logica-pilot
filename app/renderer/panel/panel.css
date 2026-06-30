@@ -1,0 +1,166 @@
+/* Painel flutuante (Settings/About) — identidade Logica.
+   Janela do SO (BrowserWindow sem moldura) → sempre acima do <webview>.
+   Documento separado: tem o próprio tema claro/escuro (classe .light no body). */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:          #12151f;
+  --panel:       #161a26;
+  --text:        #e9ebf2;
+  --muted:       #8a93a8;
+  --border:      rgba(255, 255, 255, .08);
+  --field:       #1d2230;
+  --field-bd:    rgba(255, 255, 255, .12);
+  --accent:      #8e7bff;
+  --accent-soft: rgba(124, 92, 255, .18);
+  --danger:      #ff6b6b;
+  --danger-soft: rgba(255, 107, 107, .14);
+}
+body.light {
+  --bg:          #ffffff;
+  --panel:       #ffffff;
+  --text:        #161a26;
+  --muted:       #6b7488;
+  --border:      #e9edf7;
+  --field:       #f6f7fb;
+  --field-bd:    #dfe4f1;
+  --accent:      #6a4bff;
+  --accent-soft: rgba(124, 92, 255, .12);
+  --danger:      #d8413a;
+  --danger-soft: rgba(216, 65, 58, .10);
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+}
+
+.panel { display: flex; flex-direction: column; height: 100%; }
+
+/* cabeçalho */
+.ph {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;        /* arrasta a janela pelo cabeçalho */
+}
+.ph h2 { flex: 1; font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+.ph-close {
+  -webkit-app-region: no-drag;
+  width: 28px; height: 28px;
+  border: none; border-radius: 8px;
+  background: transparent; color: var(--muted);
+  font-size: 14px; cursor: default;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .1s ease, color .1s ease;
+}
+.ph-close:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* corpo rolável */
+.pb { flex: 1; overflow-y: auto; padding: 14px 18px 18px; }
+.pb::-webkit-scrollbar { width: 10px; }
+.pb::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid transparent; background-clip: padding-box; }
+
+/* ── Settings: linhas ── */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+}
+.row:last-child { border-bottom: none; }
+.row .rl { flex: 1; min-width: 0; }
+.row label { display: block; font-size: 13.5px; font-weight: 500; }
+.row .hint { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+
+select, input[type="text"] {
+  min-width: 190px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 9px;
+  border: 1px solid var(--field-bd);
+  background: var(--field);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+select:focus, input[type="text"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.btn {
+  -webkit-app-region: no-drag;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--field-bd);
+  background: var(--field);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: default;
+  transition: background .1s ease, color .1s ease, border-color .1s ease;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.danger { color: var(--danger); border-color: transparent; background: var(--danger-soft); }
+.btn.danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+/* ── About ── */
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0 18px;
+}
+.hero .mark {
+  width: 52px; height: 52px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 26px;
+}
+.hero .ht { display: flex; flex-direction: column; }
+.hero .ht strong { font-size: 18px; font-weight: 700; letter-spacing: .2px; }
+.hero .ht .sub { margin-top: 3px; font-size: 12px; color: var(--muted); }
+
+.about-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.about-grid dt {
+  padding: 11px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.about-grid dd {
+  padding: 11px 0;
+  font-size: 12.5px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--border);
+}
+
+.engine-tag {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Página de downloads (pilot://downloads). Roda num <webview> isolado, sem
+    window.pilot. Fala com o main por fetch() de mesma origem:
+      GET  pilot://downloads/_data/list
+      POST pilot://downloads/_action   {id, action}   action: open|showInFolder|cancel
+    CSP: 'self' p/ script/style/fetch; sem imagens externas (ícones inline).
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none';" />
+  <title>Downloads</title>
+  <link rel="stylesheet" href="downloads.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="page-head">
+      <div class="head-brand">
+        <span class="brand-mark" aria-hidden="true">◢</span>
+        <h1 class="page-title">Downloads</h1>
+      </div>
+      <button class="btn-soft" id="refresh" type="button">Atualizar</button>
+    </header>
+
+    <section class="list" id="list" aria-live="polite">
+      <p class="empty" id="empty">Carregando…</p>
+    </section>
+  </main>
+
+  <script src="downloads.js"></script>
+</body>
+</html>

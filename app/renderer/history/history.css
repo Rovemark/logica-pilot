@@ -1,0 +1,259 @@
+/*
+  Página de histórico (pilot://history) — AUTOSSUFICIENTE.
+  Roda dentro de um <webview> isolado, sem o sistema de tema do host (styles.css).
+  Tokens claro/escuro via @media (prefers-color-scheme) — copiados do newtab.css
+  para manter a identidade Logica (roxo→azul, glass/blur, glow sutil).
+*/
+
+/* ===== ESCURO (default) ===== */
+:root {
+  --bg:            #0a0c12;
+  --bg-2:          #0e111b;
+  --surface:       #12151f;
+  --surface-2:     #181c28;
+  --text:          #e9ebf2;
+  --text-strong:   #f2f4fa;
+  --muted:         #8b93a7;
+  --muted-2:       #5c6478;
+  --border:        #232a3a;
+  --border-soft:   #1a2030;
+  --hover:         #181c28;
+  --accent:        #8e7bff;
+  --accent-soft:   rgba(124,92,255,.14);
+  --accent-brand:  #7c5cff;
+  --accent-brand-2:#4da3ff;
+  --accent-grad:   linear-gradient(135deg, #7c5cff 0%, #4da3ff 100%);
+  --focus-ring:    #7c5cff;
+  --glow:          0 0 18px rgba(124,92,255,.32);
+  --shadow-sm:     0 1px 3px rgba(0,0,0,.4);
+  --shadow-lg:     0 18px 50px rgba(0,0,0,.55);
+  --shadow-accent: 0 6px 26px rgba(124,92,255,.34);
+  --glass-bg:      rgba(18,21,31,.62);
+  --glass-border:  rgba(255,255,255,.08);
+  --glass-blur:    blur(20px) saturate(150%);
+  --danger:        #ff5d6c;
+  --danger-soft:   rgba(255,93,108,.12);
+  --scrollbar-thumb:#2a3346;
+  --radius:        16px;
+  --radius-sm:     11px;
+  --radius-pill:   999px;
+}
+
+/* ===== CLARO ===== */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:            #eef1f8;
+    --bg-2:          #ffffff;
+    --surface:       #ffffff;
+    --surface-2:     #f4f6fc;
+    --text:          #161a26;
+    --text-strong:   #0e1220;
+    --muted:         #5b6376;
+    --muted-2:       #8b93a7;
+    --border:        #dfe4f0;
+    --border-soft:   #e9edf7;
+    --hover:         #eef1fb;
+    --accent:        #6a4bff;
+    --accent-soft:   rgba(124,92,255,.10);
+    --accent-brand:  #7c5cff;
+    --accent-brand-2:#4da3ff;
+    --accent-grad:   linear-gradient(135deg, #7c5cff 0%, #4da3ff 100%);
+    --focus-ring:    #7c5cff;
+    --glow:          0 0 16px rgba(124,92,255,.22);
+    --shadow-sm:     0 1px 3px rgba(60,64,90,.12);
+    --shadow-lg:     0 18px 50px rgba(60,64,100,.18);
+    --shadow-accent: 0 6px 24px rgba(124,92,255,.26);
+    --glass-bg:      rgba(255,255,255,.66);
+    --glass-border:  rgba(124,92,255,.14);
+    --glass-blur:    blur(20px) saturate(150%);
+    --danger:        #d83a48;
+    --danger-soft:   rgba(216,58,72,.10);
+    --scrollbar-thumb:#c4cbdc;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  background:
+    radial-gradient(120% 50% at 50% -16%, color-mix(in srgb, var(--accent-brand) 16%, transparent) 0%, transparent 60%),
+    var(--bg);
+  color: var(--text);
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 36px 24px 64px;
+}
+
+/* ── Cabeçalho ──────────────────────────────────────────────── */
+.page-head {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 26px;
+}
+.head-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-mark {
+  font-size: 26px;
+  line-height: 1;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--accent-brand);
+  filter: drop-shadow(0 0 14px rgba(124,92,255,.45));
+}
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--text-strong);
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ── Busca ──────────────────────────────────────────────────── */
+.search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 16px;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-sm);
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.search:focus-within {
+  border-color: color-mix(in srgb, var(--accent-brand) 55%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus-ring) 24%, transparent), var(--glow);
+}
+.search-icon { display: grid; place-items: center; color: var(--muted); flex-shrink: 0; }
+.search-input {
+  flex: 1; min-width: 0; height: 100%;
+  background: transparent; border: none; outline: none;
+  color: var(--text); font-size: 14.5px; font-family: inherit;
+}
+.search-input::placeholder { color: var(--muted-2); }
+
+/* ── Botões ─────────────────────────────────────────────────── */
+.btn-danger {
+  flex-shrink: 0;
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .15s ease, transform .1s ease, box-shadow .15s ease;
+}
+.btn-danger:hover { background: color-mix(in srgb, var(--danger) 18%, transparent); box-shadow: var(--shadow-sm); }
+.btn-danger:active { transform: scale(.97); }
+
+/* ── Lista agrupada por dia ─────────────────────────────────── */
+.list { display: flex; flex-direction: column; gap: 22px; }
+
+.day-group { display: flex; flex-direction: column; gap: 4px; }
+.day-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 8px;
+  position: sticky;
+  top: 0;
+  background: linear-gradient(var(--bg), color-mix(in srgb, var(--bg) 70%, transparent));
+  backdrop-filter: blur(4px);
+  z-index: 1;
+}
+
+.hist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, transform .1s ease;
+}
+.hist-item:hover {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: var(--glass-border);
+}
+.hi-fav {
+  width: 20px; height: 20px; flex-shrink: 0;
+  border-radius: 5px; overflow: hidden;
+  background: var(--surface-2);
+  display: grid; place-items: center;
+}
+.hi-fav img { width: 16px; height: 16px; display: block; }
+.hi-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hi-title {
+  font-size: 14px; font-weight: 500; color: var(--text-strong);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hi-url {
+  font-size: 12px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hi-time { font-size: 12px; color: var(--muted-2); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.hi-del {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border: none; border-radius: var(--radius-pill);
+  background: transparent; color: var(--muted-2);
+  cursor: pointer; opacity: 0;
+  transition: opacity .14s ease, background .14s ease, color .14s ease;
+}
+.hist-item:hover .hi-del { opacity: 1; }
+.hi-del:hover { background: var(--danger-soft); color: var(--danger); }
+.hi-del:focus-visible { opacity: 1; }
+
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 60px 20px;
+  font-size: 14.5px;
+}
+
+/* ── Acessibilidade / scrollbar ─────────────────────────────── */
+:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring);
+  border-radius: 8px;
+}
+:focus:not(:focus-visible) { outline: none; }
+* { scrollbar-color: var(--scrollbar-thumb) transparent; scrollbar-width: thin; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition: none !important; }
+}

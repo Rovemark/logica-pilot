@@ -1,0 +1,71 @@
+/* Prompt de permissão flutuante — janela do SO (BrowserWindow sem moldura) →
+   sempre acima do <webview>. Documento separado: tem o próprio tema. */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:          #12151f;
+  --text:        #e9ebf2;
+  --muted:       #8a93a8;
+  --border:      rgba(255, 255, 255, .08);
+  --accent:      #8e7bff;
+  --accent-2:    #4da3ff;
+  --accent-soft: rgba(124, 92, 255, .18);
+  --field:       #1d2230;
+  --field-bd:    rgba(255, 255, 255, .12);
+}
+body.light {
+  --bg:          #ffffff;
+  --text:        #161a26;
+  --muted:       #6b7488;
+  --border:      #e9edf7;
+  --accent:      #6a4bff;
+  --accent-2:    #4da3ff;
+  --accent-soft: rgba(124, 92, 255, .12);
+  --field:       #f6f7fb;
+  --field-bd:    #dfe4f1;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+  user-select: none;
+}
+
+.perm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  padding: 0 14px;
+}
+
+.pp-text { flex: 1; min-width: 0; font-size: 13px; line-height: 1.35; color: var(--text); }
+.pp-text b { font-weight: 600; }
+
+.perm button {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: default;
+  transition: filter .12s ease, background .12s ease, color .12s ease;
+}
+.pp-allow {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+}
+.pp-allow:hover { filter: brightness(1.08); }
+.pp-deny {
+  background: var(--field);
+  border: 1px solid var(--field-bd);
+  color: var(--text);
+}
+.pp-deny:hover { background: var(--accent-soft); color: var(--accent); }

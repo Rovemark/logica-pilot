@@ -1,0 +1,29 @@
+{
+  "name": "logica-pilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Logica Pilot — browser AI-nativo do LogicaOS. Motor CDP puro (sem Playwright), percepção híbrida (a11y + visão) e loop autônomo controlado por Claude.",
+  "author": "Andre Ambrósio / Rovemark",
+  "license": "GPL-3.0-or-later",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "bin": {
+    "logica-pilot": "bin/logica-pilot.js"
+  },
+  "scripts": {
+    "pilot": "node bin/logica-pilot.js",
+    "browser": "electron app/main.js",
+    "smoke": "node bin/logica-pilot.js open https://example.com",
+    "smoke:electron": "LOGICA_PILOT_SMOKE=1 electron app/main.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "electron-chrome-extensions": "4.1.1",
+    "electron-chrome-web-store": "0.6.3"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}

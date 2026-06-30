@@ -1,0 +1,310 @@
+/*
+  Start page local (pilot://newtab) — AUTOSSUFICIENTE.
+  Roda dentro de um <webview> isolado, sem o sistema de tema do host.
+  Por isso os tokens são definidos AQUI, com claro/escuro via
+  @media (prefers-color-scheme). Identidade Logica: roxo→azul (#7c5cff→#4da3ff),
+  glass/blur, glow sutil — clean + futurista, NÃO clone do Chrome.
+*/
+
+/* ===== ESCURO (default — near-black azulado profundo) ===== */
+:root {
+  --bg:            #0a0c12;
+  --bg-2:          #0e111b;
+  --surface:       #12151f;
+  --surface-2:     #181c28;
+  --text:          #e9ebf2;
+  --text-strong:   #f2f4fa;
+  --muted:         #8b93a7;
+  --muted-2:       #5c6478;
+  --border:        #232a3a;
+  --border-soft:   #1a2030;
+  --hover:         #181c28;
+  --accent:        #8e7bff;
+  --accent-soft:   rgba(124,92,255,.14);
+  --accent-brand:  #7c5cff;   /* identidade Logica — roxo */
+  --accent-brand-2:#4da3ff;   /* identidade Logica — azul */
+  --accent-grad:   linear-gradient(135deg, #7c5cff 0%, #4da3ff 100%);
+  --focus-ring:    #7c5cff;
+  --glow:          0 1px 8px rgba(124,92,255,.12);
+  --shadow-sm:     0 1px 3px rgba(0,0,0,.4);
+  --shadow-lg:     0 18px 50px rgba(0,0,0,.55);
+  --shadow-accent: 0 6px 26px rgba(124,92,255,.34);
+  --glass-bg:      rgba(18,21,31,.62);
+  --glass-border:  rgba(255,255,255,.08);
+  --glass-blur:    blur(20px) saturate(150%);
+  --scrollbar-thumb:#2a3346;
+  --radius:        16px;
+  --radius-sm:     11px;
+  --radius-pill:   999px;
+}
+
+/* ===== CLARO (acompanha o SO — branco cristalino, levemente frio) ===== */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:            #eef1f8;
+    --bg-2:          #ffffff;
+    --surface:       #ffffff;
+    --surface-2:     #f4f6fc;
+    --text:          #161a26;
+    --text-strong:   #0e1220;
+    --muted:         #5b6376;
+    --muted-2:       #8b93a7;
+    --border:        #dfe4f0;
+    --border-soft:   #e9edf7;
+    --hover:         #eef1fb;
+    --accent:        #6a4bff;
+    --accent-soft:   rgba(124,92,255,.10);
+    --accent-brand:  #7c5cff;
+    --accent-brand-2:#4da3ff;
+    --accent-grad:   linear-gradient(135deg, #7c5cff 0%, #4da3ff 100%);
+    --focus-ring:    #7c5cff;
+    --glow:          0 1px 8px rgba(124,92,255,.08);
+    --shadow-sm:     0 1px 3px rgba(60,64,90,.12);
+    --shadow-lg:     0 18px 50px rgba(60,64,100,.18);
+    --shadow-accent: 0 6px 24px rgba(124,92,255,.26);
+    --glass-bg:      rgba(255,255,255,.66);
+    --glass-border:  rgba(124,92,255,.14);
+    --glass-blur:    blur(20px) saturate(150%);
+    --scrollbar-thumb:#c4cbdc;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Layout central ─────────────────────────────────────────── */
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+  padding: 48px 24px 24px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  /* Empurra o bloco levemente acima do centro óptico */
+  transform: translateY(-4vh);
+}
+
+/* ── Marca ──────────────────────────────────────────────────── */
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  user-select: none;
+}
+.brand-mark {
+  font-size: 76px;
+  line-height: 1;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--accent-brand);   /* fallback */
+  filter: drop-shadow(0 2px 14px rgba(124,92,255,.20));
+}
+.brand-name {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--text-strong);
+}
+.brand-name-accent {
+  margin-left: 2px;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--accent-brand-2);   /* fallback */
+}
+
+/* ── Busca (glass + foco gradiente) ─────────────────────────── */
+.search {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 60px;
+  padding: 0 10px 0 20px;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-sm);
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease, transform .18s ease;
+}
+.search:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: color-mix(in srgb, var(--accent-brand) 26%, var(--glass-border));
+  transform: translateY(-1px);
+}
+.search:focus-within {
+  border-color: color-mix(in srgb, var(--accent-brand) 50%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--focus-ring) 12%, transparent),
+    var(--shadow-lg);
+  transform: translateY(-1px);
+}
+.search-icon {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: color .18s ease;
+}
+.search:focus-within .search-icon { color: var(--accent); }
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 16.5px;
+  font-family: inherit;
+}
+.search-input::placeholder { color: var(--muted-2); }
+
+.search-go {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent-grad);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: var(--shadow-accent);
+  transition: filter .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+.search-go:hover { filter: brightness(1.08); box-shadow: var(--shadow-accent), var(--glow); }
+.search-go:active { transform: scale(.95); }
+.search-go:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-brand) 50%, transparent);
+  outline-offset: 2px;
+}
+
+/* ── Atalhos rápidos ────────────────────────────────────────── */
+.shortcuts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  width: 100%;
+  max-width: 520px;
+}
+.shortcut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 8px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, transform .14s ease, color .18s ease, box-shadow .18s ease;
+}
+.shortcut:hover {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: var(--glass-border);
+  color: var(--text-strong);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+.shortcut:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-brand) 50%, transparent);
+  outline-offset: 2px;
+}
+.shortcut-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  overflow: hidden;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.shortcut:hover .shortcut-icon {
+  border-color: color-mix(in srgb, var(--accent-brand) 45%, transparent);
+  box-shadow: var(--glow);
+}
+.shortcut-icon img {
+  width: 26px;
+  height: 26px;
+  display: block;
+}
+.shortcut-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: .1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ── Rodapé ─────────────────────────────────────────────────── */
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  font-size: 12px;
+  color: var(--muted-2);
+  user-select: none;
+}
+.foot-dot {
+  font-weight: 700;
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--accent-brand-2);   /* fallback */
+}
+
+/* ── Acessibilidade / responsivo ────────────────────────────── */
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-brand) 50%, transparent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+* { scrollbar-color: var(--scrollbar-thumb) transparent; scrollbar-width: thin; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; }
+
+@media (max-width: 520px) {
+  .shortcuts { grid-template-columns: repeat(2, 1fr); max-width: 320px; }
+  .brand-mark { font-size: 62px; }
+  .brand-name { font-size: 26px; }
+  .search { height: 54px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition: none !important; }
+}
