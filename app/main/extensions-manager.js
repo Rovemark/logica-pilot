@@ -111,6 +111,18 @@ async function init(ses, userDataDir) {
   // e desempacotadas. loadExtensions=true (default) carrega o que está em
   // extensionsPath; allowUnpackedExtensions=true permite as desempacotadas.
   if (webStore && typeof webStore.installChromeWebStore === 'function') {
+    // FIX do preload da loja: a lib usa `opts.modulePath || __dirname`, e o __dirname
+    // dela (dist/cjs/browser) faz o web-store-preload.js virar
+    // .../dist/cjs/browser/dist/renderer/web-store-preload.js (ENOENT) → a integração
+    // que INTERCEPTA o "Add to Chrome" (o que o Edge faz nativo) não carregava.
+    // Passamos a RAIZ do pacote p/ montar o path certo.
+    let webStoreModulePath;
+    try {
+      const entry = require.resolve('electron-chrome-web-store');
+      const marker = 'electron-chrome-web-store';
+      const i = entry.indexOf(marker);
+      if (i >= 0) webStoreModulePath = entry.slice(0, i + marker.length);
+    } catch {}
     try {
       await webStore.installChromeWebStore({
         session: ses,
@@ -118,6 +130,7 @@ async function init(ses, userDataDir) {
         loadExtensions: true,
         allowUnpackedExtensions: true,
         autoUpdate: true,
+        ...(webStoreModulePath ? { modulePath: webStoreModulePath } : {}),
       });
     } catch (e) {
       console.error('[ext] installChromeWebStore falhou:', e && e.message);
