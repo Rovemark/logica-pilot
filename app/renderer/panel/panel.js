@@ -85,13 +85,16 @@ async function renderAbout() {
 
 // ── SETTINGS — tema, motor de busca, homepage, limpar dados ───────────────────
 async function renderSettings() {
-  titleEl.textContent = 'Configurações';
+  // carrega settings + aplica o idioma (segue o SO se 'auto') no documento do painel
+  let settings = { theme: 'system', searchEngine: 'google', homepage: 'pilot://newtab', language: 'auto' };
+  try { const s = await window.panel.settingsGet(); if (s) settings = Object.assign(settings, s); } catch {}
+  try { if (window.i18n) window.i18n.setLang(settings.language || 'auto'); } catch {}
+  const t = (k) => (window.i18n ? window.i18n.t(k) : k);
+
+  titleEl.textContent = t('settings.title');
   bodyEl.innerHTML = '';
 
-  // carrega settings + catálogo de motores
-  let settings = { theme: 'system', searchEngine: 'google', homepage: 'pilot://newtab' };
   let engines = [];
-  try { const s = await window.panel.settingsGet(); if (s) settings = Object.assign(settings, s); } catch {}
   try { engines = (await window.panel.getEngines()) || []; } catch {}
   if (!engines.length) {
     engines = [{ id: 'google', name: 'Google' }, { id: 'bing', name: 'Bing' },
@@ -101,22 +104,37 @@ async function renderSettings() {
   // Tema
   const themeSel = el('select');
   themeSel.id = 'set-theme';
-  for (const [val, lbl] of [['system', 'Padrão do sistema'], ['light', 'Claro'], ['dark', 'Escuro']]) {
-    const o = el('option', null, lbl); o.value = val;
+  for (const [val, key] of [['system', 'settings.theme.system'], ['light', 'settings.theme.light'], ['dark', 'settings.theme.dark']]) {
+    const o = el('option', null, t(key)); o.value = val;
     if (val === (settings.theme || 'system')) o.selected = true;
     themeSel.appendChild(o);
   }
   themeSel.addEventListener('change', () => {
     const mode = themeSel.value;
     // persiste no main (settings.json + nativeTheme + backgroundColor das janelas).
-    // A casca principal reage ao evento theme:native-updated / reconcilia no boot.
     try { window.panel.setTheme({ mode }); } catch {}
     try { window.panel.settingsSet({ theme: mode }); } catch {}
-    // aplica o tema na PRÓPRIA janela do painel (documento separado)
     document.body.classList.toggle('light', mode === 'light'
       || (mode === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches));
   });
-  bodyEl.appendChild(settingsRow('Tema', 'Aparência da casca', themeSel));
+  bodyEl.appendChild(settingsRow(t('settings.theme'), t('settings.themeDesc'), themeSel));
+
+  // Idioma (detecção automática + escolha manual)
+  const langSel = el('select');
+  langSel.id = 'set-language';
+  const langOpts = [['auto', t('settings.language.auto')]].concat(
+    (window.i18n ? window.i18n.available() : []).map((l) => [l.id, l.name]));
+  for (const [val, lbl] of langOpts) {
+    const o = el('option', null, lbl); o.value = val;
+    if (val === (settings.language || 'auto')) o.selected = true;
+    langSel.appendChild(o);
+  }
+  langSel.addEventListener('change', () => {
+    try { window.panel.settingsSet({ language: langSel.value }); } catch {}
+    try { if (window.i18n) window.i18n.setLang(langSel.value); } catch {}
+    renderSettings(); // re-renderiza o painel já no novo idioma
+  });
+  bodyEl.appendChild(settingsRow(t('settings.language'), t('settings.languageDesc'), langSel));
 
   // Motor de busca
   const engSel = el('select');
@@ -129,7 +147,7 @@ async function renderSettings() {
   engSel.addEventListener('change', () => {
     try { window.panel.settingsSet({ searchEngine: engSel.value }); } catch {}
   });
-  bodyEl.appendChild(settingsRow('Motor de busca', 'Usado na barra de endereço', engSel));
+  bodyEl.appendChild(settingsRow(t('settings.engine'), t('settings.engineDesc'), engSel));
 
   // Homepage
   const homeInp = el('input');
@@ -144,16 +162,16 @@ async function renderSettings() {
   };
   homeInp.addEventListener('change', persistHome);
   homeInp.addEventListener('blur', persistHome);
-  bodyEl.appendChild(settingsRow('Página inicial', 'Aberta em novas abas', homeInp));
+  bodyEl.appendChild(settingsRow(t('settings.home'), t('settings.homeDesc'), homeInp));
 
   // Limpar dados de navegação
-  const clearBtn = el('button', 'btn danger', 'Limpar dados');
+  const clearBtn = el('button', 'btn danger', t('settings.clearBtn'));
   clearBtn.id = 'set-clear';
   clearBtn.addEventListener('click', async () => {
     clearBtn.disabled = true;
     try { await window.panel.clearData({ range: 'all' }); } catch {}
-    clearBtn.textContent = 'Dados limpos ✓';
-    setTimeout(() => { clearBtn.textContent = 'Limpar dados'; clearBtn.disabled = false; }, 1800);
+    clearBtn.textContent = t('settings.clearDone');
+    setTimeout(() => { clearBtn.textContent = t('settings.clearBtn'); clearBtn.disabled = false; }, 1800);
   });
-  bodyEl.appendChild(settingsRow('Limpar dados de navegação', 'Cookies, cache e armazenamento', clearBtn));
+  bodyEl.appendChild(settingsRow(t('settings.clear'), t('settings.clearDesc'), clearBtn));
 }

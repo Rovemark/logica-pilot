@@ -18,7 +18,11 @@ const DEFAULTS = Object.freeze({
   searchEngine: 'google', // id do catálogo (search-engines.js)
   homepage: 'pilot://newtab',
   showBookmarksBar: false, // exibir a barra de favoritos abaixo da toolbar
+  language: 'auto', // 'auto' (segue o SO) | 'pt-BR' | 'en' | 'es'
 });
+
+// idiomas suportados pela casca (devem existir em renderer/i18n/locales.js)
+const LANGUAGES = ['pt-BR', 'en', 'es'];
 
 let filePath = null;
 let state = { ...DEFAULTS };
@@ -51,6 +55,7 @@ function sanitize(s) {
   if (typeof s.searchEngine === 'string' && s.searchEngine) out.searchEngine = s.searchEngine;
   if (typeof s.homepage === 'string' && s.homepage) out.homepage = s.homepage;
   if (typeof s.showBookmarksBar === 'boolean') out.showBookmarksBar = s.showBookmarksBar;
+  if (s.language === 'auto' || LANGUAGES.includes(s.language)) out.language = s.language;
   return out;
 }
 

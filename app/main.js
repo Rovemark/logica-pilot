@@ -333,6 +333,8 @@ async function runUiTest(win) {
         hasTabStrip: !!window.TabStrip, hasOmnibox: !!window.Omnibox,
         hasFindBar: !!window.FindBar, hasOverlays: !!window.Overlays,
         hasTheme: !!window.LPTheme, dispatchType: typeof window.dispatchMenu,
+        i18nLang: (window.i18n && window.i18n.lang) || null,
+        navBackTitle: (document.getElementById('nav-back') || {}).title || null,
         pilotKeys: window.pilot ? Object.keys(window.pilot).length : 0,
         missingEls: ['views','address','tabs','findbar','app-menu','settings-overlay','about-overlay']
           .filter(function(id){return !document.getElementById(id);})

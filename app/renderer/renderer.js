@@ -699,6 +699,9 @@ async function boot() {
       if (s) settings = Object.assign(settings, s);
     }
   } catch {}
+  // i18n: aplica o idioma salvo (ou 'auto' → segue o SO via navigator.language) em
+  // toda a casca (traduz [data-i18n*] do index.html).
+  try { if (window.i18n) window.i18n.setLang(settings.language || 'auto'); } catch {}
   let engines = [];
   try { if (window.pilot && window.pilot.getEngines) engines = (await window.pilot.getEngines()) || []; } catch {}
 
@@ -733,6 +736,8 @@ async function boot() {
       if (s.theme && window.LPTheme && window.LPTheme.apply && window.LPTheme.current !== s.theme) {
         try { window.LPTheme.apply(s.theme); } catch {}
       }
+      // troca de idioma feita no painel de Configurações → reaplica na casca.
+      if (s.language) { try { if (window.i18n) window.i18n.setLang(s.language); } catch {} }
     });
   }
 
