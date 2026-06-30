@@ -143,4 +143,27 @@ contextBridge.exposeInMainWorld('pilot', {
   },
 
   platform: process.platform,
+
+  // ── Fase 1: páginas como WebContentsView geridas pelo main (flag LOGICA_PILOT_WCV) ─
+  // A casca vira controle remoto: manda comandos por tabId e recebe eventos de estado.
+  // Inerte com a flag OFF (view.enabled() → {enabled:false} → casca usa <webview>).
+  view: {
+    enabled: () => ipcRenderer.invoke('view:enabled'),
+    create: (payload) => ipcRenderer.invoke('view:create', payload),
+    activate: (payload) => ipcRenderer.invoke('view:activate', payload),
+    close: (payload) => ipcRenderer.invoke('view:close', payload),
+    navigate: (payload) => ipcRenderer.invoke('view:navigate', payload),
+    back: (payload) => ipcRenderer.invoke('view:back', payload),
+    forward: (payload) => ipcRenderer.invoke('view:forward', payload),
+    reload: (payload) => ipcRenderer.invoke('view:reload', payload),
+    stop: (payload) => ipcRenderer.invoke('view:stop', payload),
+    layout: (bounds) => ipcRenderer.send('view:layout', bounds),
+    onState: (cb) => ipcRenderer.on('tab:state', (_e, d) => cb(d)),
+    onNavigated: (cb) => ipcRenderer.on('tab:navigated', (_e, d) => cb(d)),
+    onTitle: (cb) => ipcRenderer.on('tab:title', (_e, d) => cb(d)),
+    onFavicon: (cb) => ipcRenderer.on('tab:favicon', (_e, d) => cb(d)),
+    onFail: (cb) => ipcRenderer.on('tab:fail', (_e, d) => cb(d)),
+    onActivated: (cb) => ipcRenderer.on('tab:activated', (_e, d) => cb(d)),
+    onAudio: (cb) => ipcRenderer.on('tab:audio', (_e, d) => cb(d)),
+  },
 });

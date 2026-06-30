@@ -40,8 +40,14 @@ const settingsStore = require('./main/settings');
 const searchEngines = require('./main/search-engines');
 const bookmarksStore = require('./main/bookmarks-store');
 const newsFeed = require('./main/news');
+const { createRegistry } = require('./main/view-registry');
 
 const pkg = require('../package.json');
+
+// Migração <webview> → WebContentsView (Fase 1). Atrás de flag: OFF (default) = o
+// caminho atual com <webview>; ON = páginas geridas pelo main via view-registry.
+// Permite coexistência e rollback instantâneo durante a migração.
+const WCV_ENABLED = process.env.LOGICA_PILOT_WCV === '1';
 
 // ── Guarda anti-crash do processo principal ─────────────────────────────────
 // Bug conhecido da electron-chrome-extensions@4.1.1: em navegação rápida o frame
@@ -105,6 +111,40 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+// Área de conteúdo (onde a WebContentsView ativa aparece): abaixo da titlebar
+// (tab strip) + toolbar. É um FALLBACK; a casca reporta o retângulo exato do
+// container #views via IPC 'view:layout' (cobre painel Pilot, barra de favoritos…).
+function computeContentBounds(win) {
+  const [w, h] = win.getContentSize();
+  const TOP = 84; // ~ tab strip + toolbar
+  return { x: 0, y: TOP, width: w, height: Math.max(0, h - TOP) };
+}
+
+// IPC da Fase 1: a casca comanda as views por tabId; executa no registry da JANELA
+// do emissor. Inerte se a janela não tem registry (flag OFF). Registrado 1x.
+function registerViewIpc() {
+  const regOf = (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return win && win._lpRegistry ? win._lpRegistry : null;
+  };
+  ipcMain.handle('view:enabled', () => ({ enabled: WCV_ENABLED }));
+  ipcMain.handle('view:create', (e, p = {}) => { const r = regOf(e); if (r) r.createTab(p.tabId, { url: p.url }); return { ok: !!r }; });
+  ipcMain.handle('view:activate', (e, p = {}) => { const r = regOf(e); if (r) r.activateTab(p.tabId); });
+  ipcMain.handle('view:close', (e, p = {}) => { const r = regOf(e); if (r) r.closeTab(p.tabId); });
+  ipcMain.handle('view:navigate', (e, p = {}) => { const r = regOf(e); if (r) r.navigate(p.tabId, p.url); });
+  ipcMain.handle('view:back', (e, p = {}) => { const r = regOf(e); if (r) r.goBack(p.tabId); });
+  ipcMain.handle('view:forward', (e, p = {}) => { const r = regOf(e); if (r) r.goForward(p.tabId); });
+  ipcMain.handle('view:reload', (e, p = {}) => { const r = regOf(e); if (r) (p.hard ? r.reloadHard(p.tabId) : r.reload(p.tabId)); });
+  ipcMain.handle('view:stop', (e, p = {}) => { const r = regOf(e); if (r) r.stop(p.tabId); });
+  // a casca reporta o retângulo exato da área de conteúdo (resize/painel/favoritos)
+  ipcMain.on('view:layout', (e, bounds) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (!win) return;
+    win._lpContentBounds = bounds;
+    if (win._lpRegistry) win._lpRegistry.layout();
+  });
+}
+
 // ── Criação de janela ─────────────────────────────────────────────────────────
 function createWindow(opts = {}) {
   const smoke = !!process.env.LOGICA_PILOT_SMOKE;
@@ -138,6 +178,21 @@ function createWindow(opts = {}) {
   win.webContents.on('did-attach-webview', (_e, wc) => {
     webviewManager.equip(wc, win);
   });
+
+  // ── Fase 1 (flag LOGICA_PILOT_WCV): páginas como WebContentsView geridas pelo
+  // main. Inerte com a flag OFF — o renderer segue criando <webview>. ON: o main
+  // cria/posiciona/troca as views; o renderer vira controle remoto via IPC view:*.
+  if (WCV_ENABLED && !headless) {
+    const registry = createRegistry({
+      window: win,
+      getContentBounds: () => win._lpContentBounds || computeContentBounds(win),
+      emit: (channel, payload) => { try { if (!win.isDestroyed()) win.webContents.send(channel, payload); } catch {} },
+      preload: path.join(__dirname, 'renderer', 'webview-preload.js'),
+    });
+    win._lpRegistry = registry;
+    win.on('resize', () => registry.layout());
+    win.on('closed', () => { try { registry.destroy(); } catch {} });
+  }
 
   if (smoke) {
     // janela única para o smoke, sem UI
@@ -1214,6 +1269,7 @@ app.whenReady().then(() => {
     .catch((e) => console.error('[ext] init falhou:', e && e.message));
 
   registerPilotProtocol();
+  registerViewIpc(); // Fase 1: handlers view:* (inertes com a flag OFF)
 
   // Application Menu nativo (accelerators funcionam sobre o <webview>).
   Menu.setApplicationMenu(buildMenu(getActiveWindow));
