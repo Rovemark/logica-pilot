@@ -49,6 +49,11 @@ const pkg = require('../package.json');
 // Permite coexistência e rollback instantâneo durante a migração.
 const WCV_ENABLED = process.env.LOGICA_PILOT_WCV === '1';
 
+// Nome do app = "Logica Pilot" (o default seria "Electron"). Afeta o userData e o
+// branding lido por libs via app.getName() — ex.: a Chrome Web Store mostra "Usar no
+// Logica Pilot" (a lib troca "Chrome" pelo nome do app no preload da loja).
+app.setName('Logica Pilot');
+
 // ── Guarda anti-crash do processo principal ─────────────────────────────────
 // Bug conhecido da electron-chrome-extensions@4.1.1: em navegação rápida o frame
 // é descartado ANTES do handler onBeforeNavigate acessar o WebFrameMain, lançando
@@ -1227,6 +1232,37 @@ ipcMain.handle('ext:install-unpacked', async (evt) => {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  // Migração 1x do userData: o app rodava sem nome ("Electron"), então os dados
+  // (extensões instaladas, histórico, favoritos, settings, cookies da partition)
+  // ficaram em .../Electron. Agora que o nome é "Logica Pilot", o userData aponta
+  // p/ .../Logica Pilot — renomeamos o dir antigo p/ não perder nada. rename é
+  // instantâneo (mesmo volume) e roda ANTES de qualquer store/extensão ler o path.
+  try {
+    const appData = app.getPath('appData');
+    const newUD = path.join(appData, 'Logica Pilot');
+    const oldUD = path.join(appData, 'Electron');
+    // marcador que prova ser NOSSO dado (não de outro app Electron sem nome): a
+    // partition persist:logica-pilot. O Electron já cria o dir novo (cache/cookies)
+    // antes daqui, então copiamos SÓ os nossos itens que ainda não existem no novo
+    // (rename falharia: dir novo já existe).
+    const ours = fs.existsSync(path.join(oldUD, 'Partitions', 'logica-pilot'));
+    if (oldUD !== newUD && ours) {
+      const items = ['settings.json', 'history.json', 'bookmarks.json', 'downloads.json',
+        'extensions', 'Partitions', 'Local Storage', 'Cookies'];
+      let migrated = 0;
+      for (const it of items) {
+        const src = path.join(oldUD, it);
+        const dst = path.join(newUD, it);
+        try {
+          if (fs.existsSync(src) && !fs.existsSync(dst)) { fs.cpSync(src, dst, { recursive: true }); migrated++; }
+        } catch {}
+      }
+      if (migrated) console.log('[name] userData migrado (Electron → Logica Pilot):', migrated, 'itens');
+    }
+  } catch (e) {
+    console.warn('[name] migração de userData falhou (segue com dir novo):', e && e.message);
+  }
+
   // Stores (precisam de app.getPath, só disponível após whenReady).
   const userData = app.getPath('userData');
   settingsStore.init(userData);

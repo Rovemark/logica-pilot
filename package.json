@@ -1,5 +1,6 @@
 {
   "name": "logica-pilot",
+  "productName": "Logica Pilot",
   "version": "0.1.0",
   "private": true,
   "description": "Logica Pilot — browser AI-nativo do LogicaOS. Motor CDP puro (sem Playwright), percepção híbrida (a11y + visão) e loop autônomo controlado por Claude.",
