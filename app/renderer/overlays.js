@@ -45,6 +45,8 @@
   ];
   // rótulo traduzido do item (cai no label PT-BR se o i18n não estiver pronto)
   const miLabel = (it) => (window.i18n && it.i18n ? window.i18n.t(it.i18n) : it.label);
+  // tradução genérica com fallback PT-BR + interpolação {var}
+  const T = (key, fb, vars) => { try { return window.i18n ? window.i18n.t(key, vars) : fb; } catch (e) { return fb; } };
 
   class Overlays {
     constructor() {
@@ -194,7 +196,7 @@
       let appVersion = '';
       try { const info = await window.pilot?.appInfo?.(); if (info) { appVersion = info.appVersion || ''; } } catch {}
       const rows = [
-        ['Versão', appVersion || '—'],
+        [T('about.version', 'Versão'), appVersion || '—'],
         ['Chromium', v.chrome || '—'],
         ['Electron', v.electron || '—'],
         ['V8', v.v8 || '—'],
@@ -202,9 +204,9 @@
       ];
       const body =
         '<div class="about-hero"><span class="brand-mark">◢</span><div><strong>Logica Pilot</strong>' +
-        '<div class="sr-hint">Navegador autônomo · motor Chromium</div></div></div>' +
+        '<div class="sr-hint">' + escapeHtml(T('about.tagline', 'Navegador autônomo · motor Chromium')) + '</div></div></div>' +
         '<dl class="about-grid">' + rows.map((r) => '<dt>' + escapeHtml(r[0]) + '</dt><dd>' + escapeHtml(r[1]) + '</dd>').join('') + '</dl>';
-      this._card('Sobre', body, this.aboutEl);
+      this._card(T('about.title', 'Sobre'), body, this.aboutEl);
     }
 
     // ── Histórico ───────────────────────────────────────────
@@ -215,9 +217,9 @@
         ? '<div class="hist-list">' + items.map((h) =>
             '<div class="hist-item" data-url="' + escapeHtml(h.url) + '"><span class="hi-title">' + escapeHtml(h.title || h.url) + '</span>' +
             '<span class="hi-url">' + escapeHtml(h.url) + '</span></div>').join('') + '</div>'
-        : '<p class="sr-hint">Sem histórico ainda.</p>';
-      const body = '<div class="settings-row"><label>Histórico recente</label><button id="hist-clear" class="btn-soft btn-danger">Limpar histórico</button></div>' + list;
-      this._card('Histórico', body, this.historyEl);
+        : '<p class="sr-hint">' + escapeHtml(T('history.empty', 'Sem histórico ainda.')) + '</p>';
+      const body = '<div class="settings-row"><label>' + escapeHtml(T('history.recent', 'Histórico recente')) + '</label><button id="hist-clear" class="btn-soft btn-danger">' + escapeHtml(T('history.clear', 'Limpar histórico')) + '</button></div>' + list;
+      this._card(T('menu.history', 'Histórico'), body, this.historyEl);
 
       this.historyEl.querySelectorAll('.hist-item').forEach((it) => {
         it.addEventListener('click', () => { this.historyEl.hidden = true; this.dispatch('open-url', it.dataset.url); });
@@ -236,17 +238,17 @@
       }
       const list = items.length
         ? '<div class="dl-list">' + items.map((d) => this._dlRow(d)).join('') + '</div>'
-        : '<p class="sr-hint">Nenhum download.</p>';
-      this._card('Downloads', list, this.downloadsEl);
+        : '<p class="sr-hint">' + escapeHtml(T('downloads.empty', 'Nenhum download.')) + '</p>';
+      this._card(T('menu.downloads', 'Downloads'), list, this.downloadsEl);
       this._wireDlActions(this.downloadsEl);
     }
 
     _dlRow(d) {
       const pct = d.totalBytes ? Math.min(100, Math.round((d.receivedBytes / d.totalBytes) * 100)) : 0;
-      const stateLabel = { started: 'baixando…', progress: 'baixando…', completed: 'concluído', cancelled: 'cancelado', interrupted: 'interrompido' }[d.state] || (d.state || '');
+      const stateLabel = { started: T('dl.downloading', 'baixando…'), progress: T('dl.downloading', 'baixando…'), completed: T('dl.completed', 'concluído'), cancelled: T('dl.cancelled', 'cancelado'), interrupted: T('dl.interrupted', 'interrompido') }[d.state] || (d.state || '');
       const acts = d.state === 'completed'
-        ? '<button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="open">Abrir</button><button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="showInFolder">Mostrar</button>'
-        : '<button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="cancel">Cancelar</button>';
+        ? '<button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="open">' + escapeHtml(T('dl.open', 'Abrir')) + '</button><button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="showInFolder">' + escapeHtml(T('dl.show', 'Mostrar')) + '</button>'
+        : '<button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="cancel">' + escapeHtml(T('dl.cancel', 'Cancelar')) + '</button>';
       return '<div class="dl-item"><span class="dl-name">' + escapeHtml(d.filename || d.url || '') + '</span>' +
         (d.state === 'completed' ? '' : '<span class="dl-bar"><i style="width:' + pct + '%"></i></span>') +
         '<span class="dl-state">' + escapeHtml(stateLabel) + '</span>' + acts + '</div>';
@@ -279,7 +281,7 @@
         return '<span class="dl-chip"><span>' + escapeHtml(d.filename || '') + '</span>' +
           '<span class="dl-bar"><i style="width:' + pct + '%"></i></span><span>' + escapeHtml(label) + '</span></span>';
       }).join('') + '<button class="dl-close" title="Fechar">✕</button>' +
-        '<span class="dl-chip" id="dl-open-all" style="cursor:default">Ver tudo</span>';
+        '<span class="dl-chip" id="dl-open-all" style="cursor:default">' + escapeHtml(T('dl.viewAll', 'Ver tudo')) + '</span>';
       this.shelf.hidden = false;
       const close = this.shelf.querySelector('.dl-close');
       if (close) close.addEventListener('click', () => { this.shelf.hidden = true; });
@@ -301,11 +303,19 @@
       const req = this._permQueue[0];
       if (!req) { this.permEl.hidden = true; this.permEl.innerHTML = ''; this._curPerm = null; return; }
       this._curPerm = req;
-      const labels = { media: 'usar câmera/microfone', geolocation: 'acessar sua localização', notifications: 'enviar notificações' };
-      const what = labels[req.permission] || ('usar: ' + req.permission);
+      const labels = {
+        media: T('perm.media', 'usar câmera/microfone'),
+        geolocation: T('perm.geolocation', 'acessar sua localização'),
+        notifications: T('perm.notifications', 'enviar notificações'),
+      };
+      const what = labels[req.permission] || T('perm.generic', 'usar: ' + req.permission, { what: req.permission });
+      const origin = req.origin || T('perm.site', 'O site');
+      const text = T('perm.text', escapeHtml(origin) + ' quer ' + escapeHtml(what) + '.',
+        { origin: escapeHtml(origin), what: escapeHtml(what) });
       this.permEl.innerHTML =
-        '<span class="pp-text">' + escapeHtml(req.origin || 'O site') + ' quer ' + escapeHtml(what) + '.</span>' +
-        '<button class="pp-allow">Permitir</button><button class="pp-deny">Bloquear</button>';
+        '<span class="pp-text">' + text + '</span>' +
+        '<button class="pp-allow">' + escapeHtml(T('perm.allow', 'Permitir')) + '</button>' +
+        '<button class="pp-deny">' + escapeHtml(T('perm.deny', 'Bloquear')) + '</button>';
       this.permEl.hidden = false;
       this.permEl.querySelector('.pp-allow').addEventListener('click', () => this._respondPermission(true));
       this.permEl.querySelector('.pp-deny').addEventListener('click', () => this._respondPermission(false));
