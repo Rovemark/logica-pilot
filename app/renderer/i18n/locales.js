@@ -2,8 +2,8 @@
 /**
  * locales.js — Catálogo de traduções da casca (12 idiomas).
  * EN é o canônico; os demais traduzidos a partir dele.
- * Cobre: titlebar, toolbar, findbar, painel do Pilot, menu ⋮, Configurações,
- * home (nova aba) e overlays (Sobre/Histórico/Downloads/permissão).
+ * Cobre: titlebar, toolbar, findbar, painel do Pilot, menu ⋮, Configurações
+ * (inclui chave da IA), home (nova aba) e overlays (Sobre/Histórico/Downloads/permissão).
  */
 window.LP_LOCALES = {
   "pt-BR": {
@@ -103,6 +103,8 @@ window.LP_LOCALES = {
     "perm.site": "O site",
     "perm.allow": "Permitir",
     "perm.deny": "Bloquear",
+    "settings.aiKey": "Chave da IA (Pilot)",
+    "settings.aiKeyDesc": "Chave Anthropic (sk-ant-…) p/ usar o Pilot sem o LogicaProxy",
   },
   "en": {
     "lang.name": "English",
@@ -201,6 +203,8 @@ window.LP_LOCALES = {
     "perm.site": "The site",
     "perm.allow": "Allow",
     "perm.deny": "Block",
+    "settings.aiKey": "AI key (Pilot)",
+    "settings.aiKeyDesc": "Anthropic key (sk-ant-…) to use Pilot without LogicaProxy",
   },
   "es": {
     "lang.name": "Español",
@@ -299,6 +303,8 @@ window.LP_LOCALES = {
     "perm.site": "El sitio",
     "perm.allow": "Permitir",
     "perm.deny": "Bloquear",
+    "settings.aiKey": "Clave de IA (Pilot)",
+    "settings.aiKeyDesc": "Clave Anthropic (sk-ant-…) para usar Pilot sin LogicaProxy",
   },
   "fr": {
     "lang.name": "Français",
@@ -397,6 +403,8 @@ window.LP_LOCALES = {
     "perm.site": "Le site",
     "perm.allow": "Autoriser",
     "perm.deny": "Bloquer",
+    "settings.aiKey": "Clé IA (Pilot)",
+    "settings.aiKeyDesc": "Clé Anthropic (sk-ant-…) pour utiliser Pilot sans LogicaProxy",
   },
   "de": {
     "lang.name": "Deutsch",
@@ -495,6 +503,8 @@ window.LP_LOCALES = {
     "perm.site": "Die Website",
     "perm.allow": "Zulassen",
     "perm.deny": "Blockieren",
+    "settings.aiKey": "KI-Schlüssel (Pilot)",
+    "settings.aiKeyDesc": "Anthropic-Schlüssel (sk-ant-…) für Pilot ohne LogicaProxy",
   },
   "it": {
     "lang.name": "Italiano",
@@ -593,6 +603,8 @@ window.LP_LOCALES = {
     "perm.site": "Il sito",
     "perm.allow": "Consenti",
     "perm.deny": "Blocca",
+    "settings.aiKey": "Chiave IA (Pilot)",
+    "settings.aiKeyDesc": "Chiave Anthropic (sk-ant-…) per usare Pilot senza LogicaProxy",
   },
   "nl": {
     "lang.name": "Nederlands",
@@ -691,6 +703,8 @@ window.LP_LOCALES = {
     "perm.site": "De site",
     "perm.allow": "Toestaan",
     "perm.deny": "Blokkeren",
+    "settings.aiKey": "AI-sleutel (Pilot)",
+    "settings.aiKeyDesc": "Anthropic-sleutel (sk-ant-…) om Pilot zonder LogicaProxy te gebruiken",
   },
   "pl": {
     "lang.name": "Polski",
@@ -789,6 +803,8 @@ window.LP_LOCALES = {
     "perm.site": "Witryna",
     "perm.allow": "Zezwól",
     "perm.deny": "Zablokuj",
+    "settings.aiKey": "Klucz AI (Pilot)",
+    "settings.aiKeyDesc": "Klucz Anthropic (sk-ant-…) do Pilota bez LogicaProxy",
   },
   "ru": {
     "lang.name": "Русский",
@@ -887,6 +903,8 @@ window.LP_LOCALES = {
     "perm.site": "Сайт",
     "perm.allow": "Разрешить",
     "perm.deny": "Блокировать",
+    "settings.aiKey": "Ключ ИИ (Pilot)",
+    "settings.aiKeyDesc": "Ключ Anthropic (sk-ant-…) для Pilot без LogicaProxy",
   },
   "ja": {
     "lang.name": "日本語",
@@ -985,6 +1003,8 @@ window.LP_LOCALES = {
     "perm.site": "このサイト",
     "perm.allow": "許可",
     "perm.deny": "ブロック",
+    "settings.aiKey": "AIキー (Pilot)",
+    "settings.aiKeyDesc": "LogicaProxy なしで Pilot を使う Anthropic キー (sk-ant-…)",
   },
   "ko": {
     "lang.name": "한국어",
@@ -1083,6 +1103,8 @@ window.LP_LOCALES = {
     "perm.site": "사이트",
     "perm.allow": "허용",
     "perm.deny": "차단",
+    "settings.aiKey": "AI 키 (Pilot)",
+    "settings.aiKeyDesc": "LogicaProxy 없이 Pilot을 쓰는 Anthropic 키 (sk-ant-…)",
   },
   "zh-CN": {
     "lang.name": "简体中文",
@@ -1181,5 +1203,7 @@ window.LP_LOCALES = {
     "perm.site": "该网站",
     "perm.allow": "允许",
     "perm.deny": "阻止",
+    "settings.aiKey": "AI 密钥 (Pilot)",
+    "settings.aiKeyDesc": "无需 LogicaProxy 即可使用 Pilot 的 Anthropic 密钥 (sk-ant-…)",
   },
 };

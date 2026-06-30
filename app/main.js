@@ -28,6 +28,7 @@ const path = require('path');
 const fs = require('fs');
 const { ElectronPage } = require('../src/electron-page');
 const agent = require('../src/agent');
+const llm = require('../src/llm');
 const perception = require('../src/perception');
 const actions = require('../src/actions');
 
@@ -1068,6 +1069,8 @@ ipcMain.handle('theme:set', (evt, { mode } = {}) => {
 ipcMain.handle('settings:get', () => settingsStore.get());
 ipcMain.handle('settings:set', (evt, patch) => {
   const next = settingsStore.set(patch || {});
+  // se a chave da IA mudou, reconfigura o cérebro do Pilot na hora.
+  if (patch && 'aiApiKey' in patch) { try { llm.configure({ apiKey: next.aiApiKey }); } catch {} }
   // propaga pra TODAS as janelas-casca (o painel flutuante de Settings é janela
   // separada; sem isto a casca aberta ficava com searchEngine/homepage/tema stale).
   try { broadcast('settings:changed', settingsStore.get()); } catch {}
@@ -1303,6 +1306,9 @@ app.whenReady().then(() => {
   // Stores (precisam de app.getPath, só disponível após whenReady).
   const userData = app.getPath('userData');
   settingsStore.init(userData);
+  // injeta a chave da IA (das settings do usuário) no cérebro do Pilot — habilita
+  // o Pilot out-of-the-box (Anthropic direto) quando não há LogicaProxy local.
+  try { llm.configure({ apiKey: settingsStore.get().aiApiKey }); } catch {}
   historyStore.init(userData);
   downloadsStore.init(userData, shell);
   bookmarksStore.init(userData);

@@ -19,6 +19,7 @@ const DEFAULTS = Object.freeze({
   homepage: 'pilot://newtab',
   showBookmarksBar: false, // exibir a barra de favoritos abaixo da toolbar
   language: 'auto', // 'auto' (segue o SO) | 'pt-BR' | 'en' | 'es'
+  aiApiKey: '', // chave Anthropic do usuário (sk-ant-…) p/ o Pilot sem LogicaProxy
 });
 
 // idiomas suportados pela casca (devem existir em renderer/i18n/locales.js)
@@ -56,6 +57,7 @@ function sanitize(s) {
   if (typeof s.homepage === 'string' && s.homepage) out.homepage = s.homepage;
   if (typeof s.showBookmarksBar === 'boolean') out.showBookmarksBar = s.showBookmarksBar;
   if (s.language === 'auto' || LANGUAGES.includes(s.language)) out.language = s.language;
+  if (typeof s.aiApiKey === 'string') out.aiApiKey = s.aiApiKey.trim();
   return out;
 }
 

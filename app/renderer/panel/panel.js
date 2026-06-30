@@ -164,6 +164,19 @@ async function renderSettings() {
   homeInp.addEventListener('blur', persistHome);
   bodyEl.appendChild(settingsRow(t('settings.home'), t('settings.homeDesc'), homeInp));
 
+  // Chave da IA do Pilot (out-of-the-box: Anthropic direto, sem LogicaProxy)
+  const aiInp = el('input');
+  aiInp.type = 'password';
+  aiInp.id = 'set-aikey';
+  aiInp.value = settings.aiApiKey || '';
+  aiInp.placeholder = 'sk-ant-…';
+  aiInp.setAttribute('autocomplete', 'off');
+  aiInp.spellcheck = false;
+  const persistAi = () => { try { window.panel.settingsSet({ aiApiKey: aiInp.value.trim() }); } catch {} };
+  aiInp.addEventListener('change', persistAi);
+  aiInp.addEventListener('blur', persistAi);
+  bodyEl.appendChild(settingsRow(t('settings.aiKey'), t('settings.aiKeyDesc'), aiInp));
+
   // Limpar dados de navegação
   const clearBtn = el('button', 'btn danger', t('settings.clearBtn'));
   clearBtn.id = 'set-clear';
