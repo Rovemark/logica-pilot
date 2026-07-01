@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440" role="img" aria-label="Logica Pilot learning flywheel">
+  <defs>
+    <linearGradient id="fbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d0f1a"/><stop offset="1" stop-color="#161a2e"/>
+    </linearGradient>
+    <linearGradient id="fac" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#4da3ff"/>
+    </linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7c5cff"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="440" rx="18" fill="url(#fbg)"/>
+  <text x="450" y="52" text-anchor="middle" font-family="-apple-system, Segoe UI, sans-serif" font-size="26" font-weight="800" fill="#f2f4ff">The Learning Flywheel <tspan fill="#8ea0ff">— the moat</tspan></text>
+  <text x="450" y="82" text-anchor="middle" font-family="-apple-system, Segoe UI, sans-serif" font-size="15" fill="#aeb6d8">Every task makes the next one on that site cheaper, faster and more reliable. A Playwright script starts cold every run.</text>
+
+  <!-- circular arrows -->
+  <circle cx="450" cy="262" r="118" fill="none" stroke="#7c5cff" stroke-width="2.5" stroke-dasharray="6 10" opacity="0.55"/>
+  <path d="M450 144 A118 118 0 0 1 568 262" fill="none" stroke="url(#fac)" stroke-width="3.5" marker-end="url(#arw)"/>
+  <path d="M568 262 A118 118 0 0 1 450 380" fill="none" stroke="url(#fac)" stroke-width="3.5" marker-end="url(#arw)"/>
+  <path d="M450 380 A118 118 0 0 1 332 262" fill="none" stroke="url(#fac)" stroke-width="3.5" marker-end="url(#arw)"/>
+  <path d="M332 262 A118 118 0 0 1 450 144" fill="none" stroke="url(#fac)" stroke-width="3.5" marker-end="url(#arw)"/>
+
+  <g font-family="-apple-system, Segoe UI, sans-serif" text-anchor="middle">
+    <!-- top -->
+    <g transform="translate(450,150)"><rect x="-92" y="-28" width="184" height="56" rx="12" fill="#171b2e" stroke="#7c5cff88"/>
+      <text y="-2" font-size="16" font-weight="700" fill="#f2f4ff">1 · Agent acts</text>
+      <text y="18" font-size="12" fill="#aeb6d8">clicks/reads by intent</text></g>
+    <!-- right -->
+    <g transform="translate(636,262)"><rect x="-96" y="-28" width="192" height="56" rx="12" fill="#171b2e" stroke="#4da3ff88"/>
+      <text y="-2" font-size="16" font-weight="700" fill="#f2f4ff">2 · Site Memory</text>
+      <text y="18" font-size="12" fill="#aeb6d8">learns elements + recipes</text></g>
+    <!-- bottom -->
+    <g transform="translate(450,374)"><rect x="-104" y="-28" width="208" height="56" rx="12" fill="#171b2e" stroke="#3ddc9788"/>
+      <text y="-2" font-size="16" font-weight="700" fill="#f2f4ff">3 · Warm-start</text>
+      <text y="18" font-size="12" fill="#aeb6d8">fewer tokens · known flows</text></g>
+    <!-- left -->
+    <g transform="translate(264,262)"><rect x="-96" y="-28" width="192" height="56" rx="12" fill="#171b2e" stroke="#ffd16688"/>
+      <text y="-2" font-size="16" font-weight="700" fill="#f2f4ff">4 · Runs more</text>
+      <text y="18" font-size="12" fill="#aeb6d8">cheaper → more usage</text></g>
+
+    <!-- center -->
+    <g transform="translate(450,262)">
+      <text y="-6" font-size="15" font-weight="800" fill="url(#fac)">local &amp; private</text>
+      <text y="16" font-size="12" fill="#8ea0ff">your data, your moat</text>
+    </g>
+  </g>
+</svg>

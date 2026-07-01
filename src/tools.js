@@ -20,6 +20,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const perception = require('./perception');
+const siteMemory = require('./site-memory');
 const actions = require('./actions');
 const agent = require('./agent');
 const llm = require('./llm');
@@ -32,7 +33,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const q = (id) => `[data-lpilot-id="${String(id).replace(/"/g, '')}"]`;
 
 async function map(page, max = 120) {
-  return perception.format(await perception.snapshot(page, { maxEls: max }));
+  const text = perception.format(await perception.snapshot(page, { maxEls: max }));
+  // Learning flywheel (MOAT): record the visit + append what we've learned about
+  // this site, so the model warm-starts on repeat visits. Best-effort.
+  try {
+    const url = await page.eval('location.href');
+    siteMemory.recordVisit(url);
+    const hint = siteMemory.hintLine(url);
+    if (hint) return text + '\n\n' + hint;
+  } catch {}
+  return text;
 }
 async function ensureUrl(page, a) { if (a && a.url) await page.goto(a.url); }
 // ensures elements have data-lpilot-id (needed by index-based actions)
@@ -172,6 +182,18 @@ const TOOLS = [
     run: async (a, ctx) => {
       await ensureUrl(ctx.page, a);
       await ensureIds(ctx.page);
+      // Learning flywheel (MOAT): capture the target element + url BEFORE acting,
+      // because a click can navigate away and destroy the element.
+      let acted = null, actedUrl = null;
+      if ((a.action === 'click' || a.action === 'type') && a.index != null) {
+        try {
+          actedUrl = await ctx.page.eval('location.href');
+          acted = await ctx.page.eval(
+            `(function(){var el=document.querySelector('${q(a.index)}');if(!el)return null;` +
+            `var t=(el.getAttribute('aria-label')||el.textContent||el.value||el.placeholder||'').trim().slice(0,60);` +
+            `return {label:t,type:(el.tagName||'').toLowerCase()};})()`);
+        } catch {}
+      }
       let res;
       switch (a.action) {
         case 'click': res = await actions.click(ctx.page, a.index); break;
@@ -180,6 +202,7 @@ const TOOLS = [
         case 'scroll': res = await actions.scroll(ctx.page, a.direction || 'down', a.amount || 600); break;
         default: throw new Error('invalid action: ' + a.action);
       }
+      if (acted && acted.label) { try { siteMemory.recordAction(actedUrl, acted); } catch {} }
       await sleep(250);
       return { text: res + '\n\n' + await map(ctx.page, 80) };
     },
@@ -254,6 +277,16 @@ const TOOLS = [
   },
 
   // ── session ──
+  {
+    name: 'memory', group: 'session', pageless: true,
+    description: 'Show what Logica Pilot has LEARNED about sites (the flywheel): visit counts, most-used elements and known recipes. Repeat tasks warm-start from this. Optional domain filter.',
+    input: { properties: { domain: { type: 'string', description: 'filter to one hostname (e.g. github.com)' } } },
+    run: async (a) => {
+      const stats = siteMemory.stats();
+      if (a.domain) return { json: { stats, site: siteMemory.dump(a.domain) } };
+      return { json: { stats, sites: siteMemory.dump() } };
+    },
+  },
   {
     name: 'session', group: 'session',
     description: 'Manage login sessions (cookies): save | load | list. Log in once, reuse forever.',

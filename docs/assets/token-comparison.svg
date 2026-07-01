@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 420" font-family="'SF Mono','Fira Code',monospace">
+  <defs>
+    <linearGradient id="pilot-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00d4aa"/>
+      <stop offset="100%" stop-color="#00f5c8"/>
+    </linearGradient>
+    <linearGradient id="pw-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff4444"/>
+      <stop offset="100%" stop-color="#ff6b6b"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="820" height="420" rx="12" fill="#0d1117"/>
+  <rect x="1" y="1" width="818" height="418" rx="11" fill="none" stroke="#30363d" stroke-width="1"/>
+  
+  <!-- Title -->
+  <text x="410" y="40" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="bold">Perception Tokens · Logica Pilot vs Playwright + LLM</text>
+  <text x="410" y="60" text-anchor="middle" fill="#8b949e" font-size="12">Measured on real sites — same task, same model</text>
+  
+  <!-- Legend -->
+  <rect x="260" y="75" width="14" height="14" rx="3" fill="url(#pilot-grad)"/>
+  <text x="280" y="87" fill="#e6edf3" font-size="12">Logica Pilot</text>
+  <rect x="400" y="75" width="14" height="14" rx="3" fill="url(#pw-grad)"/>
+  <text x="420" y="87" fill="#e6edf3" font-size="12">Playwright + LLM (raw HTML)</text>
+  
+  <!-- Y-axis -->
+  <line x1="100" y1="100" x2="100" y2="370" stroke="#30363d" stroke-width="1"/>
+  
+  <!-- Chart area -->
+  <!-- EASY -->
+  <text x="220" y="395" text-anchor="middle" fill="#8b949e" font-size="13" font-weight="bold">EASY</text>
+  <text x="220" y="408" text-anchor="middle" fill="#484f58" font-size="10">Hacker News</text>
+  
+  <!-- Pilot bar: 1833 tokens — scale: max is 166683, chart height is 250px -->
+  <!-- Scale: use log or relative within group -->
+  <!-- Group 1: Easy — max 8688 -->
+  <rect x="170" y="316" width="40" height="44" rx="4" fill="url(#pilot-grad)" filter="url(#glow)">
+    <animate attributeName="height" from="0" to="44" dur="0.8s" fill="freeze"/>
+    <animate attributeName="y" from="360" to="316" dur="0.8s" fill="freeze"/>
+  </rect>
+  <text x="190" y="310" text-anchor="middle" fill="#00d4aa" font-size="11" font-weight="bold">1.8K</text>
+  
+  <!-- Playwright bar -->
+  <rect x="215" y="148" width="40" height="212" rx="4" fill="url(#pw-grad)">
+    <animate attributeName="height" from="0" to="212" dur="1s" fill="freeze"/>
+    <animate attributeName="y" from="360" to="148" dur="1s" fill="freeze"/>
+  </rect>
+  <text x="235" y="142" text-anchor="middle" fill="#ff6b6b" font-size="11" font-weight="bold">8.7K</text>
+  
+  <!-- Gain badge -->
+  <rect x="185" y="118" width="50" height="20" rx="10" fill="#238636"/>
+  <text x="210" y="132" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">4.7×</text>
+  
+  <!-- MEDIUM -->
+  <text x="420" y="395" text-anchor="middle" fill="#8b949e" font-size="13" font-weight="bold">MEDIUM</text>
+  <text x="420" y="408" text-anchor="middle" fill="#484f58" font-size="10">Wikipedia</text>
+  
+  <rect x="370" y="357" width="40" height="3" rx="2" fill="url(#pilot-grad)" filter="url(#glow)">
+    <animate attributeName="height" from="0" to="3" dur="0.8s" fill="freeze"/>
+    <animate attributeName="y" from="360" to="357" dur="0.8s" fill="freeze"/>
+  </rect>
+  <text x="390" y="350" text-anchor="middle" fill="#00d4aa" font-size="11" font-weight="bold">901</text>
+  
+  <rect x="415" y="110" width="40" height="250" rx="4" fill="url(#pw-grad)">
+    <animate attributeName="height" from="0" to="250" dur="1.2s" fill="freeze"/>
+    <animate attributeName="y" from="360" to="110" dur="1.2s" fill="freeze"/>
+  </rect>
+  <text x="435" y="104" text-anchor="middle" fill="#ff6b6b" font-size="11" font-weight="bold">166K</text>
+  
+  <rect x="385" y="118" width="55" height="20" rx="10" fill="#238636"/>
+  <text x="412" y="132" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">185×</text>
+  
+  <!-- HARD -->
+  <text x="620" y="395" text-anchor="middle" fill="#8b949e" font-size="13" font-weight="bold">HARD</text>
+  <text x="620" y="408" text-anchor="middle" fill="#484f58" font-size="10">4 sources · research</text>
+  
+  <rect x="570" y="355" width="40" height="5" rx="2" fill="url(#pilot-grad)" filter="url(#glow)">
+    <animate attributeName="height" from="0" to="5" dur="0.8s" fill="freeze"/>
+    <animate attributeName="y" from="360" to="355" dur="0.8s" fill="freeze"/>
+  </rect>
+  <text x="590" y="348" text-anchor="middle" fill="#00d4aa" font-size="11" font-weight="bold">3.6K</text>
+  
+  <rect x="615" y="110" width="40" height="250" rx="4" fill="url(#pw-grad)">
+    <animate attributeName="height" from="0" to="250" dur="1.4s" fill="freeze"/>
+    <animate attributeName="y" from="360" to="110" dur="1.4s" fill="freeze"/>
+  </rect>
+  <text x="635" y="104" text-anchor="middle" fill="#ff6b6b" font-size="11" font-weight="bold">603K</text>
+  
+  <rect x="585" y="118" width="55" height="20" rx="10" fill="#238636"/>
+  <text x="612" y="132" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">167×</text>
+  
+  <!-- Cost comparison footer -->
+  <line x1="100" y1="360" x2="720" y2="360" stroke="#30363d" stroke-width="1"/>
+  
+  <!-- Bottom stat -->
+  <text x="410" y="385" text-anchor="middle" fill="#58a6ff" font-size="12">1,000 research tasks/mo: $11 with Pilot vs $1,810 with Playwright + LLM</text>
+</svg>

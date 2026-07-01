@@ -1,18 +1,54 @@
-# ◢ Logica Pilot
+<p align="center">
+  <img src="docs/media/hero.svg" alt="Logica Pilot — the AI-native browser" width="100%">
+</p>
+
+# Logica Pilot
 
 **The AI-native browser. Replace Playwright. 5–185× fewer perception tokens (measured on real sites).**
 
-A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic intent (not pixel coordinates), **clicks, types, scrolls, and reads** autonomously until the goal is met. Pure CDP engine · zero external dependencies · both headless agent mode and a full-featured desktop browser.
+A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic
+intent — not pixel coordinates — then **clicks, types, scrolls and reads** on its own until the
+goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
+browser · **CLI and MCP** with the same 26 tools.
 
-<div align="center">
+---
 
-[![GPL-3.0 License](https://img.shields.io/badge/license-GPL--3.0--or--later-green)](LICENSE)
-[![MCP Server](https://img.shields.io/badge/MCP-Server-informational)](https://spec.modelcontextprotocol.io)
-[![25 Tools](https://img.shields.io/badge/tools-25-blue)](src/tools.js)
-[![Zero-dependency core](https://img.shields.io/badge/core%20engine-0%20deps-success)](src/)
-[![Electron](https://img.shields.io/badge/desktop-Electron%2037-informational)](app/)
+## The Moat: it learns your sites
 
-</div>
+Token-first perception is easy to copy. **What compounds is memory.** Every task teaches Logica
+Pilot which elements matter on a site and which action sequences work — stored **locally, on your
+machine**. Repeat visits warm-start from that memory, so the browser gets **cheaper, faster and
+more reliable per site the more your agents use it.** A stock Playwright script starts cold on
+every single run.
+
+<p align="center">
+  <img src="docs/media/flywheel.svg" alt="The Logica Pilot learning flywheel" width="700">
+</p>
+
+This isn't a slide — **it ships.** After two clicks on Hacker News, the perception map itself
+carries what was learned (no extra prompt, no extra tokens spent re-discovering it):
+
+```console
+$ logica-pilot act --url news.ycombinator.com --action click --index 1
+$ logica-pilot act --url news.ycombinator.com --action click --index 4
+$ logica-pilot observe news.ycombinator.com
+  … indexed map …
+★ MEMORY (news.ycombinator.com): seen 3× · often used here: "hacker news", "comments"
+
+$ logica-pilot memory
+{ "sites": 1, "actions": 2, "recipes": 0 }
+```
+
+**Four moats, compounding:**
+
+| Moat | What it means | Status |
+|------|---------------|--------|
+| 🧠 **Site Memory** | Learns the important elements + recipes per host; repeat tasks warm-start (fewer tokens, known flows). | ✅ ships — `memory` tool |
+| 🔐 **Local session vault** | Acts as the *logged-in you*, on *your* machine — what cloud scraping APIs can't do (no credentials, no privacy leak). | ✅ ships — `session` tool |
+| 🛠️ **Self-repair memory** | Remembers each failure and its fix per site → converges toward zero breakage. | 🔜 roadmap |
+| 🔌 **MCP-native distribution** | The default browser tool across the agent ecosystem (Claude Desktop, Cursor, Cline). | ✅ ships — MCP server |
+
+> Your interaction history is **local and private** — the moat is *your* accumulated data, not a vendor's cloud.
 
 ---
 
@@ -20,7 +56,7 @@ A real browser with an embedded autonomous AI copilot. The AI **perceives** page
 
 | Aspect | Playwright + LLM | Logica Pilot |
 |--------|------------------|--------------|
-| **LLM perception** | Raw HTML or full screenshot (thousands of tokens, brittle) | Compact indexed map: `[0] button "Buy"` (10–100× fewer tokens) |
+| **LLM perception** | Raw HTML or full screenshot (thousands of tokens, brittle) | Compact indexed map: `[0] button "Buy"` (5–185× fewer tokens, measured) |
 | **How it acts** | Fragile CSS selectors or pixel coordinates | By index / intention: `"click [0]"` (resilient to layout changes) |
 | **Multi-page parallelism** | You orchestrate manually | Native `fanout` (N pages in parallel + synthesis) |
 | **Integration** | Library-only | CLI + MCP + programmatic API |
@@ -36,6 +72,10 @@ A real browser with an embedded autonomous AI copilot. The AI **perceives** page
 Three tasks — **easy, medium, hard** — run live against real websites with the Logica
 Pilot CLI, then compared against the raw HTML a straightforward Playwright agent feeds
 the LLM to perceive the same pages.
+
+<p align="center">
+  <img src="docs/assets/token-comparison.svg" alt="Perception tokens: Logica Pilot vs Playwright + LLM" width="760">
+</p>
 
 > **Methodology (honest & reproducible).** *Logica Pilot* = the tokens of `observe` (an
 > indexed element map) or `read` (a bounded clean-text extract). *Playwright + LLM* =
@@ -96,6 +136,10 @@ scores, so the model answers "what are the top stories?" from ~1.8 K tokens inst
 ```
 
 ## The Token-Efficiency Advantage
+
+<p align="center">
+  <img src="docs/assets/demo-observe.svg" alt="logica-pilot observe — indexed map in 1,833 tokens vs 8,688 of raw HTML" width="720">
+</p>
 
 Instead of sending thousands of tokens of raw HTML or a full screenshot to the LLM:
 
@@ -214,7 +258,7 @@ await pilot.close();
 
 ## MCP Server (Claude Desktop, Cursor, Cline, etc.)
 
-Logica Pilot exposes **25 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
+Logica Pilot exposes **26 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
 
 ### Configuration
 
@@ -236,7 +280,7 @@ Then set your AI credentials (one time):
 - Export `ANTHROPIC_API_KEY=sk-ant-…`, *or*
 - Run a local LogicaProxy (`:8317`)
 
-### The 25 Tools (Grouped by Function)
+### The 26 Tools (Grouped by Function)
 
 #### Navigation (5 tools)
 | Tool | Purpose |
@@ -271,10 +315,11 @@ Then set your AI credentials (one time):
 |------|---------|
 | **run** | Execute a multi-step objective autonomously (observe→decide→act loop) |
 
-#### Session & Monitoring (2 tools)
+#### Session, Memory & Monitoring (3 tools)
 | Tool | Purpose |
 |------|---------|
 | **session** | Manage login sessions (cookies): `save` / `load` / `list` — log in once, reuse forever |
+| **memory** | Show what Logica Pilot has **learned** per site (the flywheel): visits, hot elements, recipes |
 | **watch** | Check a URL and report whether content changed (price, stock, text diffs) |
 
 #### Multi-Agent Recipes (6 tools)
@@ -457,7 +502,7 @@ src/
   llm.js                Brain (Messages API via LogicaProxy or Anthropic)
   agent.js              Autonomous loop (perceive → decide → act)
   electron-page.js      Adapter: webContents.debugger → page contract
-  mcp-server.js         MCP server (stdio, 25 tools)
+  mcp-server.js         MCP server (stdio, 26 tools)
   tools.js              SINGLE REGISTRY (CLI + MCP share this)
   fanout.js             Parallel multi-agent orchestration
   search.js             Web search (Bing default, Brave if key set)
