@@ -13,7 +13,7 @@
   -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https://www.google.com data:; connect-src 'self'; base-uri 'none'; form-action 'none';" />
-  <title>Histórico</title>
+  <title>History</title>
   <link rel="stylesheet" href="history.css" />
 </head>
 <body>
@@ -21,7 +21,7 @@
     <header class="page-head">
       <div class="head-brand">
         <span class="brand-mark" aria-hidden="true">◢</span>
-        <h1 class="page-title">Histórico</h1>
+        <h1 class="page-title">History</h1>
       </div>
       <div class="head-actions">
         <form class="search" id="search-form" autocomplete="off" role="search">
@@ -33,15 +33,15 @@
             </svg>
           </span>
           <input id="search-input" class="search-input" type="text" name="q"
-                 placeholder="Buscar no histórico" aria-label="Buscar no histórico"
+                 placeholder="Search history" aria-label="Search history"
                  spellcheck="false" />
         </form>
-        <button class="btn-danger" id="clear-all" type="button">Limpar tudo</button>
+        <button class="btn-danger" id="clear-all" type="button">Clear all</button>
       </div>
     </header>
 
     <section class="list" id="list" aria-live="polite">
-      <p class="empty" id="empty">Carregando…</p>
+      <p class="empty" id="empty">Loading…</p>
     </section>
   </main>
 
