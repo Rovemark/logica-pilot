@@ -397,8 +397,7 @@ All recipes are **MCP tools** too — call them directly from Claude or any agen
 ## Desktop Browser Features
 
 <p align="center">
-  <img src="docs/media/screenshot-browsing.png" alt="Logica Pilot browsing a real page with the Pilot copilot panel" width="49%">
-  <img src="docs/media/screenshot-home.png" alt="Logica Pilot new-tab page" width="49%">
+  <img src="docs/media/screenshot-browsing.png" alt="Logica Pilot browsing a live page with the autonomous Pilot copilot panel" width="92%">
 </p>
 
 The Logica Pilot browser window (real browser engine) includes:
