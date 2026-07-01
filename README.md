@@ -11,6 +11,11 @@ intent — not pixel coordinates — then **clicks, types, scrolls and reads** o
 goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
 browser · **CLI and MCP** with the same 26 tools.
 
+<p align="center">
+  <img src="docs/media/demo.gif" alt="Logica Pilot in action — real browser, real page, autonomous Pilot copilot" width="100%">
+  <br><em>The real desktop browser: a live page in a tab and the autonomous <strong>Pilot</strong> copilot on the right.</em>
+</p>
+
 ---
 
 ## The Moat: it learns your sites
@@ -136,10 +141,6 @@ scores, so the model answers "what are the top stories?" from ~1.8 K tokens inst
 ```
 
 ## The Token-Efficiency Advantage
-
-<p align="center">
-  <img src="docs/assets/demo-observe.svg" alt="logica-pilot observe — indexed map in 1,833 tokens vs 8,688 of raw HTML" width="720">
-</p>
 
 Instead of sending thousands of tokens of raw HTML or a full screenshot to the LLM:
 
@@ -394,6 +395,11 @@ All recipes are **MCP tools** too — call them directly from Claude or any agen
 ---
 
 ## Desktop Browser Features
+
+<p align="center">
+  <img src="docs/media/screenshot-browsing.png" alt="Logica Pilot browsing a real page with the Pilot copilot panel" width="49%">
+  <img src="docs/media/screenshot-home.png" alt="Logica Pilot new-tab page" width="49%">
+</p>
 
 The Logica Pilot browser window (real browser engine) includes:
 

@@ -80,6 +80,8 @@ process.on('unhandledRejection', (reason) => {
 
 // Useful browser engine flags (non-fatal if ignored)
 app.commandLine.appendSwitch('disable-features', 'AutomationControlled');
+// Screenshot mode: force an English UI everywhere (shell + newtab webview) for the README.
+if (process.env.LOGICA_PILOT_CAPTURE) app.commandLine.appendSwitch('lang', 'en-US');
 
 // Present as Google Chrome: clean UA (without "Electron/Logica Pilot") so sites
 // don't break AND so Chrome Web Store recognizes the browser (warning
@@ -230,6 +232,11 @@ function createWindow(opts = {}) {
   }
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'), { query });
 
+  // Screenshot mode: capture real app states to PNGs (for the README). Best-effort.
+  if (process.env.LOGICA_PILOT_CAPTURE) {
+    win.webContents.once('did-finish-load', () => { runCapture(win).catch((e) => console.error('[capture]', e && e.message)); });
+  }
+
   if (process.env.LOGICA_PILOT_DEVTOOLS) win.webContents.openDevTools({ mode: 'detach' });
 
   // force window to front (ensures Architect sees the NEW one, not an old one)
@@ -283,6 +290,38 @@ async function runSmoke(win) {
 function argValue(flag) {
   const i = process.argv.indexOf(flag);
   return i >= 0 ? process.argv[i + 1] : null;
+}
+
+// ── Screenshot capture: real app states → PNGs for the README ────────────────
+async function runCapture(win) {
+  const dir = process.env.LOGICA_PILOT_CAPTURE;
+  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  const wc = win.webContents;
+  const js = (code) => wc.executeJavaScript(code, true).catch(() => {});
+  const shot = async (name, ms) => {
+    await new Promise((r) => setTimeout(r, ms));
+    try {
+      const img = await wc.capturePage();
+      fs.writeFileSync(path.join(dir, name), img.toPNG());
+      console.log('[capture] wrote', name);
+    } catch (e) { console.error('[capture] shot failed', name, e && e.message); }
+  };
+  try {
+    try { win.show(); win.focus(); } catch {}
+    // Force English everywhere: the shell i18n AND the newtab webview's own runtime
+    // i18n (which fetches pilot://newtab/_data/i18n based on settings.language).
+    try { settingsStore.set({ language: 'en' }); } catch {}
+    await js(`window.i18n && window.i18n.setLang('en')`);
+    await js(`window.dispatchMenu && window.dispatchMenu('reload')`); // newtab re-fetches i18n in EN
+    await new Promise((r) => setTimeout(r, 1200));
+    await shot('home.png', 3000);                                 // new-tab (branded + feed)
+    await js(`window.dispatchMenu && window.dispatchMenu('open-url','https://news.ycombinator.com')`);
+    await shot('browsing.png', 5500);                             // real page rendered in a tab
+    await js(`window.dispatchMenu && window.dispatchMenu('toggle-pilot');` +
+      `var g=document.getElementById('goal'); if(g){g.value='find the top Show HN post and tell me its score'; g.dispatchEvent(new Event('input')); g.focus();}`);
+    await shot('pilot.png', 1800);                                // Pilot copilot panel open
+  } catch (e) { console.error('[capture] error', e && e.message); }
+  app.exit(0);
 }
 
 // ── Headless UI test: load real index.html and hunt for boot errors ──────────
