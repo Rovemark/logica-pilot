@@ -56,6 +56,72 @@ async function cmdOpen(url) {
   }
 }
 
+// ── fanout: multi-agent (N URLs em paralelo) ─────────────────────────────────
+async function cmdFanout(args) {
+  const { fanout } = require('../src/fanout');
+  const urls = String(args.urls || args._[1] || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const task = args.task || args._[2];
+  if (!urls.length || !task) {
+    console.error(`${C.red}Uso:${C.reset} logica-pilot fanout --urls a.com,b.com --task "extraia X" [--synthesize "compare"] [--mode extract|read|run] [--json]`);
+    process.exit(1);
+  }
+  banner();
+  console.log(`${C.cyan}◎ fanout${C.reset} ${urls.length} URLs · ${C.dim}${task}${C.reset}\n`);
+  const r = await fanout({
+    urls, task, mode: args.mode || 'extract', synthesize: args.synthesize,
+    concurrency: args.concurrency ? parseInt(args.concurrency, 10) : 4, model: args.model,
+    onEvent: (ev) => {
+      if (ev.type === 'done') console.log(`  ${ev.ok ? C.green + '✓' : C.red + '✗'}${C.reset} ${C.dim}${ev.url}${C.reset}`);
+      if (ev.type === 'synthesize') console.log(`  ${C.mag}∴ sintetizando…${C.reset}`);
+    },
+  });
+  if (args.json) { console.log(JSON.stringify(r, null, 2)); }
+  else {
+    console.log(`\n${C.green}✓${C.reset} ${r.ok}/${r.count} ok`);
+    if (r.synthesis) console.log(`\n${C.bold}Síntese:${C.reset}\n${r.synthesis}`);
+    else r.results.forEach((x, i) => console.log(('\n[' + i + '] ' + x.url + '\n' + JSON.stringify(x.data || x.text || x.result || x.error)).slice(0, 600)));
+  }
+  process.exit(0);
+}
+
+// ── read: conteúdo legível de uma URL (opcional --summarize) ─────────────────
+async function cmdRead(args) {
+  const url = args._[1] || args.url;
+  if (!url) { console.error(`${C.red}Uso:${C.reset} logica-pilot read <url> [--summarize]`); process.exit(1); }
+  const pilot = new LogicaPilot({ headless: true });
+  await pilot.launch();
+  try {
+    await pilot.goto(url);
+    const snap = await pilot.snapshot({ maxEls: 0 });
+    let text = String(snap.text || '').trim();
+    if (args.summarize) {
+      const llm = require('../src/llm');
+      const resp = await llm.callClaude({ system: 'Resuma a página de forma objetiva, em tópicos.', messages: [{ role: 'user', content: 'Resuma:\n\n' + text.slice(0, 8000) }], maxTokens: 700 });
+      text = llm.textOf(resp);
+    }
+    console.log(text || '(sem texto)');
+  } finally { await pilot.close(); }
+  process.exit(0);
+}
+
+// ── extract: dados estruturados (JSON) de uma URL ────────────────────────────
+async function cmdExtract(args) {
+  const url = args._[1] || args.url;
+  const instruction = args.task || args.instruction || args._[2];
+  if (!url) { console.error(`${C.red}Uso:${C.reset} logica-pilot extract <url> --task "o que extrair"`); process.exit(1); }
+  const pilot = new LogicaPilot({ headless: true });
+  await pilot.launch();
+  try {
+    await pilot.goto(url);
+    const snap = await pilot.snapshot({ maxEls: 60 });
+    const perception = require('../src/perception');
+    const { extractStructured } = require('../src/fanout');
+    const data = await extractStructured({ text: perception.format(snap), instruction });
+    console.log(JSON.stringify(data, null, 2));
+  } finally { await pilot.close(); }
+  process.exit(0);
+}
+
 async function cmdRun(args) {
   const objective = args._[1];
   if (!objective) {
@@ -138,6 +204,11 @@ async function main() {
       }
       case 'browser':
       case 'ui': return cmdBrowser(args);
+      case 'mcp':
+      case 'serve': return require('../src/mcp-server').start();
+      case 'fanout': return await cmdFanout(args);
+      case 'read': return await cmdRead(args);
+      case 'extract': return await cmdExtract(args);
       case 'version':
       case '--version':
       case '-v':
@@ -146,13 +217,18 @@ async function main() {
         banner();
         console.log(`
 ${C.bold}Comandos:${C.reset}
+  ${C.cyan}mcp${C.reset}                servidor MCP (stdio) — pilota o browser via Claude/Cursor, token-first
   ${C.cyan}run${C.reset} "<objetivo>"   loop autônomo (a IA navega sozinha)
                      flags: --url --headful --vision --model --max-steps --json
-  ${C.cyan}open${C.reset} <url>         abre e imprime o mapa indexado da página
+  ${C.cyan}fanout${C.reset}             multi-agent: N URLs em paralelo + síntese
+                     --urls a,b,c --task "..." [--synthesize "..."] [--mode extract|read|run]
+  ${C.cyan}extract${C.reset} <url>      dados estruturados (JSON) de uma página  --task "..."
+  ${C.cyan}read${C.reset} <url>         conteúdo legível da página              [--summarize]
+  ${C.cyan}open${C.reset} <url>         abre e imprime o mapa indexado (observe)
   ${C.cyan}browser${C.reset}            abre o BROWSER Electron (janela Chromium real)
   ${C.cyan}version${C.reset}
 
-${C.dim}Cérebro via LogicaProxy :8317 · motor CDP puro · 0 dep de Playwright${C.reset}
+${C.dim}Substituto parrudo do Playwright · CDP puro · token-first · 0 dep · IA via chave própria ou LogicaProxy${C.reset}
 `);
     }
   } catch (e) {
