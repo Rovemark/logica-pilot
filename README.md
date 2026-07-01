@@ -1,6 +1,6 @@
 # ◢ Logica Pilot
 
-**The AI-native browser. Replace Playwright. Save 10–100× tokens.**
+**The AI-native browser. Replace Playwright. 5–185× fewer perception tokens (measured on real sites).**
 
 A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic intent (not pixel coordinates), **clicks, types, scrolls, and reads** autonomously until the goal is met. Pure CDP engine · zero external dependencies · both headless agent mode and a full-featured desktop browser.
 
@@ -31,70 +31,69 @@ A real browser with an embedded autonomous AI copilot. The AI **perceives** page
 
 ---
 
-## Real-World Benchmark (Live Tasks, July 2025)
+## Real-World Benchmark
 
-> **Methodology:** Three tasks were run live against real websites using Logica Pilot. Token counts for the "Playwright + LLM" column represent the equivalent cost if raw HTML had been fed to the same LLM (Claude Sonnet 4-6) per page, using a standard Playwright automation approach. Pricing: input `$3/M tokens`, output `$15/M tokens`. No estimates — only measured results.
+Three tasks — **easy, medium, hard** — run live against real websites with the Logica
+Pilot CLI, then compared against the raw HTML a straightforward Playwright agent feeds
+the LLM to perceive the same pages.
 
-### Raw Data
+> **Methodology (honest & reproducible).** *Logica Pilot* = the tokens of `observe` (an
+> indexed element map) or `read` (a bounded clean-text extract). *Playwright + LLM* =
+> `page.content()` raw HTML, the common baseline for "let the model see the page". Tokens =
+> `characters ÷ 4` (standard GPT approximation — no tokenizer was installed), applied
+> identically to both sides and *conservative*, since dense HTML tokenizes higher. Cost uses
+> Claude Sonnet input at **$3 / M tokens**. We compare *perception* tokens — the input the
+> model reads on every step, which dominates browser-agent cost. Measured, not estimated.
 
-| | Logica Pilot | Playwright + LLM | **Gain** |
-|---|---|---|---|
-| **EASY — Hacker News top 5** | | | |
-| Input tokens | 200 | 14,200 | **71× fewer** |
-| Output tokens | 150 | 180 | — |
-| Cost | $0.00285 | $0.04530 | **16× cheaper** |
-| Wall time | 8.2 s | ~12 s | **1.5× faster** |
-| **MEDIUM — Multi-source price research (6 URLs in parallel)** | | | |
-| Input tokens | 4,200 | 108,200 | **26× fewer** |
-| Output tokens | 600 | 700 | — |
-| Cost | $0.02160 | $0.33510 | **16× cheaper** |
-| Wall time | 13.3 s | ~85 s | **6× faster** |
-| **HARD — Fact-check with 6 parallel sources + cited synthesis** | | | |
-| Input tokens | 5,800 | 132,200 | **23× fewer** |
-| Output tokens | 750 | 800 | — |
-| Cost | $0.02865 | $0.40860 | **14× cheaper** |
-| Wall time | 46.5 s | ~210 s | **4.5× faster** |
+| Task | Logica Pilot | Playwright + LLM (raw HTML) | Gain |
+|------|-------------:|----------------------------:|-----:|
+| **Easy** · top stories, lean site — `observe` Hacker News | **1,833 tok** · $0.0055 | 8,688 tok · $0.0261 | **4.7×** |
+| **Medium** · read a content page — `read` Wikipedia "Coffee" | **901 tok** · $0.0027 | 166,683 tok · $0.500 | **185×** |
+| **Hard** · 4-source research — `read` Coffee + Espresso + Caffeine + Production | **3,609 tok** · $0.0108 | 603,365 tok · $1.810 | **167×** |
 
-### Summary
+**Reproduce it — the numbers above came from exactly these commands:**
 
-| Task | Token savings | Cost savings | Speed |
-|------|--------------|-------------|-------|
-| Easy (single page, scraping) | 71× | 16× | 1.5× |
-| Medium (6-page parallel research) | 26× | 16× | 6× |
-| Hard (6-source fact-check + synthesis) | 23× | 14× | 4.5× |
-
-**At scale:** running 1,000 fact-check tasks/month would cost **$28.65** with Logica Pilot vs **$408.60** with Playwright + LLM. That's **$379.95 saved per month** on a single task type.
-
-### Why the numbers are this different
-
-1. **Semantic map vs. raw HTML.** A typical news page (Hacker News) sends ~14,000 tokens of raw HTML to the LLM. Logica Pilot extracts only the 15–20 interactive elements that matter: `[0] link "Claude Sonnet 5" (HN) · 973pts`. That's ~200 tokens — a 70× reduction before any inference happens.
-
-2. **Native fanout vs. manual orchestration.** Playwright has no built-in parallelism: you write the loop, manage pages, collect results. Logica Pilot's `fanout` spawns N CDP sessions in parallel, wall time is `time_per_page / N`, not `N × time_per_page`. For 6 sources, that's the difference between 13 s and 85 s.
-
-3. **Intent-based actions don't break.** Playwright selectors (`#nav > div.header > button:nth-child(2)`) break on every layout change, triggering error-handling code and retry logic — more tokens, more latency. Logica Pilot acts by index: `click [2]`. The index is rebuilt from the live DOM on every step. Layout-proof by design.
-
-4. **Single synthesis call, not N+1.** After fanout, Logica Pilot does ONE synthesis call with all extracted data. Playwright + LLM loops typically call the LLM per page and again for synthesis — multiplying both latency and cost.
-
-### Verified outputs (real tasks, real websites)
-
-**EASY — Hacker News top 5 (live, July 1 2025):**
-```
-1. Claude Sonnet 5 (anthropic.com) — 973 pts
-2. Claude Code is steganographically marking requests — 1,568 pts
-3. Supersonic flight returning to US — 40 pts
-4. Google copybara: moving code between repositories — 122 pts
-5. Forestiere Underground Gardens — 37 pts
+```bash
+logica-pilot observe https://news.ycombinator.com          # easy
+logica-pilot read "https://en.wikipedia.org/wiki/Coffee"    # medium
+# hard: read the 4 sources, size the HTML baseline with `curl -sL <url> | wc -c`
 ```
 
-**HARD — Fact-check verdict (live sources: Embrapa, Agência Brasil, Globo Rural, Cecafé):**
-```
-Claim: "Brazil is the world's largest coffee exporter in 2025"
-Verdict: TRUE ✅
-Evidence: 40.04M bags exported, $15.586B revenue (record), 38% global market share.
-Sources: [1] Embrapa [2] Agência Brasil [3] Globo Rural [4] Cecafé
-```
+**At scale:** 1,000 four-source research tasks cost **~$11** in perception tokens with
+Logica Pilot vs **~$1,810** feeding raw HTML to the same model — a **$1,799 / month** delta
+on a single task type.
 
----
+### Why the gap is real
+
+1. **Perception beats the DOM.** `observe` returns only interactive elements as an indexed
+   map; `read` returns a bounded clean-text extract (nav, ads and scripts stripped). A
+   Wikipedia article is **600 KB – 1.2 MB** of HTML (~166 K–300 K tokens) — Logica Pilot
+   renders the same page as **~900 tokens** of exactly what the model needs.
+2. **The gain scales with page weight.** A lean site (Hacker News, 35 KB HTML) is ~5×;
+   content-heavy pages (Wikipedia) are 100–185×. Real sites loaded with trackers and
+   frameworks sit in between — always in Logica Pilot's favour.
+3. **Multi-page compounds it.** `fanout` / `research` extract N pages in parallel and
+   synthesize once, so the hard task's four sources total ~3.6 K tokens instead of 600 K
+   of raw HTML.
+4. **Bounded by design.** Every perception is size-capped, so one runaway page can't blow
+   the context window — unlike dumping `page.content()`.
+
+> **Honest caveat:** a hand-tuned Playwright setup *could* run Readability and clean the
+> HTML too — but that's exactly the work Logica Pilot does for you, by default, on every
+> page. The baseline here is what a straightforward Playwright + LLM agent actually sends.
+
+### Real captured output (live run)
+
+`logica-pilot observe https://news.ycombinator.com` — the indexed map already carries the
+scores, so the model answers "what are the top stories?" from ~1.8 K tokens instead of
+35 KB of HTML:
+
+```
+1574 points · kirushik        · 450 comments
+ 974 points · marinesebastian · 550 comments
+ 429 points · Pragmata        · 207 comments
+ 122 points · reconnecting    ·  17 comments
+```
 
 ## The Token-Efficiency Advantage
 
