@@ -122,6 +122,42 @@ async function cmdExtract(args) {
   process.exit(0);
 }
 
+// ── search: URLs de resultado ────────────────────────────────────────────────
+async function cmdSearch(args) {
+  const q = args._[1] || args.q;
+  if (!q) { console.error(`${C.red}Uso:${C.reset} logica-pilot search "<consulta>" [--limit N]`); process.exit(1); }
+  const { search } = require('../src/search');
+  const r = await search(q, { limit: args.limit ? parseInt(args.limit, 10) : 8 });
+  if (args.json) console.log(JSON.stringify(r, null, 2));
+  else r.forEach((x, i) => console.log(`${i + 1}. ${x.url}  ${C.dim}${(x.title || '').slice(0, 70)}${C.reset}`));
+  process.exit(0);
+}
+
+// ── receitas multi-agent: research / compare / deal / factcheck ──────────────
+async function cmdRecipe(name, args) {
+  const recipes = require('../src/recipes');
+  const onEvent = (ev) => {
+    if (ev.type === 'done') console.log(`  ${ev.ok ? C.green + '✓' : C.red + '✗'}${C.reset} ${C.dim}${ev.url}${C.reset}`);
+    if (ev.type === 'synthesize') console.log(`  ${C.mag}∴ sintetizando…${C.reset}`);
+  };
+  banner();
+  let r;
+  if (name === 'compare') {
+    const urls = String(args.urls || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!urls.length) { console.error(`${C.red}Uso:${C.reset} logica-pilot compare --urls a.com,b.com [--task "..."]`); process.exit(1); }
+    console.log(`${C.cyan}◎ compare${C.reset} ${urls.length} itens\n`);
+    r = await recipes.compare(urls, { task: args.task, model: args.model, onEvent });
+  } else {
+    const q = args._[1] || args.q;
+    if (!q) { console.error(`${C.red}Uso:${C.reset} logica-pilot ${name} "<consulta>"`); process.exit(1); }
+    console.log(`${C.cyan}◎ ${name}${C.reset} ${C.dim}${q}${C.reset}\n`);
+    r = await recipes[name](q, { limit: args.limit ? parseInt(args.limit, 10) : undefined, model: args.model, onEvent });
+  }
+  if (args.json) console.log(JSON.stringify(r, null, 2));
+  else console.log(`\n${C.bold}Resultado:${C.reset}\n${r.synthesis || JSON.stringify(r.results, null, 2)}`);
+  process.exit(0);
+}
+
 async function cmdRun(args) {
   const objective = args._[1];
   if (!objective) {
@@ -209,6 +245,11 @@ async function main() {
       case 'fanout': return await cmdFanout(args);
       case 'read': return await cmdRead(args);
       case 'extract': return await cmdExtract(args);
+      case 'search': return await cmdSearch(args);
+      case 'research': return await cmdRecipe('research', args);
+      case 'compare': return await cmdRecipe('compare', args);
+      case 'deal': return await cmdRecipe('deal', args);
+      case 'factcheck': return await cmdRecipe('factcheck', args);
       case 'version':
       case '--version':
       case '-v':
@@ -222,6 +263,11 @@ ${C.bold}Comandos:${C.reset}
                      flags: --url --headful --vision --model --max-steps --json
   ${C.cyan}fanout${C.reset}             multi-agent: N URLs em paralelo + síntese
                      --urls a,b,c --task "..." [--synthesize "..."] [--mode extract|read|run]
+  ${C.cyan}research${C.reset} "<?>"     🧠 pesquisa + lê fontes em paralelo + relatório citado
+  ${C.cyan}compare${C.reset} --urls…   🧠 tabela comparativa + recomendação
+  ${C.cyan}deal${C.reset} "<produto>"  🧠 acha lojas + rankeia por valor real
+  ${C.cyan}factcheck${C.reset} "<?>"    🧠 veredito sobre uma afirmação, com citações
+  ${C.cyan}search${C.reset} "<?>"       URLs de resultado (Bing/Brave)
   ${C.cyan}extract${C.reset} <url>      dados estruturados (JSON) de uma página  --task "..."
   ${C.cyan}read${C.reset} <url>         conteúdo legível da página              [--summarize]
   ${C.cyan}open${C.reset} <url>         abre e imprime o mapa indexado (observe)

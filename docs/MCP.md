@@ -53,19 +53,24 @@ logica-pilot open <url>              # imprime o mapa indexado (observe)
 logica-pilot read <url> [--summarize]
 logica-pilot extract <url> --task "nome, preço e nota do produto"
 logica-pilot run "<objetivo>" [--url U] [--headful] [--json]
-logica-pilot fanout --urls a.com,b.com,c.com \
-  --task "extraia preço e nota" \
-  --synthesize "qual o melhor custo-benefício?"
+logica-pilot fanout --urls a.com,b.com,c.com --task "..." --synthesize "..."
 ```
 
-## Receitas multi-agent (tudo em cima do `fanout`)
+## Receitas multi-agent (comandos + tools MCP de 1ª classe)
 
-As "features matadoras" são invocações de `fanout` com um prompt de síntese:
+As "features matadoras" = `search` + `fanout` + síntese afinada. Chamáveis direto
+por CLI **e** como tools MCP (`browser_research`, `browser_deal`, `browser_factcheck`):
 
-- **Deep Research** — `fanout --urls <fontes> --task "resuma os fatos" --synthesize "responda X com citações"`
-- **Compare Anything** — `fanout --urls <produtos> --task "specs+preço+nota (JSON)" --synthesize "tabela comparativa + recomendação"`
-- **Best Deal** — `fanout --urls <lojas> --task "preço+frete+disponibilidade" --synthesize "rankeie por valor real"`
-- **Fact-Check** — `fanout --urls <fontes indep> --task "o que a fonte diz sobre a afirmação" --synthesize "veredito + citações"`
+```bash
+logica-pilot research "qual o melhor framework web em 2024?"   # 🧠 Deep Research
+logica-pilot compare --urls loja1,loja2,loja3 --task "preço e specs"  # 🧠 tabela
+logica-pilot deal "iPhone 15 Pro 256GB"                        # 🧠 melhor negócio
+logica-pilot factcheck "o café faz mal à saúde"                # 🧠 veredito citado
+logica-pilot search "melhor notebook custo-benefício"          # URLs de resultado
+```
+
+> `search` usa Bing (0-dep, decodifica o redirect). Pra busca de alta confiança,
+> defina `BRAVE_SEARCH_API_KEY` (grátis) — o `search` prefere a Brave API se houver.
 
 ## Sem dependências
 

@@ -108,6 +108,26 @@ const TOOLS = [
     },
   },
   {
+    name: 'browser_search',
+    description: 'Busca na web e retorna URLs de resultado (título + url). Use pra achar fontes antes do fanout/research.',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] },
+  },
+  {
+    name: 'browser_research',
+    description: '🧠 Deep Research: pesquisa a pergunta, lê as fontes EM PARALELO (multi-agent) e sintetiza uma resposta com citações [n].',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] },
+  },
+  {
+    name: 'browser_deal',
+    description: '🧠 Best Deal: acha lojas do produto, extrai preço + frete em paralelo e rankeia por VALOR REAL.',
+    inputSchema: { type: 'object', properties: { product: { type: 'string' }, limit: { type: 'number' } }, required: ['product'] },
+  },
+  {
+    name: 'browser_factcheck',
+    description: '🧠 Fact-Check: busca fontes independentes sobre a afirmação e dá um VEREDITO com citações.',
+    inputSchema: { type: 'object', properties: { claim: { type: 'string' }, limit: { type: 'number' } }, required: ['claim'] },
+  },
+  {
     name: 'browser_watch',
     description: 'Checa uma URL e diz se MUDOU desde a última checagem (diff de conteúdo). Base de monitores (preço/estoque/vaga).',
     inputSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
@@ -222,6 +242,26 @@ async function callTool(name, a = {}) {
     const b64 = await actions.screenshot(p.page, { format: 'jpeg', quality: 65, fullPage: !!a.fullPage });
     if (a.marks) { try { await perception.unmark(p.page); } catch {} }
     return { image: b64, mimeType: 'image/jpeg' };
+  }
+
+  if (name === 'browser_search') {
+    const { search } = require('./search');
+    return { json: await search(a.query, { limit: a.limit }) };
+  }
+  if (name === 'browser_research') {
+    const { research } = require('./recipes');
+    const r = await research(a.query, { limit: a.limit });
+    return { text: r.synthesis || JSON.stringify(r.results, null, 2) };
+  }
+  if (name === 'browser_deal') {
+    const { deal } = require('./recipes');
+    const r = await deal(a.product, { limit: a.limit });
+    return { text: r.synthesis || JSON.stringify(r.results, null, 2) };
+  }
+  if (name === 'browser_factcheck') {
+    const { factcheck } = require('./recipes');
+    const r = await factcheck(a.claim, { limit: a.limit });
+    return { text: r.synthesis || JSON.stringify(r.results, null, 2) };
   }
 
   throw new Error('tool desconhecida: ' + name);
