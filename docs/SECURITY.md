@@ -2,7 +2,7 @@
 
 ## Overview
 
-Logica Pilot is an AI-native browser that couples a real Chromium engine (via Chrome DevTools Protocol) with an autonomous agent loop. This document describes the security posture, responsible-use guidelines, and known considerations.
+Logica Pilot is an AI-native browser that couples a real browser engine (via CDP) with an autonomous agent loop. This document describes the security posture, responsible-use guidelines, and known considerations.
 
 **Core principle:** Logica Pilot gives an AI agent real control over a browser instance in your session. This is powerful for automation, and requires informed use.
 
@@ -15,7 +15,7 @@ Logica Pilot is an AI-native browser that couples a real Chromium engine (via Ch
 Logica Pilot runs an LLM-driven agent loop that:
 - **Observes** the page via accessibility tree + optional vision fallback (screenshot with indexed marks)
 - **Decides** what action to take (click, type, scroll, extract)
-- **Acts** on the page via Chrome DevTools Protocol
+- **Acts** on the page via CDP
 
 The agent operates **in your browser session**, with access to:
 - Active tabs and all their content (HTML, DOM, JavaScript context)
@@ -29,10 +29,10 @@ The agent operates **in your browser session**, with access to:
 - Testing automation on non-production accounts first
 - Reviewing the agent's goal before executing
 
-### Browser Engine (Chromium)
+### Browser Engine
 
-Logica Pilot bundles **real Chromium** (via Electron). This means:
-- Full **Chrome security model**: same-origin policy, content-security-policy, site isolation
+Logica Pilot bundles **real the browser engine** (via Electron). This means:
+- Full **browser security model**: same-origin policy, content-security-policy, site isolation
 - **Chrome extensions** can be installed (from Web Store or unpacked). They run with their declared permissions; review them as you would in normal Chrome
 - **Native permissions** (camera, microphone, location) use OS dialogs and your browser grants
 - **Incognito isolation** (⌘⇧N) creates a separate, ephemeral session with no cookies/cache
@@ -64,7 +64,7 @@ The agent uses **your LLM credential** to think. Two routing options:
 |------|----------|--------|-------|
 | **Anthropic API Key** | `~/.logica-pilot/settings.json` | Plain text JSON | Guarded by OS file permissions; recommend env var for CI/CD |
 | **Session Cookies** | `~/.logica-pilot/sessions/<name>.json` | JSON (CDP format) | Loaded on-demand via `--session <name>` flag; includes HttpOnly flag info |
-| **Browser Profile** | Electron `userData` dir | Chromium profile | Standard browser cache, history, extensions, bookmarks (not encrypted) |
+| **Browser Profile** | Electron `userData` dir | the browser engine profile | Standard browser cache, history, extensions, bookmarks (not encrypted) |
 | **History** | `userData/history.db` | SQLite | Stored locally; used by omnibox autocomplete |
 | **Downloads** | `userData/downloads.json` | JSON metadata | Records file names, URLs, timestamps (not the actual files) |
 
@@ -176,7 +176,7 @@ The `browser_fanout` tool runs **the same task on multiple URLs in parallel**, e
 ❌ Leave the agent running unattended with sensitive actions  
 ❌ Share session files (cookies) with others  
 ❌ Rely solely on the agent for financial/legal decisions — humans must review  
-❌ Install untrusted Chrome extensions  
+❌ Install untrusted browser extensions  
 
 ---
 
@@ -206,7 +206,7 @@ The `browser_fanout` tool runs **the same task on multiple URLs in parallel**, e
 - Optional encryption and rotation (for compliance)
 
 **Sandbox & container isolation** (future)
-- Run agent in a separate Chromium profile with restricted permissions
+- Run agent in a separate the browser engine profile with restricted permissions
 - Limit cookie access between browser sessions
 - Restrict file system access to specific directories
 
@@ -229,7 +229,7 @@ We take security seriously and will patch issues promptly. Once patched, we'll c
 
 ## References
 
-- **Chrome DevTools Protocol** — [chromium.org/blink/public/devtools-protocol](https://chromedevtools.github.io/devtools-protocol/)
+- **CDP** — [chromium.org/blink/public/devtools-protocol](https://chromedevtools.github.io/devtools-protocol/)
 - **Electron Security** — [electronjs.org/docs/tutorial/security](https://www.electronjs.org/docs/tutorial/security)
 - **Anthropic API Security** — [docs.anthropic.com/claude/reference/getting-started-with-the-api](https://docs.anthropic.com/claude/reference/getting-started-with-the-api)
 - **Chrome Extension Security** — [developer.chrome.com/docs/extensions/mv3/security](https://developer.chrome.com/docs/extensions/mv3/security/)

@@ -8,7 +8,7 @@ Welcome! Logica Pilot is an open-source browser automation engine built with zer
 
 - **Node.js** ≥ 18
 - **npm** (bundled with Node)
-- A Chromium-based browser installed on your system (Chrome, Edge, Brave, or Chromium itself)
+- A a compatible browser installed on your system
 
 ### Getting Started
 
@@ -72,7 +72,7 @@ This launches the full Logica Pilot browser window with:
 ```
 src/
   cdp-pipe.js         — CDP transport over --remote-debugging-pipe (0-dep)
-  browser.js          — discovers & launches Chromium, manages pages/sessions
+  browser.js          — discovers & launches the browser, manages pages/sessions
   perception.js       — indexed map of elements (a11y + vision badges)
   actions.js          — click/type/scroll/press/extract by index
   agent.js            — autonomous loop (observe → decide → act)
@@ -108,7 +108,7 @@ We follow **zero-dependency ethos** and **plain JavaScript** (no TypeScript, no 
 - **No external libraries** except:
   - `electron` (browser GUI only)
   - `electron-chrome-extensions`, `electron-chrome-web-store` (extension support)
-  - All automation logic uses **native Node.js + Chrome DevTools Protocol**
+  - All automation logic uses **native Node.js + CDP**
 
 - **Plain JS conventions:**
   - `'use strict';` at the top of every file
@@ -265,10 +265,10 @@ node bin/logica-pilot.js mcp
 |----------|---------|---------|
 | `LOGICA_PILOT_LLM_URL` | `http://127.0.0.1:8317/v1/messages` | Brain endpoint (LogicaProxy) |
 | `LOGICA_PILOT_MODEL` | `claude-sonnet-4-6` | LLM model ID |
-| `LOGICA_PILOT_BROWSER` / `CHROME_PATH` | auto-detect | Path to Chromium binary |
+| `LOGICA_PILOT_BROWSER` / `CHROME_PATH` | auto-detect | Path to the browser binary |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key (fallback if proxy is down) |
 | `BRAVE_SEARCH_API_KEY` | — | Brave Search API for high-confidence search |
-| `LOGICA_PILOT_DEBUG` | — | Enable Chrome DevTools Protocol logs (stderr) |
+| `LOGICA_PILOT_DEBUG` | — | Enable CDP logs (stderr) |
 | `LOGICA_PILOT_SMOKE` | — | Enable smoke test mode (auto-close after validation) |
 | `LOGICA_PILOT_HEADFUL` | — | Run in headful mode (not headless) |
 | `LOGICA_PILOT_UITEST` | — | Enable UI test mode (Electron) |
@@ -279,7 +279,7 @@ node bin/logica-pilot.js mcp
 
 We use conventional commits (loosely; not strict):
 
-- **fix:** bug fixes → `fix: CDP pipe hang on Chromium 130`
+- **fix:** bug fixes → `fix: CDP pipe hang on the browser engine 130`
 - **feat:** new features → `feat: add browser_watch tool for price monitoring`
 - **refactor:** code cleanup → `refactor: simplify perception.js element collection`
 - **docs:** documentation → `docs: add MCP tool integration guide`
@@ -356,7 +356,7 @@ The model acts **by index**, not by pixel or selector. It's 10–100× cheaper a
 ### Why Pure CDP?
 
 - **Zero dependencies:** Removes bloat and security surface
-- **Real Chromium:** Electron IS Chromium; `webContents.debugger` IS the Chrome DevTools Protocol
+- **Real engine:** Electron embeds the browser engine; `webContents.debugger` IS the CDP
 - **Cross-platform:** Works on macOS, Linux, Windows, no forks needed
 - **Local-first:** Can run completely offline once the browser is discovered
 

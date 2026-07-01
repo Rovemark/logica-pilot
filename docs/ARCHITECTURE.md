@@ -1,6 +1,6 @@
 # Logica Pilot Architecture
 
-**Logica Pilot** is an AI-native browser and a token-efficient replacement for browser automation frameworks like Playwright. It combines a 0-dependency Chrome DevTools Protocol (CDP) engine with a perception layer that returns compact indexed maps instead of raw HTML, enabling autonomous agents (Claude, Cursor, Cline) to control browsers with 10–100× fewer tokens.
+**Logica Pilot** is an AI-native browser and a token-efficient replacement for browser automation frameworks like Playwright. It combines a 0-dependency CDP engine with a perception layer that returns compact indexed maps instead of raw HTML, enabling autonomous agents (Claude, Cursor, Cline) to control browsers with 10–100× fewer tokens.
 
 ## Core Philosophy
 
@@ -19,8 +19,8 @@ Traditional browser automation + LLM (Playwright → screenshot/HTML → LLM) is
 └─────────────────────────────────────────────────────────────────────┘
 
   ╔════════════════════════════════════════════════════════════════╗
-  ║                      CHROME PROCESS                            ║
-  ║  (Chrome/Edge/Brave/Chromium, auto-discovered cross-platform) ║
+  ║                      BROWSER PROCESS                            ║
+  ║  (auto-discovered browser, auto-discovered cross-platform) ║
   ║                                                                ║
   ║  --remote-debugging-pipe  →  fd 3 (write) / fd 4 (read)       ║
   ║  JSON messages, \0-terminated, no third-party deps            ║
@@ -200,7 +200,7 @@ Traditional browser automation + LLM (Playwright → screenshot/HTML → LLM) is
     │  ┌─────────────────────────────────────────────────────────┐│
     │  │ • Windows: main window (BrowserWindow)                  ││
     │  │ • Tabs: native UI (favicon, audio, spinner)             ││
-    │  │ • WebView: each tab is a <webview> → Chromium context   ││
+    │  │ • WebView: each tab is a <webview> → the browser engine context   ││
     │  │ • Omnibox: URL bar + suggestions (search engines)       ││
     │  │ • Sidebar: history, bookmarks, downloads, settings      ││
     │  │ • Copilot panel: tasks, agent status, suggestions       ││
@@ -217,14 +217,14 @@ Traditional browser automation + LLM (Playwright → screenshot/HTML → LLM) is
 
 ---
 
-## Transport: Chrome DevTools Protocol over Pipes
+## Transport: CDP over Pipes
 
 ### Why Pipes?
 
-Traditional approaches use WebSocket (heavyweight) or bundled frameworks (Puppeteer, Playwright) that add bloat and dependency risk. Logica Pilot uses **Chrome's native `--remote-debugging-pipe` flag**, which speaks directly over two file descriptors opened by Node:
+Traditional approaches use WebSocket (heavyweight) or bundled frameworks (Puppeteer, Playwright) that add bloat and dependency risk. Logica Pilot uses **the native `--remote-debugging-pipe` flag**, which speaks directly over two file descriptors opened by Node:
 
-- **fd 3** (writable): Node → Chrome (commands)
-- **fd 4** (readable): Chrome → Node (responses + events)
+- **fd 3** (writable): Node → browser (commands)
+- **fd 4** (readable): browser → Node (responses + events)
 
 **Zero dependencies.** The protocol is implemented by hand in ~115 lines of `cdp-pipe.js`.
 
@@ -248,7 +248,7 @@ All messages are JSON, NUL-terminated (`\0`):
 
 ### Browser Discovery
 
-`resolveBrowserBinary()` auto-detects an installed Chromium (cross-platform):
+`resolveBrowserBinary()` auto-detects an installed the browser engine (cross-platform):
 
 - **macOS**: `/Applications/Google Chrome.app`, `/Applications/Edge.app`, Brave, Canary
 - **Windows**: `C:\Program Files\Google\Chrome`, `C:\Program Files\Microsoft\Edge`, Brave
@@ -732,7 +732,7 @@ npm run browser
 ```
 
 **Features:**
-- **Real browser window** (Chromium parity)
+- **Real browser window** (the browser engine parity)
 - **Tabs** (favicon, audio indicator, spinner, reopen ⌘⇧T, ⌘1–9)
 - **Omnibox** (URL bar + search suggestions from configurable engines)
 - **Sidebar**: History, Bookmarks, Downloads, Settings
@@ -986,7 +986,7 @@ await pilot.close();
 
 ### Docker
 
-Embed in a container with Chromium pre-installed:
+Embed in a container with the browser engine pre-installed:
 
 ```dockerfile
 FROM node:20-alpine
@@ -1013,7 +1013,7 @@ ENTRYPOINT ["node", "bin/logica-pilot.js"]
 
 ## References
 
-- [Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/)
+- [CDP](https://chromedevtools.github.io/devtools-protocol/)
 - [Anthropic Messages API](https://docs.anthropic.com/messages/reference)
 - [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
 - [Electron Documentation](https://www.electronjs.org/docs)
