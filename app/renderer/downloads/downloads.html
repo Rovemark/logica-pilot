@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!--
-    Página de downloads (pilot://downloads). Roda num <webview> isolado, sem
-    window.pilot. Fala com o main por fetch() de mesma origem:
+    Downloads page (pilot://downloads). Runs in an isolated <webview>, without
+    window.pilot. Talks to main via same-origin fetch():
       GET  pilot://downloads/_data/list
       POST pilot://downloads/_action   {id, action}   action: open|showInFolder|cancel
-    CSP: 'self' p/ script/style/fetch; sem imagens externas (ícones inline).
+    CSP: 'self' for script/style/fetch; no external images (inline icons).
   -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none';" />

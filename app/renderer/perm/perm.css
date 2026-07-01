@@ -1,5 +1,5 @@
-/* Prompt de permissão flutuante — janela do SO (BrowserWindow sem moldura) →
-   sempre acima do <webview>. Documento separado: tem o próprio tema. */
+/* Floating permission prompt — OS window (frameless BrowserWindow) →
+   always above the <webview>. Separate document: has its own theme. */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {

@@ -1,11 +1,11 @@
 /*
-  Página de downloads (pilot://downloads) — AUTOSSUFICIENTE.
-  Roda dentro de um <webview> isolado, sem o sistema de tema do host (styles.css).
-  Tokens claro/escuro via @media (prefers-color-scheme) — copiados do newtab.css
-  para manter a identidade Logica (roxo→azul, glass/blur, glow sutil).
+  Downloads page (pilot://downloads) — SELF-CONTAINED.
+  Runs inside an isolated <webview>, without the host's theme system (styles.css).
+  Light/dark tokens via @media (prefers-color-scheme) — copied from newtab.css
+  to preserve the Logica identity (purple→blue, glass/blur, subtle glow).
 */
 
-/* ===== ESCURO (default) ===== */
+/* ===== DARK (default) ===== */
 :root {
   --bg:            #0a0c12;
   --bg-2:          #0e111b;
@@ -41,7 +41,7 @@
   --radius-pill:   999px;
 }
 
-/* ===== CLARO ===== */
+/* ===== LIGHT ===== */
 @media (prefers-color-scheme: light) {
   :root {
     --bg:            #eef1f8;
@@ -96,7 +96,7 @@ body {
   padding: 36px 24px 64px;
 }
 
-/* ── Cabeçalho ──────────────────────────────────────────────── */
+/* ── Header ─────────────────────────────────────────────────── */
 .page-head {
   display: flex;
   align-items: center;
@@ -114,7 +114,7 @@ body {
 }
 .page-title { font-size: 24px; font-weight: 700; letter-spacing: -0.4px; color: var(--text-strong); }
 
-/* ── Botões ─────────────────────────────────────────────────── */
+/* ── Buttons ────────────────────────────────────────────────── */
 .btn-soft, .dl-act {
   height: 36px;
   padding: 0 14px;
@@ -139,7 +139,7 @@ body {
   background: var(--danger-soft);
 }
 
-/* ── Lista ──────────────────────────────────────────────────── */
+/* ── List ───────────────────────────────────────────────────── */
 .list { display: flex; flex-direction: column; gap: 10px; }
 
 .dl-item {
@@ -180,7 +180,7 @@ body {
 
 .dl-actions { grid-row: 1 / span 2; display: flex; gap: 8px; }
 
-/* barra de progresso (ocupa toda a largura abaixo do nome) */
+/* progress bar (spans the full width below the name) */
 .dl-bar {
   grid-column: 2 / span 2;
   height: 5px;
@@ -202,7 +202,7 @@ body {
   font-size: 14.5px;
 }
 
-/* ── Acessibilidade / scrollbar ─────────────────────────────── */
+/* ── Accessibility / scrollbar ──────────────────────────────── */
 :focus-visible {
   outline: 2px solid transparent;
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring);

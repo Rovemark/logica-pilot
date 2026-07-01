@@ -1,12 +1,12 @@
 /*
-  Start page local (pilot://newtab) — AUTOSSUFICIENTE.
-  Roda dentro de um <webview> isolado, sem o sistema de tema do host.
-  Por isso os tokens são definidos AQUI, com claro/escuro via
-  @media (prefers-color-scheme). Identidade Logica: roxo→azul (#7c5cff→#4da3ff),
-  glass/blur, glow sutil — clean + futurista, NÃO clone do Chrome.
+  Local start page (pilot://newtab) — SELF-CONTAINED.
+  Runs inside an isolated <webview>, without the host's theming system.
+  That's why the tokens are defined HERE, with light/dark via
+  @media (prefers-color-scheme). Logica identity: purple→blue (#7c5cff→#4da3ff),
+  glass/blur, subtle glow — clean + futuristic, NOT a Chrome clone.
 */
 
-/* ===== ESCURO (default — near-black azulado profundo) ===== */
+/* ===== DARK (default — deep bluish near-black) ===== */
 :root {
   --bg:            #0a0c12;
   --bg-2:          #0e111b;
@@ -21,8 +21,8 @@
   --hover:         #181c28;
   --accent:        #8e7bff;
   --accent-soft:   rgba(124,92,255,.14);
-  --accent-brand:  #7c5cff;   /* identidade Logica — roxo */
-  --accent-brand-2:#4da3ff;   /* identidade Logica — azul */
+  --accent-brand:  #7c5cff;   /* Logica identity — purple */
+  --accent-brand-2:#4da3ff;   /* Logica identity — blue */
   --accent-grad:   linear-gradient(135deg, #7c5cff 0%, #4da3ff 100%);
   --focus-ring:    #7c5cff;
   --glow:          0 1px 8px rgba(124,92,255,.12);
@@ -38,7 +38,7 @@
   --radius-pill:   999px;
 }
 
-/* ===== CLARO (acompanha o SO — branco cristalino, levemente frio) ===== */
+/* ===== LIGHT (follows the OS — crystalline white, slightly cool) ===== */
 @media (prefers-color-scheme: light) {
   :root {
     --bg:            #eef1f8;
@@ -84,11 +84,10 @@ body {
 }
 
 /* ── Layout ──────────────────────────────────────────────────
-   Estilo Edge: a primeira dobra (marca + busca + Pilot + atalhos) ocupa a
-   altura visível, limpa e centrada; ao ROLAR aparece o feed de notícias mais
-   largo. Por isso a página deixa de ser centralizada por flex e passa a ser
-   um fluxo scrollável; o "miolo" central fica capado em 720px e o feed em
-   ~1040px. */
+   Edge style: the first fold (brand + search + Pilot + shortcuts) fills the
+   visible height, clean and centered; on SCROLL the wider news feed appears.
+   That's why the page stops being flex-centered and becomes a scrollable
+   flow; the central "core" is capped at 720px and the feed at ~1040px. */
 .page {
   flex: 1;
   display: flex;
@@ -101,14 +100,14 @@ body {
   margin: 0 auto;
 }
 
-/* Dobra inicial: empurra o miolo para perto do centro óptico da 1ª tela,
-   mantendo a sensação de "home limpa" antes de rolar para as notícias. */
+/* Initial fold: pushes the core near the optical center of the 1st screen,
+   keeping the "clean home" feel before scrolling down to the news. */
 .brand { margin-top: clamp(48px, 16vh, 168px); }
 
-/* O miolo (busca, Pilot, atalhos) permanece estreito e centrado. */
+/* The core (search, Pilot, shortcuts) stays narrow and centered. */
 .search, .pilot-card, .shortcuts { align-self: center; }
 
-/* ── Marca ──────────────────────────────────────────────────── */
+/* ── Brand ──────────────────────────────────────────────────── */
 .brand {
   display: flex;
   flex-direction: column;
@@ -141,7 +140,7 @@ body {
   color: var(--accent-brand-2);   /* fallback */
 }
 
-/* ── Busca (glass + foco gradiente) ─────────────────────────── */
+/* ── Search (glass + gradient focus) ─────────────────────────── */
 .search {
   width: 100%;
   max-width: 640px;
@@ -212,9 +211,9 @@ body {
   outline-offset: 2px;
 }
 
-/* ── Card Pilot (IA) ────────────────────────────────────────── */
-/* Leve destaque accent: borda em gradiente sutil + fundo glass. Sem glow
-   exagerado — fica claramente "especial" sem competir com a busca. */
+/* ── Pilot card (AI) ────────────────────────────────────────── */
+/* Light accent highlight: subtle gradient border + glass background. No
+   over-the-top glow — clearly "special" without competing with the search. */
 .pilot-card {
   width: 100%;
   max-width: 600px;
@@ -315,7 +314,7 @@ body {
   outline-offset: 2px;
 }
 
-/* ── Atalhos rápidos ────────────────────────────────────────── */
+/* ── Quick shortcuts ────────────────────────────────────────── */
 .shortcuts {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -379,7 +378,7 @@ body {
   max-width: 100%;
 }
 
-/* ── Notícias (feed estilo Edge/MSN) ────────────────────────── */
+/* ── News (Edge/MSN-style feed) ────────────────────────── */
 .news {
   width: 100%;
   max-width: 1040px;
@@ -401,7 +400,7 @@ body {
   padding-left: 2px;
 }
 
-/* Abas de categoria (chips) */
+/* Category tabs (chips) */
 .news-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -438,7 +437,7 @@ body {
   outline-offset: 2px;
 }
 
-/* Grade de cards responsiva (auto-fill, multi-coluna) */
+/* Responsive card grid (auto-fill, multi-column) */
 .news-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
@@ -470,7 +469,7 @@ body {
   outline-offset: 2px;
 }
 
-/* Mídia no topo (16:9 fixo p/ alinhar a grade) */
+/* Media at the top (fixed 16:9 to align the grid) */
 .news-card-media {
   position: relative;
   display: block;
@@ -488,7 +487,7 @@ body {
 }
 .news-card:hover .news-card-img { transform: scale(1.04); }
 
-/* Placeholder gradiente com inicial da fonte (quando não há imagem) */
+/* Gradient placeholder with the source's initial (when there's no image) */
 .news-ph {
   position: absolute;
   inset: 0;
@@ -503,7 +502,7 @@ body {
   user-select: none;
 }
 
-/* Corpo do card */
+/* Card body */
 .news-card-body {
   display: flex;
   flex-direction: column;
@@ -516,7 +515,7 @@ body {
   font-weight: 600;
   line-height: 1.35;
   color: var(--text-strong);
-  /* 3 linhas + ellipsis */
+  /* 3 lines + ellipsis */
   display: -webkit-box;
   -webkit-line-clamp: 3;
   line-clamp: 3;
@@ -543,7 +542,7 @@ body {
 .news-card-dot { color: var(--muted-2); }
 .news-card-time { white-space: nowrap; color: var(--muted-2); }
 
-/* Estado vazio / erro (discreto) */
+/* Empty / error state (discreet) */
 .news-empty {
   grid-column: 1 / -1;
   text-align: center;
@@ -582,7 +581,7 @@ body {
   100% { background-position: -200% 0; }
 }
 
-/* ── Rodapé ─────────────────────────────────────────────────── */
+/* ── Footer ─────────────────────────────────────────────────── */
 .foot {
   display: flex;
   align-items: center;
@@ -602,7 +601,7 @@ body {
   color: var(--accent-brand-2);   /* fallback */
 }
 
-/* ── Acessibilidade / responsivo ────────────────────────────── */
+/* ── Accessibility / responsive ────────────────────────────── */
 :focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent-brand) 50%, transparent);
   outline-offset: 2px;

@@ -1,5 +1,5 @@
-/* Barra "Localizar na página" flutuante — janela do SO (BrowserWindow sem
-   moldura) → sempre acima do <webview>. Documento separado: tema próprio. */
+/* Floating "Find in page" bar — OS window (frameless BrowserWindow)
+   → always above the <webview>. Separate document: its own theme. */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {

@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!--
-    Página de histórico (pilot://history). Roda num <webview> isolado, sem
-    window.pilot. Fala com o main por fetch() de mesma origem:
+    History page (pilot://history). Runs in an isolated <webview>, without
+    window.pilot. Talks to main via same-origin fetch():
       GET  pilot://history/_data/list?q=&limit=
       POST pilot://history/_action/delete   {url}
       POST pilot://history/_action/clear    {range}
-    CSP: 'self' p/ script/style/fetch; img https p/ favicons (Google s2).
+    CSP: 'self' for script/style/fetch; img https for favicons (Google s2).
   -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https://www.google.com data:; connect-src 'self'; base-uri 'none'; form-action 'none';" />

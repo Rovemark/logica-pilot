@@ -1,19 +1,19 @@
-/* Logica Pilot — casca premium FUTURISTA, identidade Logica/Rovemark.
-   Direção: clean + futurista, accent roxo→azul Logica (#7c5cff→#4da3ff),
-   glass/blur, glow sutil. NÃO é clone do Chrome.
-   Sistema de tema: data-theme no <html> (light|dark). 'system' é resolvido em JS. */
+/* Logica Pilot — premium FUTURISTIC shell, Logica/Rovemark identity.
+   Direction: clean + futuristic, purple→blue Logica accent (#7c5cff→#4da3ff),
+   glass/blur, subtle glow. NOT a Chrome clone.
+   Theme system: data-theme on <html> (light|dark). 'system' is resolved in JS. */
 
-/* ===== ESCURO (near-black azulado profundo, premium) ===== */
+/* ===== DARK (deep bluish near-black, premium) ===== */
 :root,
 :root[data-theme="dark"] {
   --bg:            #0a0c12;
   --bg-2:          #0e111b;
   --surface:       #12151f;
   --surface-2:     #181c28;
-  --titlebar-a:    #0d101a;   /* gradiente da titlebar (topo) */
-  --titlebar-b:    #0a0c12;   /* gradiente da titlebar (base) */
+  --titlebar-a:    #0d101a;   /* titlebar gradient (top) */
+  --titlebar-b:    #0a0c12;   /* titlebar gradient (bottom) */
   --toolbar:       #0d101a;
-  --canvas:        #0a0c12;   /* fundo da área de conteúdo p/ matar flash branco */
+  --canvas:        #0a0c12;   /* content area background to kill white flash */
   --text:          #e9ebf2;
   --text-strong:   #f2f4fa;
   --muted:         #8b93a7;
@@ -21,13 +21,13 @@
   --border:        #232a3a;
   --border-soft:   #1a2030;
   --hover:         #181c28;
-  --accent:        #8e7bff;   /* accent funcional = família Logica (roxo→azul), NÃO azul-Google */
-  --accent-soft:   rgba(124,92,255,.16);   /* preenchimento suave do accent */
-  --accent-brand:  #7c5cff;   /* identidade Logica — roxo */
-  --accent-brand-2:#4da3ff;   /* identidade Logica — azul */
+  --accent:        #8e7bff;   /* functional accent = Logica family (purple→blue), NOT Google blue */
+  --accent-soft:   rgba(124,92,255,.16);   /* soft accent fill */
+  --accent-brand:  #7c5cff;   /* Logica identity — purple */
+  --accent-brand-2:#4da3ff;   /* Logica identity — blue */
   --accent-grad:   linear-gradient(135deg, #7c5cff 0%, #4da3ff 100%);
   --focus-ring:    #7c5cff;
-  --glow:          0 1px 8px rgba(124,92,255,.12);          /* elevação sutil, sem halo */
+  --glow:          0 1px 8px rgba(124,92,255,.12);          /* subtle elevation, no halo */
   --glow-strong:   0 2px 14px rgba(124,92,255,.22);
   --green:         #34c759;
   --amber:         #ffb020;
@@ -36,16 +36,16 @@
   --shadow-soft:   0 10px 34px rgba(0,0,0,.50);
   --shadow-glass:  0 16px 48px rgba(0,0,0,.55), 0 0 0 1px rgba(124,92,255,.06);
   --shadow-accent: 0 6px 22px rgba(124,92,255,.36);
-  --glass-bg:      rgba(16,19,28,.66);          /* fundo translúcido p/ titlebar/toolbar/overlays */
-  --glass-bg-2:    rgba(20,24,36,.78);          /* glass mais sólido p/ popovers/cards */
-  --glass-border:  rgba(255,255,255,.08);        /* borda fina luminosa */
+  --glass-bg:      rgba(16,19,28,.66);          /* translucent background for titlebar/toolbar/overlays */
+  --glass-bg-2:    rgba(20,24,36,.78);          /* more solid glass for popovers/cards */
+  --glass-border:  rgba(255,255,255,.08);        /* thin luminous border */
   --glass-blur:    blur(20px) saturate(150%);
   --scrollbar-thumb:#2a3346;
   --radius:        12px;
   --radius-sm:     9px;
   --radius-pill:   999px;
   --tab-h:         40px;
-  /* aliases legados (apontam pros novos) */
+  /* legacy aliases (point to the new ones) */
   --panel:         var(--surface);
   --panel-2:       var(--surface-2);
   --stroke:        var(--border);
@@ -53,9 +53,9 @@
   --accent-2:      var(--accent-brand-2);
 }
 
-/* ===== CLARO (branco cristalino futurista, levemente frio — NÃO cinza chapado) ===== */
+/* ===== LIGHT (futuristic crystalline white, slightly cool — NOT flat gray) ===== */
 :root[data-theme="light"] {
-  --bg:            #eef1f8;   /* levemente frio/azulado */
+  --bg:            #eef1f8;   /* slightly cool/bluish */
   --bg-2:          #ffffff;
   --surface:       #ffffff;
   --surface-2:     #f4f6fc;
@@ -70,7 +70,7 @@
   --border:        #dfe4f0;
   --border-soft:   #e9edf7;
   --hover:         #eef1fb;
-  --accent:        #6a4bff;   /* roxo Logica vibrante (NÃO azul-Google) */
+  --accent:        #6a4bff;   /* vibrant Logica purple (NOT Google blue) */
   --accent-soft:   rgba(124,92,255,.10);
   --accent-brand:  #7c5cff;
   --accent-brand-2:#4da3ff;
@@ -115,7 +115,7 @@ body {
 }
 svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-/* foco de teclado global (acessibilidade) — anel fino e limpo */
+/* global keyboard focus (accessibility) — thin, clean ring */
 :focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent-brand) 50%, transparent);
   outline-offset: 2px;
@@ -123,7 +123,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 }
 :focus:not(:focus-visible) { outline: none; }
 
-/* scrollbar global fina por token (consistência claro/escuro) */
+/* thin global scrollbar via token (light/dark consistency) */
 * { scrollbar-color: var(--scrollbar-thumb) transparent; scrollbar-width: thin; }
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-thumb {
@@ -133,7 +133,7 @@ svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width:
 ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent-brand) 45%, var(--scrollbar-thumb)); }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* transição suave aplicada por theme.js só na troca de tema */
+/* smooth transition applied by theme.js only on theme switch */
 html.theme-transition, html.theme-transition body,
 html.theme-transition .titlebar, html.theme-transition .toolbar,
 html.theme-transition .pilot, html.theme-transition .tab,
@@ -145,7 +145,7 @@ html.theme-transition .address-wrap {
   *, ::before, ::after { animation: none !important; transition: none !important; }
 }
 
-/* ── Titlebar / abas (glass) ───────────────────────────────── */
+/* ── Titlebar / tabs (glass) ───────────────────────────────── */
 .titlebar {
   height: var(--tab-h);
   display: flex;
@@ -176,9 +176,9 @@ body.darwin .titlebar { padding-left: 84px; }
 .tabs {
   display: flex; gap: 6px; align-items: center;
   flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden;
-  /* o container HERDA a região arrastável da .titlebar — o espaço vazio do tab
-     strip arrasta a janela e aceita duplo-clique p/ maximizar (igual Chrome).
-     Só as abas e o botão "+" são no-drag (interativos). */
+  /* the container INHERITS the draggable region from .titlebar — the empty space of the tab
+     strip drags the window and accepts double-click to maximize (like Chrome).
+     Only the tabs and the "+" button are no-drag (interactive). */
 }
 .tabs::-webkit-scrollbar { height: 0; }
 .tab {
@@ -189,7 +189,7 @@ body.darwin .titlebar { padding-left: 84px; }
   border: 1px solid transparent;
   border-radius: var(--radius-sm); font-size: 12px; color: var(--muted);
   cursor: default; flex-shrink: 0;
-  -webkit-app-region: no-drag; /* aba clicável; só o vazio do strip arrasta a janela */
+  -webkit-app-region: no-drag; /* clickable tab; only the empty strip drags the window */
   transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease, width .15s ease;
 }
 .tab:hover { background: var(--surface-2); color: var(--text-strong); }
@@ -198,7 +198,7 @@ body.darwin .titlebar { padding-left: 84px; }
   border-color: var(--glass-border);
   box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,.04);
 }
-/* indicador gradiente/glow da aba ativa (linha inferior) */
+/* gradient/glow indicator of the active tab (bottom line) */
 .tab.active::after {
   content: ""; position: absolute; left: 12px; right: 12px; bottom: -3px;
   height: 2px; border-radius: 2px;
@@ -244,8 +244,8 @@ body:not(.darwin) .win-controls { display: flex; }
   backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--glass-border);
 }
-/* Garante que NADA da toolbar fique na região arrastável da janela
-   (no macOS, app-region:drag come os cliques reais → botões não respondem). */
+/* Ensures NOTHING in the toolbar sits in the window's draggable region
+   (on macOS, app-region:drag eats the real clicks → buttons don't respond). */
 .toolbar, .toolbar * { -webkit-app-region: no-drag; }
 
 .nav-group { display: flex; gap: 2px; }
@@ -279,7 +279,7 @@ body:not(.darwin) .win-controls { display: flex; }
   font-size: 12px; font-weight: 600; white-space: nowrap; user-select: none;
 }
 .incognito-badge svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-/* na janela anônima, a barra de título ganha um leve realce p/ diferenciar */
+/* in the incognito window, the titlebar gets a slight highlight to differentiate it */
 body.incognito .titlebar { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent-brand) 55%, transparent); }
 
 .address-wrap {
@@ -309,7 +309,7 @@ body.incognito .titlebar { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--a
 }
 .address::placeholder { color: var(--muted-2); }
 
-/* dropdown de sugestões do omnibox (glass) */
+/* omnibox suggestions dropdown (glass) */
 .omni-suggest {
   position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 2147482000;
   transform: translateZ(0); will-change: transform;
@@ -337,7 +337,7 @@ body.incognito .titlebar { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--a
 
 .nav-btn .menu-dot { width: 4px; height: 4px; }
 
-/* barra de progresso de carregamento (gradiente Logica + glow) */
+/* loading progress bar (Logica gradient + glow) */
 .progress {
   position: absolute; left: 0; bottom: -1px; height: 2px; width: 0%;
   background: var(--accent-grad); z-index: 50;
@@ -416,7 +416,7 @@ body.incognito .titlebar { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--a
 .findbar button:hover { background: var(--accent-soft); color: var(--accent); }
 .findbar button:disabled { opacity: .35; }
 
-/* ── Indicador de zoom (glass) ─────────────────────────────── */
+/* ── Zoom indicator (glass) ────────────────────────────────── */
 .zoom-pill {
   position: fixed; top: 92px; right: 18px; z-index: 2147482400;
   transform: translateZ(0); will-change: transform;
@@ -429,15 +429,15 @@ body.incognito .titlebar { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--a
   border-radius: var(--radius-pill); box-shadow: var(--shadow-glass);
 }
 
-/* ── Conteúdo ──────────────────────────────────────────────── */
+/* ── Content ───────────────────────────────────────────────── */
 .content { flex: 1; display: flex; min-height: 0; position: relative; }
 .views { flex: 1; position: relative; background: var(--canvas); }
 .views webview { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
 .views webview.active { display: flex; }
 
-/* O <webview> é uma camada nativa do Chromium que pinta ACIMA de qualquer DOM.
-   Quando um popover/overlay precisa aparecer, escondemos a webview ativa
-   (via :has() — Chromium 130). Some enquanto o menu está aberto e volta ao fechar. */
+/* The <webview> is a native Chromium layer that paints ABOVE any DOM.
+   When a popover/overlay needs to appear, we hide the active webview
+   (via :has() — Chromium 130). It disappears while the menu is open and returns on close. */
 body:has(#app-menu:not([hidden])) .views webview.active,
 body:has(#findbar:not([hidden])) .views webview.active,
 body:has(#omni-suggest:not([hidden])) .views webview.active,
@@ -446,7 +446,7 @@ body:has(.overlay:not([hidden])) .views webview.active {
   display: none !important;
 }
 
-/* ── Painel Pilot (glass + borda luminosa) ─────────────────── */
+/* ── Pilot panel (glass + luminous border) ─────────────────── */
 .pilot {
   width: 380px; flex-shrink: 0;
   background: var(--glass-bg);
@@ -633,7 +633,7 @@ body:has(.overlay:not([hidden])) .views webview.active {
 .dl-item .dl-act { border: none; background: transparent; color: var(--accent); font-size: 12px; cursor: default; }
 .dl-item .dl-act:hover { text-decoration: underline; }
 
-/* shelf de downloads (rodapé) — glass */
+/* downloads shelf (footer) — glass */
 .dl-shelf {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 90;
   display: flex; align-items: center; gap: 10px;
@@ -653,7 +653,7 @@ body:has(.overlay:not([hidden])) .views webview.active {
 .dl-shelf .dl-chip .dl-bar > i { display: block; height: 100%; background: var(--accent-grad); width: 0%; box-shadow: var(--glow); }
 .dl-shelf .dl-close { margin-left: auto; border: none; background: transparent; color: var(--muted); font-size: 14px; }
 
-/* prompt de permissão — glass */
+/* permission prompt — glass */
 .perm-prompt {
   position: fixed; top: 92px; left: 50%; transform: translateX(-50%) translateZ(0);
   will-change: transform;

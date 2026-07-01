@@ -1,6 +1,6 @@
-/* Painel flutuante (Settings/About) — identidade Logica.
-   Janela do SO (BrowserWindow sem moldura) → sempre acima do <webview>.
-   Documento separado: tem o próprio tema claro/escuro (classe .light no body). */
+/* Floating panel (Settings/About) — Logica identity.
+   OS window (frameless BrowserWindow) → always above the <webview>.
+   Separate document: has its own light/dark theme (.light class on body). */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
@@ -41,14 +41,14 @@ html, body {
 
 .panel { display: flex; flex-direction: column; height: 100%; }
 
-/* cabeçalho */
+/* header */
 .ph {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 16px 18px 12px;
   border-bottom: 1px solid var(--border);
-  -webkit-app-region: drag;        /* arrasta a janela pelo cabeçalho */
+  -webkit-app-region: drag;        /* drag the window by the header */
 }
 .ph h2 { flex: 1; font-size: 15px; font-weight: 600; letter-spacing: .2px; }
 .ph-close {
@@ -62,12 +62,12 @@ html, body {
 }
 .ph-close:hover { background: var(--accent-soft); color: var(--accent); }
 
-/* corpo rolável */
+/* scrollable body */
 .pb { flex: 1; overflow-y: auto; padding: 14px 18px 18px; }
 .pb::-webkit-scrollbar { width: 10px; }
 .pb::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid transparent; background-clip: padding-box; }
 
-/* ── Settings: linhas ── */
+/* ── Settings: rows ── */
 .row {
   display: flex;
   align-items: center;

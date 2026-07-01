@@ -1,8 +1,8 @@
-/* omni.css — lista de sugestões da omnibox como JANELA FLUTUANTE (camada do SO →
-   sempre acima do <webview>). Documento separado: tema próprio, espelhando o
-   visual do #omni-suggest do renderer (host destacado, título, item selecionado
-   com fundo accent-soft). A janela é NÃO-FOCÁVEL (showInactive no main); aqui só
-   exibimos a lista e o índice selecionado e aceitamos CLIQUE. */
+/* omni.css — omnibox suggestions list as a FLOATING WINDOW (OS layer →
+   always above the <webview>). Separate document: its own theme, mirroring the
+   look of the renderer's #omni-suggest (highlighted host, title, selected item
+   with accent-soft background). The window is NON-FOCUSABLE (showInactive in main); here we only
+   display the list and the selected index and accept CLICK. */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {

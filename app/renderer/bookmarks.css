@@ -1,7 +1,7 @@
-/* bookmarks.css — Favoritos: estrela na omnibox, barra de favoritos e gerenciador.
-   Herda 100% dos tokens de styles.css (não edita o base). */
+/* bookmarks.css — Bookmarks: omnibox star, bookmarks bar and manager.
+   Inherits 100% of the tokens from styles.css (does not edit the base). */
 
-/* ── Estrela na omnibox ─────────────────────────────────────── */
+/* ── Omnibox star ───────────────────────────────────────────── */
 .star-btn {
   flex-shrink: 0;
   width: 24px; height: 24px;
@@ -13,11 +13,11 @@
 }
 .star-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .star-btn:hover { background: var(--hover); color: var(--text); }
-/* preenchida quando a página está favoritada */
+/* filled when the page is bookmarked */
 .star-btn.starred { color: var(--accent); }
 .star-btn.starred svg { fill: var(--accent); stroke: var(--accent); }
 
-/* ── Barra de favoritos (abaixo da toolbar) ─────────────────── */
+/* ── Bookmarks bar (below the toolbar) ──────────────────────── */
 .bookmarks-bar {
   flex-shrink: 0;
   display: flex; align-items: center; gap: 2px;
@@ -54,7 +54,7 @@
   padding: 0 8px; align-self: center;
 }
 
-/* ── Gerenciador (overlay) — reusa .overlay/.overlay-card de styles.css ── */
+/* ── Manager (overlay) — reuses .overlay/.overlay-card from styles.css ── */
 .bm-manager-row {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 6px; border-radius: var(--radius-sm);
@@ -84,7 +84,7 @@
 .bm-list { max-height: 52vh; overflow-y: auto; margin-top: 4px; }
 .bm-empty-manager { font-size: 13px; color: var(--muted); padding: 18px 4px; text-align: center; }
 
-/* editor inline de favorito */
+/* inline bookmark editor */
 .bm-edit { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
 .bm-edit input {
   width: 100%; background: var(--panel); border: 1px solid var(--stroke-soft);

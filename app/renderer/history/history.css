@@ -1,11 +1,11 @@
 /*
-  Página de histórico (pilot://history) — AUTOSSUFICIENTE.
-  Roda dentro de um <webview> isolado, sem o sistema de tema do host (styles.css).
-  Tokens claro/escuro via @media (prefers-color-scheme) — copiados do newtab.css
-  para manter a identidade Logica (roxo→azul, glass/blur, glow sutil).
+  History page (pilot://history) — SELF-CONTAINED.
+  Runs inside an isolated <webview>, without the host's theme system (styles.css).
+  Light/dark tokens via @media (prefers-color-scheme) — copied from newtab.css
+  to preserve the Logica identity (purple→blue, glass/blur, subtle glow).
 */
 
-/* ===== ESCURO (default) ===== */
+/* ===== DARK (default) ===== */
 :root {
   --bg:            #0a0c12;
   --bg-2:          #0e111b;
@@ -39,7 +39,7 @@
   --radius-pill:   999px;
 }
 
-/* ===== CLARO ===== */
+/* ===== LIGHT ===== */
 @media (prefers-color-scheme: light) {
   :root {
     --bg:            #eef1f8;
@@ -92,7 +92,7 @@ body {
   padding: 36px 24px 64px;
 }
 
-/* ── Cabeçalho ──────────────────────────────────────────────── */
+/* ── Header ─────────────────────────────────────────────────── */
 .page-head {
   display: flex;
   flex-direction: column;
@@ -126,7 +126,7 @@ body {
   gap: 12px;
 }
 
-/* ── Busca ──────────────────────────────────────────────────── */
+/* ── Search ─────────────────────────────────────────────────── */
 .search {
   flex: 1;
   display: flex;
@@ -154,7 +154,7 @@ body {
 }
 .search-input::placeholder { color: var(--muted-2); }
 
-/* ── Botões ─────────────────────────────────────────────────── */
+/* ── Buttons ────────────────────────────────────────────────── */
 .btn-danger {
   flex-shrink: 0;
   height: 44px;
@@ -172,7 +172,7 @@ body {
 .btn-danger:hover { background: color-mix(in srgb, var(--danger) 18%, transparent); box-shadow: var(--shadow-sm); }
 .btn-danger:active { transform: scale(.97); }
 
-/* ── Lista agrupada por dia ─────────────────────────────────── */
+/* ── List grouped by day ────────────────────────────────────── */
 .list { display: flex; flex-direction: column; gap: 22px; }
 
 .day-group { display: flex; flex-direction: column; gap: 4px; }
@@ -243,7 +243,7 @@ body {
   font-size: 14.5px;
 }
 
-/* ── Acessibilidade / scrollbar ─────────────────────────────── */
+/* ── Accessibility / scrollbar ──────────────────────────────── */
 :focus-visible {
   outline: 2px solid transparent;
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus-ring);
