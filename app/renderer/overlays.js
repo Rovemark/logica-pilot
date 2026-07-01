@@ -1,9 +1,9 @@
 'use strict';
 
 /* overlays.js — dropdown ⋮ (app menu) + overlays Settings/About/History/Downloads,
-   shelf de downloads e prompt de permissão.
-   Tudo chama dispatch(name) do renderer (fonte única de ação).
-   Consome window.pilot.* (degrada com optional chaining se faltar em runtime). */
+   downloads shelf and permission prompt.
+   Everything calls dispatch(name) from the renderer (single source of action).
+   Consumes window.pilot.* (degrades with optional chaining if missing at runtime). */
 
 (function () {
   function el(tag, cls, html) {
@@ -22,30 +22,30 @@
     return n.toFixed(n >= 10 || i === 0 ? 0 : 1) + ' ' + u[i];
   }
 
-  // itens do menu ⋮ (label fallback, chave i18n, ação dispatch, atalho exibido)
+  // menu items ⋮ (label fallback, i18n key, dispatch action, displayed shortcut)
   const MENU_ITEMS = [
-    { label: 'Nova aba', i18n: 'menu.newTab', action: 'new-tab', key: '⌘T' },
-    { label: 'Nova janela', i18n: 'menu.newWindow', action: 'new-window', key: '⌘N' },
+    { label: 'New Tab', i18n: 'menu.newTab', action: 'new-tab', key: '⌘T' },
+    { label: 'New Window', i18n: 'menu.newWindow', action: 'new-window', key: '⌘N' },
     { sep: true },
-    { label: 'Localizar na página', i18n: 'menu.find', action: 'find', key: '⌘F' },
-    { label: 'Modo leitor', i18n: 'menu.reader', action: 'reader', key: '⌥⌘R' },
-    { label: 'Traduzir página', i18n: 'menu.translate', action: 'translate', key: '' },
-    { label: 'Imprimir', i18n: 'menu.print', action: 'print', key: '⌘P' },
-    { label: 'Mais zoom', i18n: 'menu.zoomIn', action: 'zoom-in', key: '⌘+' },
-    { label: 'Menos zoom', i18n: 'menu.zoomOut', action: 'zoom-out', key: '⌘-' },
-    { label: 'Zoom padrão', i18n: 'menu.zoomReset', action: 'zoom-reset', key: '⌘0' },
+    { label: 'Find in page', i18n: 'menu.find', action: 'find', key: '⌘F' },
+    { label: 'Reader mode', i18n: 'menu.reader', action: 'reader', key: '⌥⌘R' },
+    { label: 'Translate page', i18n: 'menu.translate', action: 'translate', key: '' },
+    { label: 'Print', i18n: 'menu.print', action: 'print', key: '⌘P' },
+    { label: 'Zoom in', i18n: 'menu.zoomIn', action: 'zoom-in', key: '⌘+' },
+    { label: 'Zoom out', i18n: 'menu.zoomOut', action: 'zoom-out', key: '⌘-' },
+    { label: 'Reset zoom', i18n: 'menu.zoomReset', action: 'zoom-reset', key: '⌘0' },
     { sep: true },
-    { label: 'Histórico', i18n: 'menu.history', action: 'history', key: '⌘Y' },
+    { label: 'History', i18n: 'menu.history', action: 'history', key: '⌘Y' },
     { label: 'Downloads', i18n: 'menu.downloads', action: 'downloads', key: '⌘⇧J' },
-    { label: 'Extensões', i18n: 'menu.extensions', action: 'extensions', key: '' },
-    { label: 'Configurações', i18n: 'menu.settings', action: 'settings', key: '⌘,' },
+    { label: 'Extensions', i18n: 'menu.extensions', action: 'extensions', key: '' },
+    { label: 'Settings', i18n: 'menu.settings', action: 'settings', key: '⌘,' },
     { sep: true },
-    { label: 'Ferramentas do desenvolvedor', i18n: 'menu.devtools', action: 'devtools', key: '⌘⌥I' },
-    { label: 'Sobre o Logica Pilot', i18n: 'menu.about', action: 'about', key: '' },
+    { label: 'Developer tools', i18n: 'menu.devtools', action: 'devtools', key: '⌘⌥I' },
+    { label: 'About Logica Pilot', i18n: 'menu.about', action: 'about', key: '' },
   ];
-  // rótulo traduzido do item (cai no label PT-BR se o i18n não estiver pronto)
+  // translated label for item (falls back to English label if i18n not ready)
   const miLabel = (it) => (window.i18n && it.i18n ? window.i18n.t(it.i18n) : it.label);
-  // tradução genérica com fallback PT-BR + interpolação {var}
+  // generic translation with English fallback + interpolation {var}
   const T = (key, fb, vars) => { try { return window.i18n ? window.i18n.t(key, vars) : fb; } catch (e) { return fb; } };
 
   class Overlays {
@@ -62,8 +62,8 @@
       this.dispatch = () => {};
       this.settings = { theme: 'system', searchEngine: 'google', homepage: 'pilot://newtab' };
       this.engines = [];
-      this.dlMap = new Map(); // id → estado do download
-      this._permQueue = []; // fila de pedidos de permissão (um prompt por vez)
+      this.dlMap = new Map(); // id → download state
+      this._permQueue = []; // permission request queue (one prompt at a time)
     }
 
     init({ dispatch, settings, engines, onSettingsChange }) {
@@ -72,16 +72,16 @@
       if (engines) this.engines = engines;
       this.onSettingsChange = onSettingsChange || (() => {});
 
-      this.wireMenu(); // idempotente — garante o ⋮ ligado
+      this.wireMenu(); // idempotent — ensures the ⋮ is wired up
 
-      // fechar overlays por Esc / clique no backdrop
+      // close overlays on Esc / backdrop click
       for (const o of [this.settingsEl, this.aboutEl, this.historyEl, this.downloadsEl]) {
         o.addEventListener('click', (e) => { if (e.target === o) o.hidden = true; });
       }
     }
 
-    // Liga o ⋮ de forma IDEMPOTENTE. Chamado cedo no boot (antes dos awaits de
-    // IPC) e também no init() — assim o menu funciona mesmo se o IPC demorar/falhar.
+    // Wires the ⋮ in IDEMPOTENT manner. Called early during boot (before IPC
+    // awaits) and also in init() — so menu works even if IPC is delayed/fails.
     wireMenu() {
       if (this._menuWired || !this.appMenu || !this.menuBtn) return;
       this._menuWired = true;
@@ -94,9 +94,9 @@
       }, true);
     }
 
-    // Menu ⋮ como MENU NATIVO (Menu.popup no processo principal). O <webview> é
-    // uma camada nativa do Chromium que pinta acima de qualquer HTML; um menu
-    // nativo do SO fica SEMPRE acima dela. Fallback: menu HTML.
+    // Menu ⋮ as NATIVE MENU (Menu.popup in the main process). The <webview> is
+    // a native browser engine layer that paints above any HTML; a native OS menu
+    // stays ALWAYS above it. Fallback: HTML menu.
     openMenuNative() {
       if (window.pilot && window.pilot.showAppMenu) {
         const items = MENU_ITEMS.map((it) => (it.sep ? { sep: true } : { label: miLabel(it), action: it.action, key: it.key }));
@@ -134,7 +134,7 @@
     closeAll() {
       this.settingsEl.hidden = true; this.aboutEl.hidden = true;
       this.historyEl.hidden = true; this.downloadsEl.hidden = true;
-      // Esc no perm-prompt = negar o pedido atual (granted=false) e seguir a fila.
+      // Esc on perm-prompt = deny current request (granted=false) and process queue.
       if (this.permEl && !this.permEl.hidden) this.dismissPermission();
       this.closeMenu();
     }
@@ -142,7 +142,7 @@
     _card(title, bodyHtml, target) {
       target.innerHTML =
         '<div class="overlay-card">' +
-        '  <div class="overlay-head"><h2>' + escapeHtml(title) + '</h2><button class="overlay-close" title="Fechar (Esc)">✕</button></div>' +
+        '  <div class="overlay-head"><h2>' + escapeHtml(title) + '</h2><button class="overlay-close" title="Close (Esc)">✕</button></div>' +
         '  <div class="overlay-body">' + bodyHtml + '</div>' +
         '</div>';
       target.querySelector('.overlay-close').addEventListener('click', () => { target.hidden = true; });
@@ -156,17 +156,17 @@
       const engOpts = engines.map((e) => '<option value="' + escapeHtml(e.id) + '"' + (e.id === this.settings.searchEngine ? ' selected' : '') + '>' + escapeHtml(e.name) + '</option>').join('');
       const theme = this.settings.theme || 'system';
       const themeOpts = ['system', 'light', 'dark'].map((m) =>
-        '<option value="' + m + '"' + (m === theme ? ' selected' : '') + '>' + ({ system: 'Padrão do sistema', light: 'Claro', dark: 'Escuro' }[m]) + '</option>').join('');
+        '<option value="' + m + '"' + (m === theme ? ' selected' : '') + '>' + ({ system: 'System default', light: 'Light', dark: 'Dark' }[m]) + '</option>').join('');
       const body =
-        '<div class="settings-row"><div><label>Tema</label><span class="sr-hint">Aparência da casca</span></div>' +
+        '<div class="settings-row"><div><label>Theme</label><span class="sr-hint">Browser shell appearance</span></div>' +
         '  <select id="set-theme">' + themeOpts + '</select></div>' +
-        '<div class="settings-row"><div><label>Motor de busca</label><span class="sr-hint">Usado na barra de endereço</span></div>' +
+        '<div class="settings-row"><div><label>Search engine</label><span class="sr-hint">Used in the address bar</span></div>' +
         '  <select id="set-engine">' + engOpts + '</select></div>' +
-        '<div class="settings-row"><div><label>Página inicial</label><span class="sr-hint">Aberta em novas abas</span></div>' +
+        '<div class="settings-row"><div><label>Home page</label><span class="sr-hint">Opened in new tabs</span></div>' +
         '  <input id="set-home" type="text" value="' + escapeHtml(this.settings.homepage || 'pilot://newtab') + '" /></div>' +
-        '<div class="settings-row"><div><label>Limpar dados de navegação</label><span class="sr-hint">Cookies, cache e armazenamento</span></div>' +
-        '  <button id="set-clear" class="btn-soft btn-danger">Limpar dados</button></div>';
-      this._card('Configurações', body, this.settingsEl);
+        '<div class="settings-row"><div><label>Clear browsing data</label><span class="sr-hint">Cookies, cache and storage</span></div>' +
+        '  <button id="set-clear" class="btn-soft btn-danger">Clear data</button></div>';
+      this._card('Settings', body, this.settingsEl);
 
       const themeSel = this.settingsEl.querySelector('#set-theme');
       themeSel.addEventListener('change', () => {
@@ -181,7 +181,7 @@
       this.settingsEl.querySelector('#set-clear').addEventListener('click', async () => {
         try { await window.pilot?.clearData?.({ range: 'all' }); } catch {}
         const btn = this.settingsEl.querySelector('#set-clear');
-        if (btn) { btn.textContent = 'Dados limpos ✓'; setTimeout(() => { btn.textContent = 'Limpar dados'; }, 1800); }
+        if (btn) { btn.textContent = 'Data cleared ✓'; setTimeout(() => { btn.textContent = 'Clear data'; }, 1800); }
       });
     }
 
@@ -190,26 +190,26 @@
       this.onSettingsChange(patch);
     }
 
-    // ── About (prova visual de Chromium) ────────────────────
+    // ── About (visual proof of browser engine) ────────────────────
     async openAbout() {
       const v = (window.pilot && window.pilot.versions) || {};
       let appVersion = '';
       try { const info = await window.pilot?.appInfo?.(); if (info) { appVersion = info.appVersion || ''; } } catch {}
       const rows = [
-        [T('about.version', 'Versão'), appVersion || '—'],
-        ['Chromium', v.chrome || '—'],
+        [T('about.version', 'Version'), appVersion || '—'],
+        ['Browser Engine', v.chrome || '—'],
         ['Electron', v.electron || '—'],
         ['V8', v.v8 || '—'],
         ['Node.js', v.node || '—'],
       ];
       const body =
         '<div class="about-hero"><span class="brand-mark">◢</span><div><strong>Logica Pilot</strong>' +
-        '<div class="sr-hint">' + escapeHtml(T('about.tagline', 'Navegador autônomo · motor Chromium')) + '</div></div></div>' +
+        '<div class="sr-hint">' + escapeHtml(T('about.tagline', 'Autonomous browser · native browser engine')) + '</div></div></div>' +
         '<dl class="about-grid">' + rows.map((r) => '<dt>' + escapeHtml(r[0]) + '</dt><dd>' + escapeHtml(r[1]) + '</dd>').join('') + '</dl>';
-      this._card(T('about.title', 'Sobre'), body, this.aboutEl);
+      this._card(T('about.title', 'About'), body, this.aboutEl);
     }
 
-    // ── Histórico ───────────────────────────────────────────
+    // ── History ───────────────────────────────────────────
     async openHistory() {
       let items = [];
       try { items = (await window.pilot?.historyRecent?.({ limit: 100 })) || []; } catch {}
@@ -217,9 +217,9 @@
         ? '<div class="hist-list">' + items.map((h) =>
             '<div class="hist-item" data-url="' + escapeHtml(h.url) + '"><span class="hi-title">' + escapeHtml(h.title || h.url) + '</span>' +
             '<span class="hi-url">' + escapeHtml(h.url) + '</span></div>').join('') + '</div>'
-        : '<p class="sr-hint">' + escapeHtml(T('history.empty', 'Sem histórico ainda.')) + '</p>';
-      const body = '<div class="settings-row"><label>' + escapeHtml(T('history.recent', 'Histórico recente')) + '</label><button id="hist-clear" class="btn-soft btn-danger">' + escapeHtml(T('history.clear', 'Limpar histórico')) + '</button></div>' + list;
-      this._card(T('menu.history', 'Histórico'), body, this.historyEl);
+        : '<p class="sr-hint">' + escapeHtml(T('history.empty', 'No history yet.')) + '</p>';
+      const body = '<div class="settings-row"><label>' + escapeHtml(T('history.recent', 'Recent history')) + '</label><button id="hist-clear" class="btn-soft btn-danger">' + escapeHtml(T('history.clear', 'Clear history')) + '</button></div>' + list;
+      this._card(T('menu.history', 'History'), body, this.historyEl);
 
       this.historyEl.querySelectorAll('.hist-item').forEach((it) => {
         it.addEventListener('click', () => { this.historyEl.hidden = true; this.dispatch('open-url', it.dataset.url); });
@@ -232,23 +232,23 @@
     async openDownloads() {
       let items = [];
       try { items = (await window.pilot?.downloadsList?.()) || []; } catch {}
-      // mescla com eventos vivos
+      // merge with live events
       for (const d of this.dlMap.values()) {
         if (!items.find((x) => x.id === d.id)) items.unshift(d);
       }
       const list = items.length
         ? '<div class="dl-list">' + items.map((d) => this._dlRow(d)).join('') + '</div>'
-        : '<p class="sr-hint">' + escapeHtml(T('downloads.empty', 'Nenhum download.')) + '</p>';
+        : '<p class="sr-hint">' + escapeHtml(T('downloads.empty', 'No downloads.')) + '</p>';
       this._card(T('menu.downloads', 'Downloads'), list, this.downloadsEl);
       this._wireDlActions(this.downloadsEl);
     }
 
     _dlRow(d) {
       const pct = d.totalBytes ? Math.min(100, Math.round((d.receivedBytes / d.totalBytes) * 100)) : 0;
-      const stateLabel = { started: T('dl.downloading', 'baixando…'), progress: T('dl.downloading', 'baixando…'), completed: T('dl.completed', 'concluído'), cancelled: T('dl.cancelled', 'cancelado'), interrupted: T('dl.interrupted', 'interrompido') }[d.state] || (d.state || '');
+      const stateLabel = { started: T('dl.downloading', 'downloading…'), progress: T('dl.downloading', 'downloading…'), completed: T('dl.completed', 'completed'), cancelled: T('dl.cancelled', 'cancelled'), interrupted: T('dl.interrupted', 'interrupted') }[d.state] || (d.state || '');
       const acts = d.state === 'completed'
-        ? '<button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="open">' + escapeHtml(T('dl.open', 'Abrir')) + '</button><button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="showInFolder">' + escapeHtml(T('dl.show', 'Mostrar')) + '</button>'
-        : '<button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="cancel">' + escapeHtml(T('dl.cancel', 'Cancelar')) + '</button>';
+        ? '<button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="open">' + escapeHtml(T('dl.open', 'Open')) + '</button><button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="showInFolder">' + escapeHtml(T('dl.show', 'Show')) + '</button>'
+        : '<button class="dl-act" data-id="' + escapeHtml(d.id) + '" data-act="cancel">' + escapeHtml(T('dl.cancel', 'Cancel')) + '</button>';
       return '<div class="dl-item"><span class="dl-name">' + escapeHtml(d.filename || d.url || '') + '</span>' +
         (d.state === 'completed' ? '' : '<span class="dl-bar"><i style="width:' + pct + '%"></i></span>') +
         '<span class="dl-state">' + escapeHtml(stateLabel) + '</span>' + acts + '</div>';
@@ -263,7 +263,7 @@
       });
     }
 
-    // ── eventos de download (renderer pluga onDownloadEvent) ──
+    // ── download events (renderer plugs onDownloadEvent) ──
     onDownload(d) {
       if (!d || d.id == null) return;
       this.dlMap.set(d.id, Object.assign(this.dlMap.get(d.id) || {}, d));
@@ -280,8 +280,8 @@
         const label = d.state === 'completed' ? '✓' : fmtBytes(d.receivedBytes);
         return '<span class="dl-chip"><span>' + escapeHtml(d.filename || '') + '</span>' +
           '<span class="dl-bar"><i style="width:' + pct + '%"></i></span><span>' + escapeHtml(label) + '</span></span>';
-      }).join('') + '<button class="dl-close" title="Fechar">✕</button>' +
-        '<span class="dl-chip" id="dl-open-all" style="cursor:default">' + escapeHtml(T('dl.viewAll', 'Ver tudo')) + '</span>';
+      }).join('') + '<button class="dl-close" title="Close">✕</button>' +
+        '<span class="dl-chip" id="dl-open-all" style="cursor:default">' + escapeHtml(T('dl.viewAll', 'View all')) + '</span>';
       this.shelf.hidden = false;
       const close = this.shelf.querySelector('.dl-close');
       if (close) close.addEventListener('click', () => { this.shelf.hidden = true; });
@@ -289,39 +289,39 @@
       if (openAll) openAll.addEventListener('click', () => this.openDownloads());
     }
 
-    // ── prompt de permissão (fila: um pedido por vez) ───────
+    // ── permission prompt (queue: one request at a time) ───────
     showPermission(req) {
       if (!req) return;
       this._permQueue.push(req);
-      // se já há um prompt visível (botões ainda não clicados), só enfileira.
+      // if a prompt is already visible (buttons not clicked yet), just enqueue.
       if (!this.permEl.hidden) return;
       this._renderNextPermission();
     }
 
-    // renderiza o próximo pedido da fila (ou esconde o prompt se vazia)
+    // renders next request from queue (or hides prompt if empty)
     _renderNextPermission() {
       const req = this._permQueue[0];
       if (!req) { this.permEl.hidden = true; this.permEl.innerHTML = ''; this._curPerm = null; return; }
       this._curPerm = req;
       const labels = {
-        media: T('perm.media', 'usar câmera/microfone'),
-        geolocation: T('perm.geolocation', 'acessar sua localização'),
-        notifications: T('perm.notifications', 'enviar notificações'),
+        media: T('perm.media', 'use camera/microphone'),
+        geolocation: T('perm.geolocation', 'access your location'),
+        notifications: T('perm.notifications', 'send notifications'),
       };
-      const what = labels[req.permission] || T('perm.generic', 'usar: ' + req.permission, { what: req.permission });
-      const origin = req.origin || T('perm.site', 'O site');
-      const text = T('perm.text', escapeHtml(origin) + ' quer ' + escapeHtml(what) + '.',
+      const what = labels[req.permission] || T('perm.generic', 'use: ' + req.permission, { what: req.permission });
+      const origin = req.origin || T('perm.site', 'The site');
+      const text = T('perm.text', escapeHtml(origin) + ' wants ' + escapeHtml(what) + '.',
         { origin: escapeHtml(origin), what: escapeHtml(what) });
       this.permEl.innerHTML =
         '<span class="pp-text">' + text + '</span>' +
-        '<button class="pp-allow">' + escapeHtml(T('perm.allow', 'Permitir')) + '</button>' +
-        '<button class="pp-deny">' + escapeHtml(T('perm.deny', 'Bloquear')) + '</button>';
+        '<button class="pp-allow">' + escapeHtml(T('perm.allow', 'Allow')) + '</button>' +
+        '<button class="pp-deny">' + escapeHtml(T('perm.deny', 'Deny')) + '</button>';
       this.permEl.hidden = false;
       this.permEl.querySelector('.pp-allow').addEventListener('click', () => this._respondPermission(true));
       this.permEl.querySelector('.pp-deny').addEventListener('click', () => this._respondPermission(false));
     }
 
-    // responde o pedido atual (no topo da fila) e avança para o próximo
+    // responds to current request (at top of queue) and advances to next
     _respondPermission(granted) {
       const req = this._permQueue.shift();
       if (req) { try { window.pilot?.permissionRespond?.({ requestId: req.requestId, granted }); } catch {} }
@@ -329,7 +329,7 @@
       this._renderNextPermission();
     }
 
-    // Esc / closeAll: nega o pedido atual (granted=false) e processa a fila.
+    // Esc / closeAll: deny current request (granted=false) and process queue.
     dismissPermission() {
       if (this.permEl.hidden && !this._permQueue.length) return;
       this._respondPermission(false);

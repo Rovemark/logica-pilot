@@ -1,9 +1,9 @@
 'use strict';
 
-/* tabs.js — TabStrip com reconciliação incremental do DOM.
-   Mantém o estado das abas e cada tab.el estável (não usa innerHTML='').
-   Atualiza só o que mudou e reordena com insertBefore.
-   O renderer.js cria/equipa o <webview> (callbacks) — este módulo NÃO conhece o motor Pilot. */
+/* tabs.js — TabStrip with incremental DOM reconciliation.
+   Maintains the state of tabs and keeps each tab.el stable (does not use innerHTML='').
+   Updates only what changed and reorders with insertBefore.
+   The renderer.js creates/equips the <webview> (callbacks) — this module does NOT know about the Pilot engine. */
 
 (function () {
   function escapeHtml(s) {
@@ -13,13 +13,13 @@
   class TabStrip {
     /**
      * @param {object} opts
-     *   - container: elemento .tabs (HTMLElement)
-     *   - makeWebview(url): cria o <webview> e devolve o elemento
-     *   - viewsContainer: onde os webviews vivem (#views)
-     *   - onActivate(tab): chamado quando a aba ativa muda
-     *   - onAllClosed(): chamado quando a última aba foi removida (renderer recria)
-     *   - canClose(tab): retorna false p/ vetar fechamento (guarda do Pilot); pode chamar stop e retornar true
-     *   - home: URL da nova aba (pilot://newtab)
+     *   - container: element .tabs (HTMLElement)
+     *   - makeWebview(url): creates the <webview> and returns the element
+     *   - viewsContainer: where webviews live (#views)
+     *   - onActivate(tab): called when the active tab changes
+     *   - onAllClosed(): called when the last tab was closed (renderer recreates)
+     *   - canClose(tab): returns false to prevent closure (Pilot guard); may call stop and return true
+     *   - home: URL for new tab (pilot://newtab)
      */
     constructor(opts) {
       this.container = opts.container;
@@ -33,17 +33,17 @@
       this.tabs = [];
       this.activeId = null;
       this.seq = 0;
-      this.closedStack = []; // pilha p/ ⌘⇧T (limite ~25)
+      this.closedStack = []; // stack for ⌘⇧T (limit ~25)
     }
 
-    // ── ciclo de vida ───────────────────────────────────────
+    // ── lifecycle ───────────────────────────────────────
     create(url, { background = false } = {}) {
       const id = ++this.seq;
       const wv = this.makeWebview(url || this.home);
       this.views.appendChild(wv);
       const tab = {
         id, wv, el: null,
-        title: 'Nova aba', url: url || this.home,
+        title: 'New tab', url: url || this.home,
         loading: false, favicon: null,
         audible: false, muted: false,
         piloting: false, zoomLevel: 0,
@@ -66,10 +66,10 @@
       const idx = this.tabs.findIndex((t) => t.id === id);
       if (idx < 0) return;
       const tab = this.tabs[idx];
-      // guarda do Pilot: o renderer decide (pode parar o run antes)
+      // Pilot guard: the renderer decides (can stop the run first)
       if (!this.canClose(tab)) return;
 
-      // pilha de undo (só a URL final — sem ressuscitar histórico do webContents)
+      // undo stack (only the final URL — without resurrecting webContents history)
       this.closedStack.push({ url: tab.url, title: tab.title });
       if (this.closedStack.length > 25) this.closedStack.shift();
 
@@ -79,8 +79,8 @@
 
       if (this.tabs.length === 0) { this.onAllClosed(); return; }
       if (this.activeId === id) {
-        // paridade Chrome: ao fechar a aba ativa vai pra DIREITA (o vizinho que
-        // assumiu o slot idx após o splice); só cai pra esquerda se era a última.
+        // Chrome parity: closing the active tab moves to the RIGHT (the neighbor that
+        // took the slot idx after splice); only falls left if it was the last one.
         const next = this.tabs[idx] || this.tabs[idx - 1];
         this.activate(next.id);
       } else {
@@ -94,12 +94,12 @@
       return null;
     }
 
-    // ── seleção / navegação por índice ──────────────────────
+    // ── selection / navigation by index ──────────────────────
     get(id) { return this.tabs.find((t) => t.id === id); }
     active() { return this.get(this.activeId); }
 
     selectIndex(n) {
-      // n base-1; n===9 sempre vai pra última (paridade Chrome)
+      // n is 1-based; n===9 always goes to the last (Chrome parity)
       const target = n === 9 ? this.tabs[this.tabs.length - 1] : this.tabs[n - 1];
       if (target) this.activate(target.id);
     }
@@ -110,7 +110,7 @@
       this.activate(this.tabs[next].id);
     }
 
-    // ── mutações de estado (renderer chama nos eventos do webview) ──
+    // ── state mutations (renderer calls on webview events) ──
     setLoading(id, v) { const t = this.get(id); if (t && t.loading !== v) { t.loading = v; this.render(); } }
     setTitle(id, title) { const t = this.get(id); if (t) { t.title = title; this.render(); } }
     setUrl(id, url) { const t = this.get(id); if (t) t.url = url; }
@@ -125,10 +125,10 @@
       this.render();
     }
 
-    // ── reconciliação incremental ───────────────────────────
+    // ── incremental reconciliation ───────────────────────────
     render() {
       const n = this.tabs.length || 1;
-      // largura dinâmica: clamp entre mínimo e 200px conforme o espaço
+      // dynamic width: clamp between minimum and 200px based on available space
       const avail = this.container.clientWidth || 0;
       const gap = 6;
       let width = 200;
@@ -148,12 +148,12 @@
             '<span class="t-lead"></span>' +
             '<span class="t-title"></span>' +
             '<span class="t-audio" hidden></span>' +
-            '<span class="t-close" title="Fechar aba">✕</span>';
+            '<span class="t-close" title="Close tab">✕</span>';
           this._bind(el, t);
           t.el = el;
         }
 
-        // ── slot de ícone (favicon ↔ spinner no mesmo lugar) ──
+        // ── icon slot (favicon ↔ spinner in the same place) ──
         const lead = el.querySelector('.t-lead');
         if (t.loading) {
           if (lead.dataset.kind !== 'spin') { lead.dataset.kind = 'spin'; lead.innerHTML = '<span class="t-spin"></span>'; }
@@ -166,13 +166,13 @@
           lead.dataset.kind = 'none'; lead.dataset.src = ''; lead.innerHTML = '';
         }
 
-        // ── título ──
+        // ── title ──
         const titleEl = el.querySelector('.t-title');
-        const title = t.title || 'Nova aba';
+        const title = t.title || 'New tab';
         if (titleEl.textContent !== title) titleEl.textContent = title;
         if (el.title !== title) el.title = title;
 
-        // ── áudio ──
+        // ── audio ──
         const audioEl = el.querySelector('.t-audio');
         if (t.audible) {
           audioEl.hidden = false;
@@ -182,14 +182,14 @@
           audioEl.hidden = true;
         }
 
-        // ── classes de estado ──
+        // ── state classes ──
         el.classList.toggle('active', t.id === this.activeId);
         el.classList.toggle('piloting', !!t.piloting);
 
-        // ── largura animada ──
+        // ── animated width ──
         el.style.width = width + 'px';
 
-        // ── ordem: garante o nó na posição i ──
+        // ── order: ensures the node is at position i ──
         const ref = this.container.children[i];
         if (ref !== el) this.container.insertBefore(el, ref || null);
       }
@@ -201,7 +201,7 @@
         if (ev.target.classList.contains('t-audio')) { ev.stopPropagation(); this.toggleMute(t.id); return; }
         this.activate(t.id);
       });
-      // middle-click fecha (auxclick é o evento canônico do botão do meio)
+      // middle-click closes (auxclick is the canonical middle-button event)
       el.addEventListener('auxclick', (ev) => { if (ev.button === 1) { ev.preventDefault(); this.close(t.id); } });
       el.addEventListener('mousedown', (ev) => { if (ev.button === 1) ev.preventDefault(); });
     }

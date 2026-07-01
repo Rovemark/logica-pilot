@@ -1,9 +1,9 @@
 'use strict';
 
-/* Logica Pilot — renderer (orquestrador): navegador normal (abas/endereço) + painel autônomo.
-   Módulos: TabStrip (tabs.js), Omnibox (omnibox.js), FindBar (findbar.js), Overlays (overlays.js).
-   dispatchMenu(name) é a FONTE ÚNICA de ações (atalhos nativos, keydown e itens ⋮ convergem aqui).
-   O motor Pilot (pilot:*) NÃO se mexe. */
+/* Logica Pilot — renderer (orchestrator): standard browser (tabs/address bar) + autonomous panel.
+   Modules: TabStrip (tabs.js), Omnibox (omnibox.js), FindBar (findbar.js), Overlays (overlays.js).
+   dispatchMenu(name) is the SINGLE SOURCE of actions (native shortcuts, keydown, and menu items converge here).
+   The Pilot engine (pilot:*) does not change. */
 
 const $ = (s) => document.querySelector(s);
 const views = $('#views');
@@ -14,31 +14,31 @@ if (window.pilot && window.pilot.platform === 'darwin') document.body.classList.
 
 const HOME = 'pilot://newtab';
 
-// ── Modo anônimo ──────────────────────────────────────────────
-// O main passa ?incognito=1 no loadFile da janela anônima. Aqui o renderer:
-//  - usa uma partition NÃO-persistente única p/ as <webview> desta janela
-//    (sem 'persist:' → cookies/cache/login só vivem em memória e somem ao fechar);
-//  - NÃO grava histórico (pula historyAdd/historyUpdateTitle);
-//  - marca o body + mostra um selo "Anônima" na toolbar.
+// ── Incognito mode ────────────────────────────────────────────
+// The main passes ?incognito=1 in the loadFile of the incognito window. Here the renderer:
+//  - uses a single NON-persistent partition for the <webview> elements of this window
+//    (without 'persist:' → cookies/cache/login only live in memory and disappear on close);
+//  - does NOT save history (skips historyAdd/historyUpdateTitle);
+//  - marks the body + shows an "Incognito" badge in the toolbar.
 const _qs = new URLSearchParams(location.search);
 const IS_INCOGNITO = _qs.get('incognito') === '1';
-// URL inicial (chrome.windows.create({url}) das extensões) → 1ª aba abre nela
+// Initial URL (chrome.windows.create({url}) from extensions) → 1st tab opens at it
 const INITIAL_URL = _qs.get('initialUrl') || '';
-// partition em memória, exclusiva desta janela (sem 'persist:' = não-persistente)
+// In-memory partition, unique to this window (without 'persist:' = non-persistent)
 const INCOGNITO_PARTITION = 'logica-pilot-incognito-' + Date.now();
 const WV_PARTITION = IS_INCOGNITO ? INCOGNITO_PARTITION : 'persist:logica-pilot';
 if (IS_INCOGNITO) {
   document.body.classList.add('incognito');
-  document.title = 'Anônima — Logica Pilot';
-  // revela o selo "Anônima" na toolbar (só nesta janela)
+  document.title = 'Incognito — Logica Pilot';
+  // reveals the "Incognito" badge in the toolbar (only in this window)
   const badge = document.getElementById('incognito-badge');
   if (badge) badge.hidden = false;
 }
 
-// cache de settings (carregado no boot)
+// settings cache (loaded on boot)
 let settings = { theme: 'system', searchEngine: 'google', homepage: HOME };
 
-// ── Módulos ───────────────────────────────────────────────────
+// ── Modules ───────────────────────────────────────────────────
 const omnibox = new Omnibox();
 const findbar = new FindBar();
 const overlays = new Overlays();
@@ -48,15 +48,15 @@ function makeWebview(url) {
   const wv = document.createElement('webview');
   wv.setAttribute('src', url);
   wv.setAttribute('allowpopups', '');
-  // perfil persistente (cookies/logins) — ou partition em memória no modo anônimo
+  // persistent profile (cookies/logins) — or in-memory partition in incognito mode
   wv.setAttribute('partition', WV_PARTITION);
-  // PDF nativo: liga o plugin viewer interno do Chromium (renderiza PDFs inline,
-  // como no Chrome). Sem isto o <webview> só oferece o PDF para download.
+  // Native PDF: enables the built-in viewer plugin (renders PDFs inline,
+  // like in Chrome). Without this the <webview> only offers the PDF for download.
   wv.setAttribute('plugins', '');
   wv.setAttribute('webpreferences', 'plugins=true');
-  // Preload do guest (canal home → casca). É GUARDADO por protocolo dentro do
-  // próprio preload (só páginas pilot:// recebem window.lpHome), então é seguro
-  // colocá-lo em TODAS as webviews — sites normais não recebem nenhuma API.
+  // Guest preload (home channel → shell). It is GUARDED by protocol within the
+  // preload itself (only pilot:// pages receive window.lpHome), so it is safe
+  // to place it on ALL webviews — normal sites receive no API.
   if (window.pilot && window.pilot.webviewPreload) wv.setAttribute('preload', window.pilot.webviewPreload);
   return wv;
 }
@@ -69,7 +69,7 @@ const strip = new TabStrip({
   onActivate: (tab) => onActivateTab(tab),
   onAllClosed: () => strip.create(HOME),
   canClose: (tab) => {
-    // guarda do Pilot: se a aba está pilotando, para o run antes de fechar
+    // Pilot guard: if the tab is piloting, stop the run before closing
     if (tab.piloting && tab._guestId) {
       try { window.pilot.stop({ guestId: tab._guestId }); } catch {}
       if (running) setRunning(false);
@@ -78,9 +78,9 @@ const strip = new TabStrip({
   },
 });
 
-// liga TODOS os listeners do webview de uma aba (favicon, áudio, progresso, segurança, histórico)
+// connects ALL listeners of a tab's webview (favicon, audio, progress, security, history)
 function equipWebview(wv, url) {
-  // o tab correspondente é resolvido por getWebContentsId no momento do evento
+  // the corresponding tab is resolved by getWebContentsId at event time
   const tabOf = () => strip.tabs.find((t) => t.wv === wv);
 
   wv.addEventListener('did-start-loading', () => { const t = tabOf(); if (t) { strip.setLoading(t.id, true); if (t.id === strip.activeId) progressStart(); } });
@@ -89,9 +89,9 @@ function equipWebview(wv, url) {
     const t = tabOf(); if (!t) return;
     strip.setTitle(t.id, e.title);
     if (t.id === strip.activeId) document.title = (e.title ? e.title + ' — ' : '') + 'Logica Pilot';
-    // corrige no histórico o título da URL atual (did-navigate gravou o título antigo).
-    // updateTitle não infla visitCount; usa t.url (já commitada por did-navigate).
-    // No modo anônimo NÃO gravamos histórico.
+    // corrects in history the title of the current URL (did-navigate recorded the old title).
+    // updateTitle doesn't inflate visitCount; uses t.url (already committed by did-navigate).
+    // In incognito mode we do NOT save history.
     if (!IS_INCOGNITO) { try { window.pilot.historyUpdateTitle && window.pilot.historyUpdateTitle({ url: t.url, title: e.title }); } catch {} }
   });
   wv.addEventListener('page-favicon-updated', (e) => { const t = tabOf(); if (t) strip.setFavicon(t.id, e.favicons && e.favicons[0]); });
@@ -102,10 +102,10 @@ function equipWebview(wv, url) {
     const t = tabOf(); if (!t) return;
     strip.setUrl(t.id, e.url);
     if (t.id === strip.activeId) { omnibox.setUrl(e.url); syncNav(); bookmarks.onActiveUrl(e.url); }
-    // histórico persistente: cria a entrada SEM título (t.title ainda é o da página
-    // anterior). O page-title-updated subsequente preenche o título real via
-    // historyUpdateTitle (dedup por URL, sem inflar visitCount).
-    // No modo anônimo NÃO gravamos histórico.
+    // persistent history: creates the entry WITHOUT a title (t.title is still from the
+    // previous page). The subsequent page-title-updated fills the real title via
+    // historyUpdateTitle (dedup by URL, doesn't inflate visitCount).
+    // In incognito mode we do NOT save history.
     if (!IS_INCOGNITO) { try { window.pilot.historyAdd && window.pilot.historyAdd({ url: e.url, title: '', ts: Date.now() }); } catch {} }
   });
   wv.addEventListener('did-navigate-in-page', (e) => {
@@ -115,7 +115,7 @@ function equipWebview(wv, url) {
     if (t.id === strip.activeId) { omnibox.setUrl(e.url); bookmarks.onActiveUrl(e.url); }
   });
   wv.addEventListener('did-fail-load', (e) => {
-    if (e.isMainFrame && e.errorCode !== -3) { // -3 = ERR_ABORTED (navegação cancelada)
+    if (e.isMainFrame && e.errorCode !== -3) { // -3 = ERR_ABORTED (navigation cancelled)
       const t = tabOf(); if (t && t.id === strip.activeId) omnibox.setSecurity(t.url, true);
     }
   });
@@ -125,9 +125,9 @@ function equipWebview(wv, url) {
     if (t.id === strip.activeId) showZoom(t.zoomLevel);
   });
 
-  // Canal home → casca: a home/dashboard (pilot://newtab, isolada, sem window.pilot)
-  // pede via webview-preload (window.lpHome → sendToHost). Aqui a casca atende.
-  // O preload é guardado por protocolo, então só páginas pilot:// disparam isto.
+  // Home → Shell channel: the home/dashboard (pilot://newtab, isolated, without window.pilot)
+  // requests via webview-preload (window.lpHome → sendToHost). Here the shell responds.
+  // The preload is guarded by protocol, so only pilot:// pages trigger this.
   wv.addEventListener('ipc-message', (e) => {
     if (e.channel === 'home:pilot') launchPilotFromHome(e.args[0]);
     else if (e.channel === 'home:open' && e.args[0]) strip.create(e.args[0]);
@@ -135,12 +135,12 @@ function equipWebview(wv, url) {
   return wv;
 }
 
-// Abre o painel Pilot já preenchido com o objetivo vindo da home/dashboard.
-// PREFILL + FOCO apenas — NÃO auto-roda (mais seguro: o usuário aperta "Pilotar").
-// Além disso, a aba ativa aqui É a home (pilot://newtab), onde rodar não faz
-// sentido. Auto-run é opção FUTURA (ex.: abrir nova aba e pilotar nela).
+// Opens the Pilot panel already filled with the objective from home/dashboard.
+// PREFILL + FOCUS only — does NOT auto-run (safer: the user presses "Pilot").
+// Additionally, the active tab here IS the home (pilot://newtab), where running doesn't make
+// sense. Auto-run is a FUTURE option (e.g. open a new tab and pilot it).
 function launchPilotFromHome(objective) {
-  togglePilot(true); // garante o painel visível
+  togglePilot(true); // ensures panel is visible
   const goalEl = $('#goal');
   if (goalEl) {
     goalEl.value = String(objective == null ? '' : objective);
@@ -150,18 +150,18 @@ function launchPilotFromHome(objective) {
 
 function onActivateTab(tab) {
   omnibox.setUrl(tab.url);
-  document.title = (tab.title && tab.title !== 'Nova aba' ? tab.title + ' — ' : '') + 'Logica Pilot';
+  document.title = (tab.title && tab.title !== 'New tab' ? tab.title + ' — ' : '') + 'Logica Pilot';
   if (findbar.isOpen) findbar.close();
   hideZoom();
   syncNav();
   bookmarks.onActiveUrl(tab.url);
-  // avisa o sistema de extensões qual aba é a ativa (→ extensions.selectTab)
+  // notifies the extension system which tab is active (→ extensions.selectTab)
   notifyExtActiveTab(tab);
 }
 
-// Notifica o main do guestId da aba ativa (para extensions.selectTab). O guestId
-// (webContentsId) só existe após a <webview> anexar — se ainda não, espera o
-// dom-ready uma vez.
+// Notifies main of the guestId of the active tab (for extensions.selectTab). The guestId
+// (webContentsId) only exists after the <webview> attaches — if not yet, waits for
+// dom-ready once.
 function notifyExtActiveTab(tab) {
   if (!tab || !window.pilot || !window.pilot.tabActivated) return;
   let guestId = null;
@@ -169,7 +169,7 @@ function notifyExtActiveTab(tab) {
   if (guestId) { try { window.pilot.tabActivated({ guestId }); } catch {} return; }
   const once = () => {
     tab.wv.removeEventListener('dom-ready', once);
-    if (tab.id !== strip.activeId) return; // mudou de aba enquanto carregava
+    if (tab.id !== strip.activeId) return; // tab changed while loading
     try { window.pilot.tabActivated({ guestId: tab.wv.getWebContentsId() }); } catch {}
   };
   try { tab.wv.addEventListener('dom-ready', once); } catch {}
@@ -187,7 +187,7 @@ function syncNav() {
   } catch {}
 }
 
-// ── Barra de progresso ────────────────────────────────────────
+// ── Progress bar ──────────────────────────────────────────────
 const progressEl = $('#progress');
 let progressTimer = null;
 function progressStart() {
@@ -195,7 +195,7 @@ function progressStart() {
   progressEl.hidden = false;
   progressEl.style.opacity = '1';
   progressEl.style.width = '8%';
-  // sobe gradualmente até ~80%
+  // gradually rises to ~80%
   requestAnimationFrame(() => { progressEl.style.width = '80%'; });
 }
 function progressDone() {
@@ -206,7 +206,7 @@ function progressDone() {
   }, 200);
 }
 
-// ── Indicador de zoom ─────────────────────────────────────────
+// ── Zoom indicator ────────────────────────────────────────────
 const zoomPill = $('#zoom-pill');
 const zoomPct = $('#zoom-pct');
 let zoomHideTimer = null;
@@ -231,7 +231,7 @@ function zoomStep(delta) {
   } catch {}
 }
 
-// ── Navegação básica ──────────────────────────────────────────
+// ── Basic navigation ──────────────────────────────────────────
 function navigateActive(url) { const t = active(); if (t) { try { t.wv.loadURL(url); } catch {} } }
 
 omnibox.init({
@@ -240,22 +240,22 @@ omnibox.init({
   settings,
 });
 findbar.init({ getActiveWebview: () => activeWebview() });
-// a barra de localizar flutuante avisa quando fecha (Esc/✕) → reseta o estado
+// the floating find bar notifies when it closes (Esc/✕) → resets state
 if (window.pilot && window.pilot.onFindClosed) window.pilot.onFindClosed(() => findbar.notifyClosed());
 
 $('#nav-back').addEventListener('click', () => { const t = active(); if (t && t.wv.canGoBack()) t.wv.goBack(); });
 $('#nav-fwd').addEventListener('click', () => { const t = active(); if (t && t.wv.canGoForward()) t.wv.goForward(); });
 $('#nav-reload').addEventListener('click', () => { const t = active(); if (t) t.wv.reload(); });
 $('#tab-new').addEventListener('click', () => strip.create(HOME));
-// botão de extensões (🧩) → abre a Chrome Web Store
+// extensions button (🧩) → opens the Chrome Web Store
 { const extBtn = $('#ext-btn'); if (extBtn) extBtn.addEventListener('click', () => dispatchMenu('extensions')); }
 
-// controles de janela (Windows/Linux) — no mac usa traffic-lights nativos
+// window controls (Windows/Linux) — on Mac uses native traffic lights
 document.querySelectorAll('.wc').forEach((b) =>
   b.addEventListener('click', () => window.pilot.winControl(b.dataset.win)),
 );
 
-// ── Tema ──────────────────────────────────────────────────────
+// ── Theme ──────────────────────────────────────────────────────
 const themeBtn = $('#theme-btn');
 const THEME_ICONS = {
   light: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>',
@@ -265,23 +265,23 @@ const THEME_ICONS = {
 function updateThemeIcon() {
   const choice = window.LPTheme ? window.LPTheme.getChoice() : 'system';
   themeBtn.innerHTML = THEME_ICONS[choice] || THEME_ICONS.system;
-  themeBtn.title = 'Tema: ' + ({ light: 'claro', dark: 'escuro', system: 'sistema' }[choice]) + ' (⌘⇧L)';
+  themeBtn.title = 'Theme: ' + ({ light: 'light', dark: 'dark', system: 'system' }[choice]) + ' (⌘⇧L)';
 }
 themeBtn.addEventListener('click', () => { if (window.LPTheme) window.LPTheme.cycle(); });
 if (window.LPTheme) { window.LPTheme.onChange(() => updateThemeIcon()); updateThemeIcon(); }
 
-// Painel Configurações/Sobre como JANELA FLUTUANTE (camada do SO, acima do
-// <webview>). Caminho primário; cai no overlay HTML antigo se o IPC faltar.
+// Settings/About panel as FLOATING WINDOW (OS layer, above
+// <webview>). Primary path; falls back to old HTML overlay if IPC is missing.
 function openPanelOrOverlay(type) {
   const dark = document.documentElement.getAttribute('data-theme') !== 'light';
   if (window.pilot && window.pilot.openPanel) {
     try { window.pilot.openPanel({ type, dark }); return; } catch {}
   }
-  // fallback: overlay HTML (fica atrás do webview, mas preserva a função)
+  // fallback: HTML overlay (behind webview, but preserves function)
   if (type === 'about') overlays.openAbout(); else overlays.openSettings();
 }
 
-// ── DISPATCH: fonte única de ações ────────────────────────────
+// ── DISPATCH: single source of actions ────────────────────────
 function dispatchMenu(name, arg) {
   const t = active();
   switch (name) {
@@ -327,17 +327,17 @@ function dispatchMenu(name, arg) {
     case 'goto-tab-1': case 'goto-tab-2': case 'goto-tab-3': case 'goto-tab-4':
     case 'goto-tab-5': case 'goto-tab-6': case 'goto-tab-7': case 'goto-tab-8': case 'goto-tab-9':
       strip.selectIndex(Number(name.split('-').pop())); break;
-    case 'goto-tab-last': strip.selectIndex(9); break; // selectIndex(9) já mapeia pra última aba
-    default: console.warn('dispatchMenu: ação desconhecida', name); break;
+    case 'goto-tab-last': strip.selectIndex(9); break; // selectIndex(9) already maps to last tab
+    default: console.warn('dispatchMenu: unknown action', name); break;
   }
 }
 window.dispatchMenu = dispatchMenu;
 
 function guestIdOf(t) { try { return t ? t.wv.getWebContentsId() : null; } catch { return null; } }
 
-// ── Páginas internas (history/downloads) ──────────────────────
-// Reusa a aba ativa se ela estiver "vazia" (newtab ou na própria página interna);
-// senão abre numa aba nova. Mantém o overlay como fallback se algo der errado.
+// ── Internal pages (history/downloads) ──────────────────────────
+// Reuses the active tab if it is "empty" (newtab or on the page itself);
+// otherwise opens in a new tab. Keeps the overlay as fallback if something fails.
 function openInternal(url) {
   const t = active();
   const cur = t ? (t.url || '') : '';
@@ -347,21 +347,21 @@ function openInternal(url) {
   else strip.create(url);
 }
 
-// ── Extensões: menu flutuante com "Instalar da pasta" (sempre funciona) +
-//    "Chrome Web Store". Instalar da loja dentro de <webview> é frágil (a loja
-//    detecta "não-Chrome"); a pasta desempacotada é o caminho garantido. ──────
+// ── Extensions: floating menu with "Install from folder" (always works) +
+//    "Chrome Web Store". Installing from the store inside <webview> is fragile (the store
+//    detects "not-Chrome"); the unpacked folder is the guaranteed path. ──────
 function openExtensions() {
   const items = [];
   const t = active();
   const sid = t ? storeIdFromUrl(t.url) : null;
   if (sid) {
-    let nm = ((t.title || '').replace(/\s*[-–|]\s*Chrome.*$/i, '').trim()) || 'esta extensão';
+    let nm = ((t.title || '').replace(/\s*[-–|]\s*Chrome.*$/i, '').trim()) || 'this extension';
     if (nm.length > 34) nm = nm.slice(0, 34) + '…';
-    items.push({ label: '⬇ Instalar “' + nm + '” aqui', action: 'ext-install-current' });
+    items.push({ label: '⬇ Install "' + nm + '" here', action: 'ext-install-current' });
     items.push({ sep: true });
   }
-  items.push({ label: 'Instalar extensão (escolher pasta)…', action: 'ext-install-unpacked' });
-  items.push({ label: 'Abrir Chrome Web Store', action: 'ext-store' });
+  items.push({ label: 'Install extension (choose folder)…', action: 'ext-install-unpacked' });
+  items.push({ label: 'Open Chrome Web Store', action: 'ext-store' });
   const btn = $('#ext-btn');
   if (window.pilot && window.pilot.showAppMenu && btn) {
     const r = btn.getBoundingClientRect();
@@ -374,7 +374,7 @@ function openExtensions() {
   }
 }
 
-// extrai o ID (32 chars a-p) de uma URL de detalhe da Chrome Web Store
+// extracts the ID (32 chars a-p) from a Chrome Web Store detail URL
 function storeIdFromUrl(url) {
   try {
     const u = new URL(url);
@@ -398,37 +398,37 @@ function extStore() {
 }
 
 function extInstallUnpacked() {
-  // o main abre o seletor de pasta e mostra um diálogo nativo de confirmação
+  // main opens the folder selector and shows a native confirmation dialog
   if (window.pilot && window.pilot.extInstallUnpacked) {
     try { window.pilot.extInstallUnpacked(); } catch {}
   }
 }
 
-// ── Modo leitor (window.Reader) ───────────────────────────────
+// ── Reader mode (window.Reader) ───────────────────────────────
 async function toggleReader() {
   const wv = activeWebview();
   if (!wv || !window.Reader) return;
   try {
     const res = await window.Reader.toggle(wv);
     if (res && res.ok === false) {
-      const msg = res.error === 'sem-artigo'
-        ? 'Modo leitor: não encontrei um artigo legível nesta página.'
-        : ('Modo leitor indisponível: ' + (res.error || 'erro desconhecido') + '.');
+      const msg = res.error === 'no-article'
+        ? 'Reader mode: I did not find a readable article on this page.'
+        : ('Reader mode unavailable: ' + (res.error || 'unknown error') + '.');
       showResult({ success: false, result: msg });
     }
   } catch (e) {
-    showResult({ success: false, result: 'Modo leitor falhou: ' + (e && e.message) });
+    showResult({ success: false, result: 'Reader mode failed: ' + (e && e.message) });
   }
 }
 
-// ── Traduzir página (Google Tradutor) ─────────────────────────
+// ── Translate page (Google Translate) ─────────────────────────
 function translatePage() {
   const t = active();
   if (!t) return;
   const cur = t.url || '';
-  // só traduz páginas web reais (não as internas pilot://)
+  // only translates real web pages (not internal pilot://)
   if (!/^https?:\/\//i.test(cur)) {
-    showResult({ success: false, result: 'Traduzir: abra uma página web primeiro.' });
+    showResult({ success: false, result: 'Translate: open a web page first.' });
     return;
   }
   const target =
@@ -444,31 +444,31 @@ async function openDevTools(t) {
     if (window.pilot.openDevTools) {
       const r = await window.pilot.openDevTools({ guestId });
       if (r && r.ok === false && r.reason === 'pilot-running') {
-        // CDP é exclusivo: o Pilot está usando o debugger desta aba
-        showResult({ success: false, result: 'DevTools indisponível: o Pilot está controlando esta aba (CDP exclusivo). Pare o run primeiro.' });
+        // CDP is exclusive: Pilot is using the debugger on this tab
+        showResult({ success: false, result: 'DevTools unavailable: Pilot is controlling this tab (CDP exclusive). Stop the run first.' });
       }
     } else { try { t.wv.openDevTools(); } catch {} }
   } catch {}
 }
 
-// liga o menu nativo (accelerators funcionam mesmo com foco no <webview>)
+// enables native menu (accelerators work even with focus on <webview>)
 if (window.pilot && window.pilot.onMenuAction) window.pilot.onMenuAction((name) => dispatchMenu(name));
 
-// popups / target=_blank (new-window está MORTO no Electron 33 → vem por tab:open do main)
-// Abrir link em nova aba do menu de contexto também chega por tab:open (webview-manager).
+// popups / target=_blank (new-window is DEAD in Electron 33 → comes via tab:open from main)
+// Opening a link in a new tab from context menu also comes via tab:open (webview-manager).
 if (window.pilot && window.pilot.onTabOpen) {
   window.pilot.onTabOpen(({ url, background }) => strip.create(url, { background: !!background }));
 }
 
-// ── Extensões: o main pede ao renderer criar/ativar/fechar abas ───────────────
-// (a lib electron-chrome-extensions chama chrome.tabs.create/update/remove)
+// ── Extensions: main asks renderer to create/activate/close tabs ───────────────
+// (the electron-chrome-extensions lib calls chrome.tabs.create/update/remove)
 if (window.pilot && window.pilot.onExtCreateTab) {
   window.pilot.onExtCreateTab(({ reqId, url, background }) => {
     const tab = strip.create(url || HOME, { background: !!background });
-    // reporta o guestId (webContentsId) ao main assim que a webview anexar
-    // o guestId fica válido logo APÓS o attach da <webview> — que acontece bem
-    // antes do dom-ready. Por isso fazemos POLL curto (não dependemos do load da
-    // página, que poderia nunca pintar e estourar o timeout de 15s do main).
+    // reports the guestId (webContentsId) to main as soon as the webview attaches
+    // the guestId is valid right AFTER the <webview> attach — which happens well
+    // before dom-ready. So we do SHORT POLLING (we don't depend on page load, which
+    // could never paint and blow the main's 15s timeout).
     let done = false;
     function cleanup() {
       clearInterval(poll);
@@ -498,7 +498,7 @@ if (window.pilot && window.pilot.onExtRemoveTab) {
   });
 }
 
-// Resolve a aba (do TabStrip) cujo <webview> tem o webContentsId dado.
+// Resolves the tab (from TabStrip) whose <webview> has the given webContentsId.
 function tabByGuestId(guestId) {
   if (guestId == null) return null;
   return strip.tabs.find((t) => {
@@ -506,33 +506,33 @@ function tabByGuestId(guestId) {
   }) || null;
 }
 
-// ── Atalhos (keydown da casca) — convergem em dispatchMenu ─────
+// ── Shortcuts (shell keydown) — converge in dispatchMenu ─────
 window.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
   const key = e.key;
   const lower = key.length === 1 ? key.toLowerCase() : key;
 
-  // Ctrl+Tab / Ctrl+Shift+Tab (independe de meta)
+  // Ctrl+Tab / Ctrl+Shift+Tab (independent of meta)
   if (e.ctrlKey && key === 'Tab') { e.preventDefault(); dispatchMenu(e.shiftKey ? 'prev-tab' : 'next-tab'); return; }
 
-  // Esc: fecha overlays/menu/findbar; senão para o loading
+  // Esc: closes overlays/menu/findbar; otherwise stops loading
   if (key === 'Escape') {
     if (overlays.appMenu && !overlays.appMenu.hidden) { overlays.closeMenu(); return; }
     if (bookmarks.isManagerOpen && bookmarks.isManagerOpen()) { bookmarks.closeManager(); return; }
     if (overlays.anyOverlayOpen()) { overlays.closeAll(); return; }
     if (findbar.isOpen) { findbar.close(); return; }
-    if (document.activeElement === address) return; // omnibox trata o próprio Esc
+    if (document.activeElement === address) return; // omnibox handles its own Esc
     dispatchMenu('stop');
     return;
   }
 
   if (!mod) return;
 
-  // ⌥⌘R → modo leitor (Alt+Cmd/Ctrl+R). Antes do bloco shift/normal p/ não colidir
-  // com ⌘R (reload) nem ⌘⇧R (hard-reload).
+  // ⌥⌘R → reader mode (Alt+Cmd/Ctrl+R). Before the shift/normal block to avoid collision
+  // with ⌘R (reload) or ⌘⇧R (hard-reload).
   if (e.altKey && lower === 'r') { e.preventDefault(); dispatchMenu('reader'); return; }
 
-  // ⌘1..9 → aba N (9 = última)
+  // ⌘1..9 → tab N (9 = last)
   if (!e.shiftKey && key >= '1' && key <= '9') { e.preventDefault(); dispatchMenu('goto-tab-' + key); return; }
 
   if (e.shiftKey) {
@@ -570,10 +570,10 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// recalcula largura das abas no resize da janela
+// recalculates tab width on window resize
 window.addEventListener('resize', () => strip.render());
 
-// ── Painel Pilot (motor — NÃO mexer no fluxo) ─────────────────
+// ── Pilot panel (engine — do not modify flow) ─────────────────
 const pilotPanel = $('#pilot');
 const timeline = $('#timeline');
 const resultBox = $('#result');
@@ -593,11 +593,11 @@ function actionDetail(action, input) {
   if (!input) return '';
   switch (action) {
     case 'navigate': return input.url || '';
-    case 'click': return `elemento [${input.index}]` + (input.reason ? ` — ${input.reason}` : '');
+    case 'click': return `element [${input.index}]` + (input.reason ? ` — ${input.reason}` : '');
     case 'type': return `[${input.index}] "${input.text}"${input.submit ? ' + Enter' : ''}`;
     case 'scroll': return `${input.direction} ${input.amount || 600}px`;
     case 'press': return input.key || '';
-    case 'extract': return input.query || 'texto da página';
+    case 'extract': return input.query || 'page text';
     default: return input.reason || '';
   }
 }
@@ -621,7 +621,7 @@ function showResult(res) {
   resultBox.hidden = false;
   resultBox.className = 'result ' + (res.success ? 'ok' : 'fail');
   resultBox.innerHTML =
-    `<h4>${res.success ? 'Resultado' : 'Não concluído'} · ${res.steps || 0} passos</h4>` +
+    `<h4>${res.success ? 'Result' : 'Not completed'} · ${res.steps || 0} steps</h4>` +
     `<p>${escapeHtml(res.result || '')}</p>`;
   resultBox.scrollIntoView({ behavior: 'smooth' });
 }
@@ -639,16 +639,16 @@ async function runPilot() {
   if (!goal || !t || running) return;
 
   let guestId;
-  try { guestId = t.wv.getWebContentsId(); } catch { showResult({ success: false, result: 'Aba ainda carregando — tente de novo.' }); return; }
+  try { guestId = t.wv.getWebContentsId(); } catch { showResult({ success: false, result: 'Tab still loading — try again.' }); return; }
 
-  // limpa timeline
+  // clears timeline
   timeline.innerHTML = '';
   resultBox.hidden = true;
   setRunning(true);
   togglePilot(true);
 
   t._guestId = guestId;
-  strip.setPiloting(t.id, true); // indicador visual + guarda ao fechar
+  strip.setPiloting(t.id, true); // visual indicator + guard on close
   try {
     const res = await window.pilot.run({ guestId, objective: goal, vision: $('#vision').checked });
     showResult(res);
@@ -669,11 +669,11 @@ $('#goal').addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && 
 window.pilot.onStep(addStep);
 window.pilot.onError((d) => { showResult({ success: false, result: d.message }); setRunning(false); statusDot.className = 'status-dot err'; const t = active(); if (t) strip.setPiloting(t.id, false); });
 
-// ── Downloads / permissões (vindos do main) ───────────────────
+// ── Downloads / permissions (from main) ───────────────────
 if (window.pilot && window.pilot.onDownloadEvent) window.pilot.onDownloadEvent((d) => overlays.onDownload(d));
-// Permissão como JANELA FLUTUANTE (camada do SO, acima do <webview>). A fila/
-// timeout/resposta vivem no main+webview-manager; o renderer só repassa o pedido.
-// Cai no overlay HTML antigo se o IPC da flutuante faltar.
+// Permission as FLOATING WINDOW (OS layer, above <webview>). The queue/
+// timeout/response live in main+webview-manager; renderer just relays the request.
+// Falls back to old HTML overlay if the floating panel's IPC is missing.
 if (window.pilot && window.pilot.onPermissionRequest) {
   window.pilot.onPermissionRequest((req) => {
     const dark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -691,23 +691,23 @@ function escapeHtml(s) {
 
 // ── boot ──────────────────────────────────────────────────────
 async function boot() {
-  overlays.wireMenu(); // liga o menu ⋮ JÁ, antes de qualquer await (não depende de IPC)
-  // carrega settings (motor de busca, homepage) antes da primeira aba
+  overlays.wireMenu(); // wires the ⋮ menu NOW, before any await (doesn't depend on IPC)
+  // loads settings (search engine, homepage) before the first tab
   try {
     if (window.pilot && window.pilot.settingsGet) {
       const s = await window.pilot.settingsGet();
       if (s) settings = Object.assign(settings, s);
     }
   } catch {}
-  // i18n: aplica o idioma salvo (ou 'auto' → segue o SO via navigator.language) em
-  // toda a casca (traduz [data-i18n*] do index.html).
+  // i18n: applies the saved language (or 'auto' → follows the OS via navigator.language) across
+  // the entire shell (translates [data-i18n*] from index.html).
   try { if (window.i18n) window.i18n.setLang(settings.language || 'auto'); } catch {}
   let engines = [];
   try { if (window.pilot && window.pilot.getEngines) engines = (await window.pilot.getEngines()) || []; } catch {}
 
-  // propaga settings/motor pros módulos
+  // propagates settings/engine to modules
   omnibox.updateSettings(settings);
-  // se o catálogo trouxe template do motor default, injeta no omnibox
+  // if the catalog brought a default engine template, injects it into the omnibox
   const def = engines.find((e) => e.id === settings.searchEngine);
   if (def && def.searchTemplate) omnibox.updateSettings({ searchTemplate: def.searchTemplate });
 
@@ -722,8 +722,8 @@ async function boot() {
     },
   });
 
-  // O painel flutuante de Settings é janela SEPARADA → quando ele grava via
-  // settings:set, o main emite settings:changed; reaplica na casca já aberta.
+  // The floating Settings panel is a SEPARATE window → when it saves via
+  // settings:set, main emits settings:changed; reapplies in the already-open shell.
   if (window.pilot && window.pilot.onSettingsChanged) {
     window.pilot.onSettingsChanged((s) => {
       if (!s) return;
@@ -736,13 +736,13 @@ async function boot() {
       if (s.theme && window.LPTheme && window.LPTheme.apply && window.LPTheme.current !== s.theme) {
         try { window.LPTheme.apply(s.theme); } catch {}
       }
-      // troca de idioma feita no painel de Configurações → reaplica na casca.
+      // language change made in Settings panel → reapplies in the shell.
       if (s.language) { try { if (window.i18n) window.i18n.setLang(s.language); } catch {} }
     });
   }
 
-  // Favoritos: barra + estrela + gerenciador. getActive() entrega a aba ativa
-  // (url/title/favicon) p/ a estrela; preferência da barra vem das settings.
+  // Bookmarks: bar + star + manager. getActive() delivers the active tab
+  // (url/title/favicon) to the star; bar preference comes from settings.
   bookmarks.init({
     navigate: (url) => navigateActive(url),
     openTab: (url, opts) => strip.create(url, opts || {}),
@@ -751,7 +751,7 @@ async function boot() {
     persistBarPref: (on) => { settings.showBookmarksBar = on; try { window.pilot?.settingsSet?.({ showBookmarksBar: on }); } catch {} },
   });
 
-  // 1ª aba: na URL pedida pela extensão (chrome.windows.create) ou na home.
+  // 1st tab: at the URL requested by the extension (chrome.windows.create) or at home.
   strip.create(INITIAL_URL || HOME);
 }
 boot();
