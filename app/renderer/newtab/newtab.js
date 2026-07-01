@@ -1,11 +1,11 @@
-// Start page local (pilot://newtab) — lógica autossuficiente.
-// Roda dentro de um <webview> isolado: SEM window.pilot, SEM IPC.
-// A navegação acontece via location.href; o host detecta did-navigate.
+// Home page local (pilot://newtab) — self-contained logic.
+// Runs inside an isolated <webview>: NO window.pilot, NO IPC.
+// Navigation happens via location.href; the host detects did-navigate.
 (function () {
   'use strict';
 
-  // ── i18n da home: a home é isolada (pilot://), então o main entrega o idioma
-  // resolvido + o mapa de strings via fetch _data/i18n. t()=traduz com fallback. ──
+  // ── i18n for home: home is isolated (pilot://), so main delivers the resolved language
+  // + string map via fetch _data/i18n. t()=translates with fallback. ──
   var LP_I18N = {};
   function t(key, fallback) { return (LP_I18N[key] != null) ? LP_I18N[key] : fallback; }
   function applyI18n() {
@@ -17,24 +17,24 @@
     });
   }
 
-  // ── Detecção de URL vs termo de busca ──────────────────────────
-  // Heurística no estilo omnibox do Chrome: decide se o texto digitado
-  // deve virar uma navegação direta ou uma pesquisa no Google.
+  // ── URL detection vs search term ──────────────────────────
+  // Heuristic in the style of the browser's omnibox: decides if typed text
+  // should become a direct navigation or a Google search.
   function looksLikeUrl(raw) {
     var text = raw.trim();
-    if (!text || /\s/.test(text)) return false;          // espaço → busca
+    if (!text || /\s/.test(text)) return false;          // space → search
 
-    // Esquema explícito conhecido (http, https, ftp, file, about, pilot…)
+    // Explicit known scheme (http, https, ftp, file, about, pilot…)
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return true;
     if (/^(about|pilot|mailto|tel):/i.test(text)) return true;
 
-    // localhost (com porta/caminho opcional)
+    // localhost (with optional port/path)
     if (/^localhost(:\d+)?(\/.*)?$/i.test(text)) return true;
 
-    // IPv4 (com porta/caminho opcional)
+    // IPv4 (with optional port/path)
     if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/.*)?$/.test(text)) return true;
 
-    // domínio com TLD: ex. exemplo.com, sub.exemplo.com.br, site.io/caminho
+    // domain with TLD: ex. example.com, sub.example.com.br, site.io/path
     if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?(\/.*)?$/i.test(text)) return true;
 
     return false;
@@ -42,7 +42,7 @@
 
   function toUrl(raw) {
     var text = raw.trim();
-    // Se já tem esquema, usa como está; senão assume https.
+    // If already has scheme, use as-is; otherwise assume https.
     if (/^[a-z][a-z0-9+.-]*:/i.test(text)) return text;
     return 'https://' + text;
   }
@@ -57,7 +57,7 @@
     }
   }
 
-  // ── Busca central ──────────────────────────────────────────────
+  // ── Central search ──────────────────────────────────────────────
   var form = document.getElementById('search-form');
   var input = document.getElementById('search-input');
 
@@ -66,16 +66,16 @@
       e.preventDefault();
       submitQuery(input.value);
     });
-    // Foco imediato (além do autofocus do HTML) para começar a digitar.
+    // Immediate focus (in addition to HTML autofocus) to start typing.
     requestAnimationFrame(function () {
       try { input.focus(); } catch (_) {}
     });
   }
 
-  // ── Card Pilot (IA) ────────────────────────────────────────────
-  // A home é isolada (sem window.pilot). Pede à casca para abrir o painel Pilot
-  // já preenchido via window.lpHome.pilot(objetivo) — exposto pelo webview-preload,
-  // guardado por protocolo pilot://. Se a API faltar (preload ausente), é no-op.
+  // ── Pilot Card (AI) ────────────────────────────────────────────
+  // Home is isolated (no window.pilot). Asks the shell to open the Pilot panel
+  // pre-filled via window.lpHome.pilot(goal) — exposed by webview-preload,
+  // guarded by pilot:// protocol. If the API is missing (preload absent), it's a no-op.
   var pilotForm = document.getElementById('pilot-form');
   var pilotInput = document.getElementById('pilot-input');
 
@@ -86,13 +86,13 @@
       if (window.lpHome && typeof window.lpHome.pilot === 'function') {
         window.lpHome.pilot(goal);
       }
-      // sem API → no-op silencioso (não quebra a home)
+      // no API → silent no-op (doesn't break home)
     };
     pilotForm.addEventListener('submit', function (e) {
       e.preventDefault();
       submitPilot();
     });
-    // Cmd/Ctrl+Enter no textarea também envia (consistência com o painel da casca).
+    // Cmd/Ctrl+Enter in textarea also sends (consistency with shell panel).
     pilotInput.addEventListener('keydown', function (e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
@@ -101,8 +101,8 @@
     });
   }
 
-  // ── Atalhos rápidos / Mais visitados ───────────────────────────
-  // Default estático (mostrado enquanto não há histórico suficiente).
+  // ── Quick shortcuts / Most visited ───────────────────────────
+  // Static default (shown while insufficient history).
   var DEFAULT_SHORTCUTS = [
     { label: 'Gmail',     url: 'https://mail.google.com',  domain: 'mail.google.com' },
     { label: 'YouTube',   url: 'https://www.youtube.com',  domain: 'youtube.com' },
@@ -115,7 +115,7 @@
       encodeURIComponent(domain) + '&sz=64';
   }
 
-  // domínio "limpo" a partir de uma URL (para o favicon do s2 e fallback de título)
+  // Cleaned domain from a URL (for s2 favicon and title fallback)
   function domainOf(url) {
     try { return new URL(url).hostname.replace(/^www\./, ''); }
     catch (_) { return ''; }
@@ -154,7 +154,7 @@
     a.appendChild(iconWrap);
     a.appendChild(labelEl);
 
-    // Navegação explícita (garante href mesmo se algo cancelar o default).
+    // Explicit navigation (ensures href even if something cancels default).
     a.addEventListener('click', function (e) {
       e.preventDefault();
       location.href = item.url;
@@ -174,14 +174,14 @@
     grid.appendChild(frag);
   }
 
-  // Pinta o default na hora; troca pelos mais visitados quando o store responder.
+  // Paint default on load; swap for most visited when store responds.
   renderShortcuts(DEFAULT_SHORTCUTS);
 
   fetch('pilot://newtab/_data/topsites?limit=8', { headers: { accept: 'application/json' } })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (data) {
       var items = data && data.items ? data.items : [];
-      // exige um mínimo de histórico real para sobrepor os defaults curados
+      // requires a minimum of real history to override curated defaults
       var usable = items.filter(function (e) { return e && /^https?:\/\//i.test(e.url); });
       if (usable.length >= 3) {
         renderShortcuts(usable.map(function (e) {
@@ -189,29 +189,29 @@
         }));
       }
     })
-    .catch(function () { /* sem histórico/offline → mantém defaults */ });
+    .catch(function () { /* no history/offline → keeps defaults */ });
 
-  // ── Feed de notícias (PT-BR/Brasil) ────────────────────────────────────────
-  // Abas de categoria + grade de cards estilo Edge/MSN. O main busca RSS
-  // server-side e devolve JSON via pilot://newtab/_data/news?cat=.
+  // ── News feed (English/Global) ────────────────────────────────────────
+  // Category tabs + card grid like Edge/MSN. Main fetches RSS
+  // server-side and returns JSON via pilot://newtab/_data/news?cat=.
   var NEWS_CATEGORIES = [
-    { id: 'top',            label: 'Para você' },
-    { id: 'brasil',         label: 'Brasil' },
-    { id: 'mundo',          label: 'Mundo' },
-    { id: 'tecnologia',     label: 'Tecnologia' },
-    { id: 'esportes',       label: 'Esportes' },
-    { id: 'economia',       label: 'Economia' },
-    { id: 'entretenimento', label: 'Entretenimento' }
+    { id: 'top',            label: 'For you' },
+    { id: 'brasil',         label: 'Brazil' },
+    { id: 'mundo',          label: 'World' },
+    { id: 'tecnologia',     label: 'Technology' },
+    { id: 'esportes',       label: 'Sports' },
+    { id: 'economia',       label: 'Economy' },
+    { id: 'entretenimento', label: 'Entertainment' }
   ];
 
   var newsTabsEl = document.getElementById('news-tabs');
   var newsGridEl = document.getElementById('news-grid');
   var newsCurrentCat = 'top';
-  var newsReqToken = 0; // ignora respostas de requisições antigas (race)
-  // cache de catálogo já buscado nesta sessão (troca instantânea de aba)
+  var newsReqToken = 0; // ignores responses from old requests (race condition)
+  // cache of categories already fetched this session (instant tab switching)
   var newsCache = Object.create(null);
 
-  // Cores estáveis por inicial (placeholder quando o item não tem imagem).
+  // Stable colors by initial (placeholder when item has no image).
   var PLACEHOLDER_GRADS = [
     ['#7c5cff', '#4da3ff'], ['#ff7eb3', '#ff5f6d'], ['#11998e', '#38ef7d'],
     ['#f7971e', '#ffd200'], ['#2193b0', '#6dd5ed'], ['#c94b4b', '#4b134f'],
@@ -228,25 +228,25 @@
     return (s ? s[0] : '?').toUpperCase();
   }
 
-  // Tempo relativo em PT-BR ("agora", "há 2 min", "há 3 h", "ontem", "há 4 d").
+  // Relative time in English ("now", "2 min ago", "3 h ago", "yesterday", "4 d ago").
   function relTime(ts) {
     var n = Number(ts);
     if (!n || !isFinite(n)) return '';
     var diff = Date.now() - n;
     if (diff < 0) diff = 0;
     var min = Math.floor(diff / 60000);
-    if (min < 1) return 'agora';
-    if (min < 60) return 'há ' + min + ' min';
+    if (min < 1) return 'now';
+    if (min < 60) return min + ' min ago';
     var h = Math.floor(min / 60);
-    if (h < 24) return 'há ' + h + ' h';
+    if (h < 24) return h + ' h ago';
     var d = Math.floor(h / 24);
-    if (d === 1) return 'ontem';
-    if (d < 7) return 'há ' + d + ' d';
+    if (d === 1) return 'yesterday';
+    if (d < 7) return d + ' d ago';
     var w = Math.floor(d / 7);
-    if (w < 5) return 'há ' + w + ' sem';
+    if (w < 5) return w + ' wk ago';
     var mo = Math.floor(d / 30);
-    if (mo < 12) return 'há ' + mo + ' mês' + (mo > 1 ? 'es' : '');
-    return 'há ' + Math.floor(d / 365) + ' a';
+    if (mo < 12) return mo + ' mo' + (mo > 1 ? '' : '');
+    return Math.floor(d / 365) + ' y ago';
   }
 
   function buildNewsCard(item) {
@@ -255,7 +255,7 @@
     a.href = item.link;
     a.title = item.title;
 
-    // Mídia (imagem ou placeholder gradiente com a inicial da fonte)
+    // Media (image or gradient placeholder with source initial)
     var media = document.createElement('span');
     media.className = 'news-card-media';
     if (item.image) {
@@ -265,7 +265,7 @@
       img.alt = '';
       img.loading = 'lazy';
       img.referrerPolicy = 'no-referrer';
-      // imagem quebrada → vira placeholder, sem ícone de erro
+      // broken image → becomes placeholder, no error icon
       img.addEventListener('error', function () {
         media.removeChild(img);
         media.appendChild(buildPlaceholder(item.source));
@@ -308,7 +308,7 @@
     a.appendChild(media);
     a.appendChild(body);
 
-    // Navegação explícita (abre a notícia na própria aba).
+    // Explicit navigation (opens news in the same tab).
     a.addEventListener('click', function (e) {
       e.preventDefault();
       location.href = item.link;
@@ -359,7 +359,7 @@
     if (!newsGridEl) return;
     newsGridEl.textContent = '';
     if (!items || !items.length) {
-      renderNewsState(t('news.error', 'Não consegui carregar as notícias agora.'));
+      renderNewsState(t('news.error', 'Could not load news right now.'));
       return;
     }
     var frag = document.createDocumentFragment();
@@ -380,18 +380,18 @@
           { headers: { accept: 'application/json' } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        if (token !== newsReqToken) return; // resposta velha → ignora
+        if (token !== newsReqToken) return; // old response → ignore
         var items = data && data.ok && data.items ? data.items : [];
         if (items.length) {
           newsCache[cat] = items;
           renderNewsItems(items);
         } else {
-          renderNewsState(t('news.error', 'Não consegui carregar as notícias agora.'));
+          renderNewsState(t('news.error', 'Could not load news right now.'));
         }
       })
       .catch(function () {
         if (token !== newsReqToken) return;
-        renderNewsState(t('news.error', 'Não consegui carregar as notícias agora.'));
+        renderNewsState(t('news.error', 'Could not load news right now.'));
       });
   }
 
@@ -433,7 +433,7 @@
     loadNews(newsCurrentCat);
   }
 
-  // idioma + traduções (entregues pelo main) → reaplica na home isolada.
+  // language + translations (delivered by main) → reapply in isolated home.
   fetch('pilot://newtab/_data/i18n', { headers: { accept: 'application/json' } })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) {
@@ -441,7 +441,7 @@
       LP_I18N = d.map;
       try { document.documentElement.lang = d.lang || 'pt-BR'; } catch (e) {}
       applyI18n();
-      if (newsTabsEl) buildNewsTabs(); // re-renderiza as abas de categoria traduzidas
+      if (newsTabsEl) buildNewsTabs(); // re-render category tabs with translations
     })
     .catch(function () {});
 })();

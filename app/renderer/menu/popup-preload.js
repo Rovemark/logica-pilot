@@ -1,6 +1,6 @@
 'use strict';
 
-// Ponte do popup de menu (janela flutuante custom) com o processo principal.
+// Bridge for menu popup (custom floating window) with the main process.
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('menuPopup', {

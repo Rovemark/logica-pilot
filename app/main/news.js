@@ -1,88 +1,88 @@
 'use strict';
 
 /**
- * news.js — Feed de notícias PT-BR/Brasil para a start page (pilot://newtab).
+ * news.js — PT-BR/Brazil news feed for the start page (pilot://newtab).
  *
- * O main busca RSS SERVER-SIDE (fetch do Node/undici, sem CORS, sem API key) e
- * devolve JSON normalizado para a home. SEM dependência npm: parse manual por
- * regex dos <item>, extração de imagem por fallbacks, decode de entidades e
- * limpeza de HTML/CDATA. Cache em memória por categoria (~10 min) e timeout por
- * fetch (~6s) com try/catch por feed (uma fonte caída não derruba a rota).
+ * The main fetches RSS SERVER-SIDE (fetch from Node/undici, no CORS, no API key) and
+ * returns normalized JSON for the home. NO npm dependency: manual regex parsing of
+ * <item> tags, image extraction via fallbacks, HTML entity decoding, and HTML/CDATA
+ * cleanup. Memory cache per category (~10 min) and fetch timeout (~6s) with try/catch
+ * per feed (one downed source does not crash the route).
  *
- * Fontes validadas (30/06/2026): a família G1/Globo embute imagem rica via
- * <media:content url> em TODOS os itens; CNN Brasil e InfoMoney trazem a imagem
- * como <img src> dentro do <description>/<content:encoded> (fallback). Google
- * News BR não traz imagem (placeholder no front) mas amplia a cobertura de texto.
+ * Validated sources (30/06/2026): the G1/Globo family embeds rich images via
+ * <media:content url> in ALL items; CNN Brasil and InfoMoney bring images
+ * as <img src> inside <description>/<content:encoded> (fallback). Google
+ * News BR does not include images (placeholder on front) but broadens text coverage.
  */
 
-const CACHE_TTL_MS = 10 * 60 * 1000;   // 10 min por categoria
-const FETCH_TIMEOUT_MS = 6000;          // 6s por feed
-const MAX_ITEMS = 24;                    // teto de itens por categoria
+const CACHE_TTL_MS = 10 * 60 * 1000;   // 10 min per category
+const FETCH_TIMEOUT_MS = 6000;          // 6s per feed
+const MAX_ITEMS = 24;                    // ceiling of items per category
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-// ── Mapa de categorias → feeds RSS ────────────────────────────────────────────
-// Cada categoria mescla 1–2 feeds. A família G1 (dynamo/rss2.xml) é a âncora por
-// trazer <media:content> em todos os itens; CNN/InfoMoney complementam com <img>.
+// ── Category map → RSS feeds ────────────────────────────────────────────
+// Each category blends 1–2 feeds. The G1 family (dynamo/rss2.xml) is the anchor because
+// it delivers <media:content> in all items; CNN/InfoMoney supplement with <img>.
 const FEEDS = {
-  // "Para você" / destaques — mescla manchetes gerais + Brasil + tecnologia
+  // "For you" / highlights — blends general headlines + Brazil + technology
   top: [
     { url: 'https://g1.globo.com/rss/g1/', source: 'g1' },
     { url: 'https://www.cnnbrasil.com.br/feed/', source: 'CNN Brasil' },
   ],
   brasil: [
     { url: 'https://g1.globo.com/dynamo/brasil/rss2.xml', source: 'g1' },
-    { url: 'https://g1.globo.com/dynamo/politica/rss2.xml', source: 'g1 — Política' },
+    { url: 'https://g1.globo.com/dynamo/politica/rss2.xml', source: 'g1 — Politics' },
   ],
   mundo: [
-    { url: 'https://g1.globo.com/dynamo/mundo/rss2.xml', source: 'g1 — Mundo' },
+    { url: 'https://g1.globo.com/dynamo/mundo/rss2.xml', source: 'g1 — World' },
     {
       url: 'https://news.google.com/rss/headlines/section/topic/WORLD?hl=pt-BR&gl=BR&ceid=BR:pt-419',
-      source: 'Google Notícias',
+      source: 'Google News',
     },
   ],
   tecnologia: [
-    { url: 'https://g1.globo.com/dynamo/tecnologia/rss2.xml', source: 'g1 — Tecnologia' },
+    { url: 'https://g1.globo.com/dynamo/tecnologia/rss2.xml', source: 'g1 — Technology' },
     {
       url: 'https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=pt-BR&gl=BR&ceid=BR:pt-419',
-      source: 'Google Notícias',
+      source: 'Google News',
     },
   ],
   esportes: [
     { url: 'https://ge.globo.com/rss/ge/', source: 'ge' },
   ],
   economia: [
-    { url: 'https://g1.globo.com/dynamo/economia/rss2.xml', source: 'g1 — Economia' },
+    { url: 'https://g1.globo.com/dynamo/economia/rss2.xml', source: 'g1 — Economy' },
     { url: 'https://www.infomoney.com.br/feed/', source: 'InfoMoney' },
   ],
   entretenimento: [
-    { url: 'https://g1.globo.com/dynamo/pop-arte/rss2.xml', source: 'g1 — Pop & Arte' },
+    { url: 'https://g1.globo.com/dynamo/pop-arte/rss2.xml', source: 'g1 — Pop & Arts' },
   ],
 };
 
 const CATEGORIES = Object.keys(FEEDS);
 
-// ── Cache em memória por categoria ────────────────────────────────────────────
+// ── Memory cache per category ────────────────────────────────────────────
 const cache = new Map(); // cat -> { ts, items }
 
-// ── Helpers de parsing ────────────────────────────────────────────────────────
+// ── Parsing helpers ────────────────────────────────────────────────────────
 
-/** Remove o envelope <![CDATA[ ... ]]> (mantém o conteúdo interno). */
+/** Removes the <![CDATA[ ... ]]> envelope (keeps inner content). */
 function stripCdata(s) {
   if (!s) return '';
   return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
 }
 
-/** Decodifica as entidades HTML mais comuns dos feeds. */
+/** Decodes the most common HTML entities from feeds. */
 function decodeEntities(s) {
   if (!s) return '';
   return s
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"')
     .replace(/&#0?39;/g, "'")
-    .replace(/&#x27;/gi, "'")
+    .replace(/'/gi, "'")
     .replace(/&apos;/g, "'")
     .replace(/&nbsp;/g, ' ')
     .replace(/&hellip;/g, '…')
@@ -92,37 +92,37 @@ function decodeEntities(s) {
     .replace(/&#x([0-9a-f]+);/gi, (_m, h) => {
       try { return String.fromCodePoint(parseInt(h, 16)); } catch { return _m; }
     })
-    .replace(/&amp;/g, '&'); // por último, para não reprocessar entidades recém-decodificadas
+    .replace(/&/g, '&'); // last, to avoid reprocessing freshly-decoded entities
 }
 
-/** Texto limpo de título/fonte: tira CDATA, tags HTML e normaliza espaços. */
+/** Clean title/source text: strips CDATA, HTML tags, and normalizes whitespace. */
 function cleanText(raw) {
   if (!raw) return '';
   let s = stripCdata(raw);
-  s = s.replace(/<[^>]+>/g, ' ');     // remove qualquer tag HTML
+  s = s.replace(/<[^>]+>/g, ' ');     // remove any HTML tag
   s = decodeEntities(s);
   s = s.replace(/\s+/g, ' ').trim();
   return s;
 }
 
-/** Captura o conteúdo de uma tag dentro de um bloco (primeira ocorrência). */
+/** Captures the content of a tag within a block (first occurrence). */
 function tag(block, name) {
-  // aceita namespaces (ex.: dc:creator) e atributos na tag de abertura
+  // accepts namespaces (e.g. dc:creator) and attributes in the opening tag
   const re = new RegExp('<' + name + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + name + '>', 'i');
   const m = block.match(re);
   return m ? m[1] : '';
 }
 
 /**
- * Extrai a melhor imagem do item, na ordem de preferência:
- *   1. <media:content url="..."> (com type image/* ou medium image, ou sem type)
+ * Extracts the best image from the item, in order of preference:
+ *   1. <media:content url="..."> (with type image/* or medium image, or without type)
  *   2. <media:thumbnail url="...">
  *   3. <enclosure type="image/..." url="...">
- *   4. primeiro <img src="..."> no description/content:encoded
- * Retorna URL https absoluta ou null.
+ *   4. first <img src="..."> in description/content:encoded
+ * Returns absolute https URL or null.
  */
 function extractImage(block) {
-  // 1) media:content — prioriza os marcados como imagem; cai pro primeiro url
+  // 1) media:content — prioritizes those marked as images; falls back to first url
   const mediaContents = block.match(/<media:content\b[^>]*>/gi) || [];
   let firstMediaUrl = null;
   for (const mc of mediaContents) {
@@ -149,12 +149,12 @@ function extractImage(block) {
     if (u && (/^image\//i.test(type) || looksLikeImage(u))) return sanitizeImg(u);
   }
 
-  // 4) primeiro <img src> dentro de description / content:encoded
+  // 4) first <img src> inside description / content:encoded
   const body = stripCdata(tag(block, 'content:encoded') || tag(block, 'description'));
   const imgSrc = (body.match(/<img\b[^>]*\bsrc="([^"]+)"/i) || [])[1];
   if (imgSrc) return sanitizeImg(decodeEntities(imgSrc));
 
-  // 5) fallback: media:content sem type que ainda assim exista
+  // 5) fallback: media:content without type that still exists
   if (firstMediaUrl) return sanitizeImg(firstMediaUrl);
 
   return null;
@@ -164,12 +164,12 @@ function looksLikeImage(u) {
   return /\.(jpe?g|png|webp|gif|avif)(\?|#|$)/i.test(u || '');
 }
 
-/** Só aceita imagens https (CSP img-src https:). Recusa data:/http: por segurança. */
+/** Accepts only https images (CSP img-src https:). Rejects data:/http: for security. */
 function sanitizeImg(u) {
   if (!u) return null;
   const url = decodeEntities(String(u).trim());
   if (/^https:\/\//i.test(url)) return url;
-  // promove http→https quando possível (CDNs de imagem servem ambos)
+  // promotes http→https where possible (image CDNs serve both)
   if (/^http:\/\//i.test(url)) return url.replace(/^http:/i, 'https:');
   return null;
 }
@@ -181,22 +181,22 @@ function parseDate(s) {
   return Number.isFinite(t) ? t : 0;
 }
 
-/** Host "limpo" de uma URL (para fallback de fonte). */
+/** Clean hostname from a URL (for source fallback). */
 function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); }
   catch { return ''; }
 }
 
 /**
- * Parseia um XML RSS/Atom em itens normalizados.
+ * Parses RSS/Atom XML into normalized items.
  * @param {string} xml
  * @param {string} category
- * @param {string} sourceLabel rótulo da fonte (cai pro <channel><title> / host)
+ * @param {string} sourceLabel label for the source (falls back to <channel><title> / host)
  */
 function parseRss(xml, category, sourceLabel) {
   if (!xml) return [];
-  const channelTitle = cleanText(tag(xml, 'title')); // primeiro <title> = canal
-  // suporta RSS (<item>) e Atom (<entry>)
+  const channelTitle = cleanText(tag(xml, 'title')); // first <title> = channel
+  // supports RSS (<item>) and Atom (<entry>)
   let blocks = xml.match(/<item\b[\s\S]*?<\/item>/gi);
   let isAtom = false;
   if (!blocks || !blocks.length) {
@@ -225,8 +225,8 @@ function parseRss(xml, category, sourceLabel) {
       parseDate(tag(block, 'updated')) ||
       parseDate(tag(block, 'dc:date'));
 
-    // fonte do item: <source> do RSS (Google News usa) > rótulo configurado >
-    // título do canal > host do link
+    // item source: <source> from RSS (Google News uses) > configured label >
+    // channel title > host from link
     const itemSource =
       cleanText(tag(block, 'source')) ||
       sourceLabel ||
@@ -245,7 +245,7 @@ function parseRss(xml, category, sourceLabel) {
   return out;
 }
 
-// ── Fetch com timeout (AbortController) ───────────────────────────────────────
+// ── Fetch with timeout (AbortController) ───────────────────────────────────────
 async function fetchText(url) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
@@ -266,7 +266,7 @@ async function fetchText(url) {
   }
 }
 
-// ── Dedup + ordenação ─────────────────────────────────────────────────────────
+// ── Dedup + sorting ─────────────────────────────────────────────────────
 function dedupeAndSort(items) {
   const seen = new Set();
   const out = [];
@@ -276,7 +276,7 @@ function dedupeAndSort(items) {
     seen.add(key);
     out.push(it);
   }
-  // prioriza itens COM imagem no topo (UX estilo MSN/Edge), depois por data desc
+  // prioritizes items WITH images at top (MSN/Edge-style UX), then by date desc
   out.sort((a, b) => {
     if (!!a.image !== !!b.image) return a.image ? -1 : 1;
     return (b.ts || 0) - (a.ts || 0);
@@ -285,8 +285,8 @@ function dedupeAndSort(items) {
 }
 
 /**
- * Busca + parseia todos os feeds de uma categoria, com cache em memória.
- * Uma fonte caída (timeout/HTTP/parse) é ignorada sem derrubar a categoria.
+ * Fetches + parses all feeds for a category, with memory cache.
+ * A downed source (timeout/HTTP/parse) is ignored without crashing the category.
  * @returns {Promise<{ok:boolean, items:Array, cached?:boolean, error?:string}>}
  */
 async function getNews(rawCat) {
@@ -313,9 +313,9 @@ async function getNews(rawCat) {
   items = dedupeAndSort(items).slice(0, MAX_ITEMS);
 
   if (!items.length) {
-    // mantém cache antigo se existir (degrada com elegância); senão sinaliza erro
+    // keeps old cache if it exists (graceful degradation); otherwise signals error
     if (hit) return { ok: true, items: hit.items, cached: true, stale: true };
-    return { ok: false, items: [], error: 'sem itens' };
+    return { ok: false, items: [], error: 'no items' };
   }
 
   cache.set(cat, { ts: Date.now(), items });
@@ -325,7 +325,7 @@ async function getNews(rawCat) {
 module.exports = {
   getNews,
   CATEGORIES,
-  // exportados para teste/uso interno
+  // exported for testing/internal use
   parseRss,
   extractImage,
   cleanText,

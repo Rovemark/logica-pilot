@@ -1,40 +1,40 @@
 'use strict';
 
 /**
- * webview-preload.js — Preload MÍNIMO e GUARDADO das <webview>.
+ * webview-preload.js — Minimal and guarded preload for <webview> instances.
  *
- * Roda dentro de CADA <webview> (guest). Sua única função é dar às PÁGINAS
- * INTERNAS (pilot://…, ex.: a home/dashboard pilot://newtab) um canal seguro
- * para pedir à casca (embedder) que abra o painel Pilot ou uma nova aba.
+ * Runs inside EACH <webview> (guest). Its only function is to provide INTERNAL
+ * PAGES (pilot://…, e.g., the home/dashboard pilot://newtab) with a secure channel
+ * to request that the shell (embedder) open the Pilot panel or a new tab.
  *
- * 🔒 GUARDA DE SEGURANÇA (não negociável):
- *   A API só é exposta quando `location.protocol === 'pilot:'`. Em QUALQUER
- *   site normal (http/https/file/about/…) NADA é exposto — o site nunca recebe
- *   `window.lpHome`. Assim páginas web não conseguem abrir o Pilot nem criar
- *   abas por conta própria.
+ * 🔒 SECURITY GUARD (non-negotiable):
+ *   The API is only exposed when `location.protocol === 'pilot:'`. On ANY
+ *   normal website (http/https/file/about/…) NOTHING is exposed — the site never receives
+ *   `window.lpHome`. This way web pages cannot open Pilot or create
+ *   tabs on their own.
  *
- * Canal: usa `ipcRenderer.sendToHost(channel, payload)` — mensagem
- * webview→embedder, que o renderer da casca recebe via
- * `wv.addEventListener('ipc-message', …)`. NÃO há acesso ao ipcMain daqui.
+ * Channel: uses `ipcRenderer.sendToHost(channel, payload)` — webview→embedder
+ * message, which the shell's renderer receives via
+ * `wv.addEventListener('ipc-message', …)`. There is NO access to ipcMain from here.
  */
 
 const { ipcRenderer, contextBridge } = require('electron');
 
-// 🔒 Guarda por protocolo: só páginas internas pilot:// recebem a API.
+// 🔒 Protocol guard: only internal pilot:// pages receive the API.
 if (location.protocol === 'pilot:') {
   const api = {
-    // Pede à casca para abrir o painel Pilot já preenchido com o objetivo.
-    // A casca decide (prefill + foco; NÃO auto-roda).
+    // Requests the shell to open the Pilot panel pre-filled with the objective.
+    // The shell decides (prefill + focus; does NOT auto-run).
     pilot: (objective) => ipcRenderer.sendToHost('home:pilot', String(objective || '')),
-    // Pede à casca para abrir uma URL em nova aba.
+    // Requests the shell to open a URL in a new tab.
     openTab: (url) => ipcRenderer.sendToHost('home:open', String(url || '')),
   };
 
-  // Caminho primário: contextBridge (contextIsolation ligado).
-  // Fallback: se contextIsolation estiver desligado, injeta direto no window.
+  // Primary path: contextBridge (contextIsolation enabled).
+  // Fallback: if contextIsolation is disabled, inject directly into window.
   try {
     contextBridge.exposeInMainWorld('lpHome', api);
   } catch (_e) {
-    try { window.lpHome = api; } catch (_e2) { /* sem canal — no-op */ }
+    try { window.lpHome = api; } catch (_e2) { /* no channel — no-op */ }
   }
 }

@@ -1,19 +1,19 @@
 'use strict';
 
-// Ponte da barra "Localizar na página" flutuante (janela do SO) com o main.
-// A busca roda na <webview> ativa, no main (wc.findInPage). Esta janela só manda
-// a query e recebe o contador (n/N) de volta.
+// Bridge for the floating "Find in Page" bar (OS window) with main.
+// The search runs in the active <webview>, in main (wc.findInPage). This window only sends
+// the query and receives the counter (n/N) back.
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('findPopup', {
-  // tema inicial enviado pelo main no did-finish-load
+  // initial theme sent by main on did-finish-load
   onData: (cb) => ipcRenderer.on('find:data', (_e, d) => cb(d)),
-  // contador atualizado (found-in-page da aba ativa) → { activeMatchOrdinal, matches }
+  // updated counter (found-in-page of active tab) → { activeMatchOrdinal, matches }
   onResult: (cb) => ipcRenderer.on('find:count', (_e, d) => cb(d)),
-  // dispara/avança a busca na aba ativa
+  // triggers/advances search in active tab
   query: (text, opts) => ipcRenderer.send('find:query', { text, options: opts || {} }),
-  // para a busca (limpa seleção) sem fechar a janela
+  // stops search (clears selection) without closing window
   stop: () => ipcRenderer.send('find:stopActive'),
-  // fecha a barra (para a busca + destrói a janela)
+  // closes bar (stops search + destroys window)
   close: () => ipcRenderer.send('find:close'),
 });

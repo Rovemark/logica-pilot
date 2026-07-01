@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * downloads-store.js — Registro de downloads (paridade Chrome).
+ * downloads-store.js — Downloads registry (parity with the browser).
  *
- * Mantém:
- *  - um Map em memória id → DownloadItem (do Electron) para AÇÕES (cancel/pause/resume),
- *  - uma lista serializável (records) persistida em userData/downloads.json para a UI.
+ * Maintains:
+ *  - a Map in memory id → DownloadItem (from Electron) for ACTIONS (cancel/pause/resume),
+ *  - a serializable list (records) persisted in userData/downloads.json for the UI.
  *
- * O webview-manager liga o session.on('will-download'); este módulo cuida do estado.
- * Recebe `shell` por injeção (init) para abrir/mostrar arquivos sem importar Electron
- * diretamente aqui (mantém o módulo testável).
+ * The webview-manager binds session.on('will-download'); this module handles the state.
+ * Receives `shell` via injection (init) to open/show files without importing Electron
+ * directly here (keeps the module testable).
  */
 
 const fs = require('fs');
@@ -18,14 +18,14 @@ const path = require('path');
 let filePath = null;
 let shellRef = null;
 
-/** id → { record, item }  (item = DownloadItem vivo; pode sumir ao concluir) */
+/** id → { record, item }  (item = live DownloadItem; may disappear after completion) */
 const items = new Map();
-/** lista de records persistível (mais recente primeiro) */
+/** list of persistable records (most recent first) */
 let records = [];
 let seq = 0;
 let writeTimer = null;
 
-/** Inicializa store: diretório do usuário + referência ao `shell` do Electron. */
+/** Initializes store: user data directory + reference to Electron `shell`. */
 function init(userDataDir, shell) {
   filePath = path.join(userDataDir, 'downloads.json');
   shellRef = shell || null;
@@ -43,8 +43,8 @@ function load() {
 }
 
 /**
- * Registra um novo DownloadItem do Electron e devolve o record + callback de emissão.
- * `emit(eventPayload)` é fornecido pelo caller para mandar 'downloads:event' ao renderer.
+ * Registers a new Electron DownloadItem and returns the record + emission callback.
+ * `emit(eventPayload)` is provided by the caller to send 'downloads:event' to the renderer.
  */
 function register(item, emit) {
   const id = `dl_${Date.now()}_${++seq}`;
@@ -52,7 +52,7 @@ function register(item, emit) {
     id,
     filename: item.getFilename(),
     url: item.getURL(),
-    savePath: '', // definido em did-set-save-path / no início
+    savePath: '', // set in did-set-save-path / on startup
     state: 'started',
     receivedBytes: 0,
     totalBytes: item.getTotalBytes(),
@@ -67,7 +67,7 @@ function register(item, emit) {
     try {
       if (typeof emit === 'function') emit(payload);
     } catch {
-      // renderer pode ter ido embora — ignorar
+      // renderer may have gone away — ignore
     }
   };
 
@@ -80,7 +80,7 @@ function register(item, emit) {
     savePath: record.savePath,
   });
 
-  // caminho de salvamento (Electron define logo após will-download)
+  // save path (Electron sets it right after will-download)
   try {
     record.savePath = item.getSavePath() || record.savePath;
   } catch {}
@@ -115,7 +115,7 @@ function register(item, emit) {
       totalBytes: record.totalBytes,
       savePath: record.savePath,
     });
-    // mantém o record na lista; solta só a referência do item vivo
+    // keeps the record in the list; releases only the live item reference
     const slot = items.get(id);
     if (slot) slot.item = null;
   });
@@ -128,17 +128,17 @@ function trimRecords() {
   if (records.length > MAX) records = records.slice(0, MAX);
 }
 
-/** Snapshot da lista (cópia) para 'downloads:list'. */
+/** Snapshot of the list (copy) for 'downloads:list'. */
 function list() {
   return records.map((r) => ({ ...r }));
 }
 
 /**
- * Executa uma ação num download:
- *  cancel | pause | resume → opera no DownloadItem vivo
+ * Executes an action on a download:
+ *  cancel | pause | resume → operates on the live DownloadItem
  *  open                    → shell.openPath(savePath)
  *  showInFolder            → shell.showItemInFolder(savePath)
- * Retorna bool de sucesso.
+ * Returns success bool.
  */
 function action(id, act) {
   const slot = items.get(id);
@@ -184,7 +184,7 @@ function flush() {
   try {
     fs.writeFileSync(filePath, JSON.stringify(records), 'utf8');
   } catch {
-    // ignora falha de disco
+    // ignore disk failure
   }
 }
 

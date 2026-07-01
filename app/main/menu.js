@@ -1,16 +1,15 @@
 'use strict';
 
 /**
- * menu.js — Application Menu nativo do Electron (paridade Chrome).
+ * menu.js — Native Electron Application Menu (feature parity with the browser).
  *
- * Por que menu nativo: os accelerators registrados aqui funcionam MESMO com o foco
- * dentro do <webview> (o keydown do renderer é engolido lá dentro). Cada item de
- * navegação/aba/zoom dispara `win.webContents.send('menu:action', name)` para o
- * renderer, que tem o `dispatchMenu(name)` como fonte única de verdade. Itens de
- * edição (undo/redo/cut/copy/paste/selectAll) usam os roles nativos do Electron,
- * que operam no campo com foco de graça.
+ * Why native menu: accelerators registered here work EVEN when focus is
+ * inside the <webview> (renderer keydown is consumed there). Each navigation/tab/zoom item
+ * fires `win.webContents.send('menu:action', name)` to the renderer, which has
+ * `dispatchMenu(name)` as the single source of truth. Edit items (undo/redo/cut/copy/paste/selectAll)
+ * use Electron's native roles, which operate on the focused field for free.
  *
- * `getActiveWin()` resolve a janela-alvo na hora do clique (multi-janela).
+ * `getActiveWin()` resolves the target window at click time (multi-window).
  */
 
 const { Menu, app } = require('electron');
@@ -18,11 +17,11 @@ const { Menu, app } = require('electron');
 const isMac = process.platform === 'darwin';
 
 /**
- * Constrói (e devolve) o Menu da aplicação.
+ * Builds (and returns) the application Menu.
  * @param {() => import('electron').BrowserWindow | null} getActiveWin
  */
 function buildMenu(getActiveWin) {
-  // Helper: manda uma ação ao renderer da janela ativa.
+  // Helper: sends an action to the active window's renderer.
   const send = (name) => {
     const win = getActiveWin && getActiveWin();
     if (win && !win.isDestroyed()) {
@@ -34,14 +33,14 @@ function buildMenu(getActiveWin) {
   /** @type {import('electron').MenuItemConstructorOptions[]} */
   const template = [];
 
-  // ── App menu (somente macOS) ──────────────────────────────────────────────
+  // ── App menu (macOS only) ──────────────────────────────────────────────
   if (isMac) {
     template.push({
       label: app.name,
       submenu: [
-        { label: `Sobre o ${app.name}`, click: () => send('about') },
+        { label: `About ${app.name}`, click: () => send('about') },
         { type: 'separator' },
-        { label: 'Configurações…', accelerator: 'Cmd+,', click: () => send('settings') },
+        { label: 'Settings…', accelerator: 'Cmd+,', click: () => send('settings') },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -54,124 +53,124 @@ function buildMenu(getActiveWin) {
     });
   }
 
-  // ── Arquivo ───────────────────────────────────────────────────────────────
+  // ── File ───────────────────────────────────────────────────────────────
   template.push({
-    label: 'Arquivo',
+    label: 'File',
     submenu: [
-      item('Nova aba', 'CmdOrCtrl+T', 'new-tab'),
-      item('Nova janela', 'CmdOrCtrl+N', 'new-window'),
-      item('Nova janela anônima', 'CmdOrCtrl+Shift+N', 'new-window-incognito'),
+      item('New Tab', 'CmdOrCtrl+T', 'new-tab'),
+      item('New Window', 'CmdOrCtrl+N', 'new-window'),
+      item('New Incognito Window', 'CmdOrCtrl+Shift+N', 'new-window-incognito'),
       { type: 'separator' },
-      item('Reabrir aba fechada', 'CmdOrCtrl+Shift+T', 'reopen-tab'),
+      item('Reopen Closed Tab', 'CmdOrCtrl+Shift+T', 'reopen-tab'),
       { type: 'separator' },
-      item('Fechar aba', 'CmdOrCtrl+W', 'close-tab'),
-      item('Imprimir…', 'CmdOrCtrl+P', 'print'),
+      item('Close Tab', 'CmdOrCtrl+W', 'close-tab'),
+      item('Print…', 'CmdOrCtrl+P', 'print'),
       ...(!isMac
-        ? [{ type: 'separator' }, { role: 'quit', label: 'Sair' }]
+        ? [{ type: 'separator' }, { role: 'quit', label: 'Exit' }]
         : []),
     ],
   });
 
-  // ── Editar (roles nativos: operam no campo com foco) ───────────────────────
+  // ── Edit (native roles: operate on the focused field) ───────────────────────
   template.push({
-    label: 'Editar',
+    label: 'Edit',
     submenu: [
-      { role: 'undo', label: 'Desfazer' },
-      { role: 'redo', label: 'Refazer' },
+      { role: 'undo', label: 'Undo' },
+      { role: 'redo', label: 'Redo' },
       { type: 'separator' },
-      { role: 'cut', label: 'Recortar' },
-      { role: 'copy', label: 'Copiar' },
-      { role: 'paste', label: 'Colar' },
-      { role: 'selectAll', label: 'Selecionar tudo' },
+      { role: 'cut', label: 'Cut' },
+      { role: 'copy', label: 'Copy' },
+      { role: 'paste', label: 'Paste' },
+      { role: 'selectAll', label: 'Select All' },
       { type: 'separator' },
-      item('Localizar na página…', 'CmdOrCtrl+F', 'find'),
-      item('Localizar próximo', 'CmdOrCtrl+G', 'find-next'),
-      item('Localizar anterior', 'CmdOrCtrl+Shift+G', 'find-prev'),
+      item('Find on Page…', 'CmdOrCtrl+F', 'find'),
+      item('Find Next', 'CmdOrCtrl+G', 'find-next'),
+      item('Find Previous', 'CmdOrCtrl+Shift+G', 'find-prev'),
     ],
   });
 
-  // ── Ver ────────────────────────────────────────────────────────────────────
+  // ── View ────────────────────────────────────────────────────────────────────
   template.push({
-    label: 'Ver',
+    label: 'View',
     submenu: [
-      item('Recarregar', 'CmdOrCtrl+R', 'reload'),
-      item('Recarregar sem cache', 'CmdOrCtrl+Shift+R', 'hard-reload'),
-      // 'Parar' SEM acelerador: o Esc é dono do renderer (fecha findbar/omnibox antes
-      // de parar o loading). Um acelerador Esc no menu nativo engoliria o Esc global.
-      { label: 'Parar', click: () => send('stop') },
+      item('Reload', 'CmdOrCtrl+R', 'reload'),
+      item('Hard Reload', 'CmdOrCtrl+Shift+R', 'hard-reload'),
+      // 'Stop' WITHOUT accelerator: Esc is owned by the renderer (closes findbar/omnibox before
+      // stopping the load). An Esc accelerator in the native menu would consume the global Esc.
+      { label: 'Stop', click: () => send('stop') },
       { type: 'separator' },
-      item('Aumentar zoom', 'CmdOrCtrl+Plus', 'zoom-in'),
-      // segundo acelerador para o '=' (teclado sem shift)
-      { label: 'Aumentar zoom', accelerator: 'CmdOrCtrl+=', visible: false, click: () => send('zoom-in') },
-      item('Diminuir zoom', 'CmdOrCtrl+-', 'zoom-out'),
-      item('Tamanho normal', 'CmdOrCtrl+0', 'zoom-reset'),
+      item('Zoom In', 'CmdOrCtrl+Plus', 'zoom-in'),
+      // second accelerator for '=' (keyboard without shift)
+      { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', visible: false, click: () => send('zoom-in') },
+      item('Zoom Out', 'CmdOrCtrl+-', 'zoom-out'),
+      item('Reset Zoom', 'CmdOrCtrl+0', 'zoom-reset'),
       { type: 'separator' },
-      item('Modo leitor', isMac ? 'Cmd+Alt+R' : 'Ctrl+Alt+R', 'reader'),
-      item('Traduzir página', undefined, 'translate'),
+      item('Reader Mode', isMac ? 'Cmd+Alt+R' : 'Ctrl+Alt+R', 'reader'),
+      item('Translate Page', undefined, 'translate'),
       { type: 'separator' },
-      item('Alternar tema', 'CmdOrCtrl+Shift+L', 'toggle-theme'),
+      item('Toggle Theme', 'CmdOrCtrl+Shift+L', 'toggle-theme'),
       { type: 'separator' },
-      item('Ferramentas do desenvolvedor', isMac ? 'Cmd+Alt+I' : 'Ctrl+Shift+I', 'devtools'),
+      item('Developer Tools', isMac ? 'Cmd+Alt+I' : 'Ctrl+Shift+I', 'devtools'),
     ],
   });
 
-  // ── Favoritos ─────────────────────────────────────────────────────────────────
+  // ── Bookmarks ─────────────────────────────────────────────────────────────────
   template.push({
-    label: 'Favoritos',
+    label: 'Bookmarks',
     submenu: [
-      item('Favoritar página', 'CmdOrCtrl+D', 'bookmark-page'),
-      item('Mostrar barra de favoritos', 'CmdOrCtrl+Shift+B', 'toggle-bookmarks-bar'),
+      item('Bookmark Page', 'CmdOrCtrl+D', 'bookmark-page'),
+      item('Show Bookmarks Bar', 'CmdOrCtrl+Shift+B', 'toggle-bookmarks-bar'),
       { type: 'separator' },
-      { label: 'Gerenciar favoritos', click: () => send('show-bookmarks') },
+      { label: 'Manage Bookmarks', click: () => send('show-bookmarks') },
     ],
   });
 
-  // ── Histórico ───────────────────────────────────────────────────────────────
+  // ── History ───────────────────────────────────────────────────────────────
   template.push({
-    label: 'Histórico',
+    label: 'History',
     submenu: [
-      item('Página inicial', 'CmdOrCtrl+Shift+H', 'home'),
-      item('Voltar', 'CmdOrCtrl+[', 'back'),
-      item('Avançar', 'CmdOrCtrl+]', 'forward'),
+      item('Home', 'CmdOrCtrl+Shift+H', 'home'),
+      item('Back', 'CmdOrCtrl+[', 'back'),
+      item('Forward', 'CmdOrCtrl+]', 'forward'),
       { type: 'separator' },
-      item('Mostrar histórico', isMac ? 'Cmd+Y' : 'Ctrl+H', 'history'),
+      item('Show History', isMac ? 'Cmd+Y' : 'Ctrl+H', 'history'),
       item('Downloads', isMac ? 'Cmd+Shift+J' : 'Ctrl+J', 'downloads'),
       { type: 'separator' },
-      item('Limpar dados de navegação…', 'CmdOrCtrl+Shift+Delete', 'clear-data'),
+      item('Clear Browsing Data…', 'CmdOrCtrl+Shift+Delete', 'clear-data'),
     ],
   });
 
-  // ── Aba ──────────────────────────────────────────────────────────────────────
+  // ── Tab ──────────────────────────────────────────────────────────────────────
   template.push({
-    label: 'Aba',
+    label: 'Tab',
     submenu: [
-      item('Próxima aba', 'Ctrl+Tab', 'next-tab'),
-      item('Aba anterior', 'Ctrl+Shift+Tab', 'prev-tab'),
+      item('Next Tab', 'Ctrl+Tab', 'next-tab'),
+      item('Previous Tab', 'Ctrl+Shift+Tab', 'prev-tab'),
       { type: 'separator' },
       ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) =>
-        item(`Ir para aba ${n}`, `CmdOrCtrl+${n}`, `goto-tab-${n}`),
+        item(`Go to Tab ${n}`, `CmdOrCtrl+${n}`, `goto-tab-${n}`),
       ),
-      item('Última aba', 'CmdOrCtrl+9', 'goto-tab-last'),
+      item('Last Tab', 'CmdOrCtrl+9', 'goto-tab-last'),
     ],
   });
 
-  // ── Janela ────────────────────────────────────────────────────────────────────
+  // ── Window ────────────────────────────────────────────────────────────────────
   template.push({
-    label: 'Janela',
+    label: 'Window',
     submenu: [
-      { role: 'minimize', label: 'Minimizar' },
+      { role: 'minimize', label: 'Minimize' },
       { role: 'zoom', label: 'Zoom' },
-      ...(isMac ? [{ type: 'separator' }, { role: 'front' }] : [{ role: 'close', label: 'Fechar' }]),
+      ...(isMac ? [{ type: 'separator' }, { role: 'front' }] : [{ role: 'close', label: 'Close' }]),
     ],
   });
 
-  // ── Ajuda ─────────────────────────────────────────────────────────────────────
+  // ── Help ─────────────────────────────────────────────────────────────────────
   template.push({
     role: 'help',
-    label: 'Ajuda',
+    label: 'Help',
     submenu: [
-      { label: `Sobre o ${app.name}`, click: () => send('about') },
-      ...(!isMac ? [{ label: 'Configurações…', accelerator: 'Ctrl+,', click: () => send('settings') }] : []),
+      { label: `About ${app.name}`, click: () => send('about') },
+      ...(!isMac ? [{ label: 'Settings…', accelerator: 'Ctrl+,', click: () => send('settings') }] : []),
     ],
   });
 

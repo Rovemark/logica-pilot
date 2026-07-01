@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * main.js — Processo principal do BROWSER Logica Pilot (Electron = Chromium real).
+ * main.js — Main process of the BROWSER Logica Pilot (Electron = real browser engine).
  *
- * A janela é um browser de verdade: cada aba é um <webview> (Chromium). Quando o
- * usuário pede uma tarefa, o main anexa o `webContents.debugger` (CDP) na aba ativa
- * e roda o MESMO motor autônomo do modo headless. A IA tem controle total.
+ * The window is a real browser: each tab is a <webview> (browser engine). When the
+ * user requests a task, main attaches the `webContents.debugger` (CDP) to the active tab
+ * and runs the SAME autonomous engine as headless mode. The AI has full control.
  *
- * Este arquivo é a PONTE: registra protocolo pilot://, Application Menu nativo,
- * tema (nativeTheme), stores (history/downloads/settings) e TODOS os handlers IPC
- * da casca. As webviews são equipadas pelo webview-manager via did-attach-webview.
+ * This file is the BRIDGE: registers pilot:// protocol, native Application Menu,
+ * theme (nativeTheme), stores (history/downloads/settings) and ALL IPC handlers
+ * from the shell. Webviews are equipped by webview-manager via did-attach-webview.
  */
 
 const {
@@ -45,30 +45,30 @@ const { createRegistry } = require('./main/view-registry');
 
 const pkg = require('../package.json');
 
-// Migração <webview> → WebContentsView (Fase 1). Atrás de flag: OFF (default) = o
-// caminho atual com <webview>; ON = páginas geridas pelo main via view-registry.
-// Permite coexistência e rollback instantâneo durante a migração.
+// Migration <webview> → WebContentsView (Phase 1). Behind flag: OFF (default) = current
+// path with <webview>; ON = pages managed by main via view-registry.
+// Allows coexistence and instant rollback during migration.
 const WCV_ENABLED = process.env.LOGICA_PILOT_WCV === '1';
 
-// Nome do app = "Logica Pilot" (o default seria "Electron"). Afeta o userData e o
-// branding lido por libs via app.getName() — ex.: a Chrome Web Store mostra "Usar no
-// Logica Pilot" (a lib troca "Chrome" pelo nome do app no preload da loja).
+// App name = "Logica Pilot" (default would be "Electron"). Affects userData and
+// branding read by libs via app.getName() — e.g., Chrome Web Store shows "Use in
+// Logica Pilot" (lib replaces "Chrome" with app name in store preload).
 app.setName('Logica Pilot');
 
-// ── Guarda anti-crash do processo principal ─────────────────────────────────
-// Bug conhecido da electron-chrome-extensions@4.1.1: em navegação rápida o frame
-// é descartado ANTES do handler onBeforeNavigate acessar o WebFrameMain, lançando
-// "Render frame was disposed before WebFrameMain could be accessed" como exceção
-// NÃO-capturada → o Electron derruba o app inteiro (diálogo "A JavaScript error…").
-// É uma corrida benigna (o frame já morreu; nada a fazer). Engolimos SÓ esse erro
-// e seguimos vivos; qualquer outra exceção continua sendo logada para diagnóstico.
+// ── Anti-crash guard for main process ─────────────────────────────────
+// Known bug in electron-chrome-extensions@4.1.1: on rapid navigation the frame
+// is discarded BEFORE the onBeforeNavigate handler accesses WebFrameMain, throwing
+// "Render frame was disposed before WebFrameMain could be accessed" as an
+// UNCAUGHT exception → Electron kills the entire app (dialog "A JavaScript error…").
+// It's a benign race (frame already dead; nothing to do). We swallow ONLY this error
+// and keep running; any other exception continues to be logged for diagnosis.
 process.on('uncaughtException', (err) => {
   const msg = String((err && err.message) || err);
   if (
     /Render frame was disposed before WebFrameMain could be accessed/i.test(msg) ||
     /WebFrameMain could be accessed/i.test(msg)
   ) {
-    console.warn('[safe] frame descartado durante navegação (ignorado):', msg);
+    console.warn('[safe] frame discarded during navigation (ignored):', msg);
     return;
   }
   console.error('[uncaughtException]', err);
@@ -77,13 +77,13 @@ process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
 });
 
-// flags Chromium úteis (não-fatais se ignoradas)
+// Useful browser engine flags (non-fatal if ignored)
 app.commandLine.appendSwitch('disable-features', 'AutomationControlled');
 
-// Apresentar como Google Chrome: UA limpo (sem "Electron/Logica Pilot") pra sites
-// não quebrarem E pra a Chrome Web Store reconhecer o browser (some o aviso
-// "mude para o Chrome"). A instalação real é programática (installExtension),
-// mas o UA limpo deixa a loja amigável.
+// Present as Google Chrome: clean UA (without "Electron/Logica Pilot") so sites
+// don't break AND so Chrome Web Store recognizes the browser (warning
+// "switch to Chrome" disappears). Real install is programmatic (installExtension),
+// but clean UA makes the store friendly.
 try {
   const _chrome = process.versions.chrome || '130.0.0.0';
   const _os = process.platform === 'darwin' ? 'Macintosh; Intel Mac OS X 10_15_7'
@@ -97,19 +97,19 @@ const PARTITION = webviewManager.PARTITION; // 'persist:logica-pilot'
 const RENDERER_DIR = path.join(__dirname, 'renderer');
 const NEWTAB_DIR = path.join(RENDERER_DIR, 'newtab');
 
-// Hosts pilot:// que servem páginas internas (cada um mapeia para app/renderer/<host>/).
-// O default de cada host é <host>.html (ex.: pilot://history → history/history.html).
+// Pilot:// hosts that serve internal pages (each maps to app/renderer/<host>/).
+// The default for each host is <host>.html (e.g., pilot://history → history/history.html).
 const PILOT_HOSTS = {
   newtab: { dir: NEWTAB_DIR, index: 'newtab.html' },
   history: { dir: path.join(RENDERER_DIR, 'history'), index: 'history.html' },
   downloads: { dir: path.join(RENDERER_DIR, 'downloads'), index: 'downloads.html' },
 };
 
-// Multi-janela: substitui o singleton 'win' por um Set.
+// Multi-window: replaces singleton 'win' with a Set.
 const windows = new Set();
 const runs = new Map(); // guestId -> { cancelled }
 
-// ── Protocolo pilot:// — registrar privilégios ANTES do app.whenReady ─────────
+// ── Register pilot:// protocol — register privileges BEFORE app.whenReady ─────────
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'pilot',
@@ -117,17 +117,17 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-// Área de conteúdo (onde a WebContentsView ativa aparece): abaixo da titlebar
-// (tab strip) + toolbar. É um FALLBACK; a casca reporta o retângulo exato do
-// container #views via IPC 'view:layout' (cobre painel Pilot, barra de favoritos…).
+// Content area (where active WebContentsView appears): below titlebar
+// (tab strip) + toolbar. It's a FALLBACK; shell reports exact container bounds for #views
+// via IPC 'view:layout' (covers Pilot panel, bookmarks bar…).
 function computeContentBounds(win) {
   const [w, h] = win.getContentSize();
   const TOP = 84; // ~ tab strip + toolbar
   return { x: 0, y: TOP, width: w, height: Math.max(0, h - TOP) };
 }
 
-// IPC da Fase 1: a casca comanda as views por tabId; executa no registry da JANELA
-// do emissor. Inerte se a janela não tem registry (flag OFF). Registrado 1x.
+// Phase 1 IPC: shell commands views by tabId; executes in registry of sender's WINDOW.
+// Inert if window has no registry (flag OFF). Registered 1x.
 function registerViewIpc() {
   const regOf = (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -142,7 +142,7 @@ function registerViewIpc() {
   ipcMain.handle('view:forward', (e, p = {}) => { const r = regOf(e); if (r) r.goForward(p.tabId); });
   ipcMain.handle('view:reload', (e, p = {}) => { const r = regOf(e); if (r) (p.hard ? r.reloadHard(p.tabId) : r.reload(p.tabId)); });
   ipcMain.handle('view:stop', (e, p = {}) => { const r = regOf(e); if (r) r.stop(p.tabId); });
-  // a casca reporta o retângulo exato da área de conteúdo (resize/painel/favoritos)
+  // shell reports exact bounds of content area (resize/panel/bookmarks)
   ipcMain.on('view:layout', (e, bounds) => {
     const win = BrowserWindow.fromWebContents(e.sender);
     if (!win) return;
@@ -151,13 +151,13 @@ function registerViewIpc() {
   });
 }
 
-// ── Criação de janela ─────────────────────────────────────────────────────────
+// ── Window creation ─────────────────────────────────────────────────────────
 function createWindow(opts = {}) {
   const smoke = !!process.env.LOGICA_PILOT_SMOKE;
   const uitest = !!process.env.LOGICA_PILOT_UITEST;
   const headless = smoke || uitest;
 
-  // backgroundColor inicial pelo tema (mata flash branco/preto no boot/resize).
+  // Initial backgroundColor by theme (kills white/black flash on boot/resize).
   const dark = resolveDark();
   const win = new BrowserWindow({
     width: 1380,
@@ -180,14 +180,14 @@ function createWindow(opts = {}) {
   windows.add(win);
   win.on('closed', () => windows.delete(win));
 
-  // Equipa cada <webview> assim que ela anexa (downloads/context-menu/popups/find).
+  // Equip each <webview> as soon as it attaches (downloads/context-menu/popups/find).
   win.webContents.on('did-attach-webview', (_e, wc) => {
     webviewManager.equip(wc, win);
   });
 
-  // ── Fase 1 (flag LOGICA_PILOT_WCV): páginas como WebContentsView geridas pelo
-  // main. Inerte com a flag OFF — o renderer segue criando <webview>. ON: o main
-  // cria/posiciona/troca as views; o renderer vira controle remoto via IPC view:*.
+  // ── Phase 1 (flag LOGICA_PILOT_WCV): pages as WebContentsView managed by
+  // main. Inert with flag OFF — renderer keeps creating <webview>. ON: main
+  // creates/positions/swaps views; renderer becomes remote control via IPC view:*.
   if (WCV_ENABLED && !headless) {
     const registry = createRegistry({
       window: win,
@@ -201,26 +201,26 @@ function createWindow(opts = {}) {
   }
 
   if (smoke) {
-    // janela única para o smoke, sem UI
+    // single window for smoke test, no UI
     runSmoke(win).catch((e) => {
-      console.error('[SMOKE] erro inesperado:', e);
+      console.error('[SMOKE] unexpected error:', e);
       app.exit(1);
     });
     return win;
   }
 
   if (uitest) {
-    // carrega o renderer REAL (sem GUI) e reporta erros de console/boot
+    // load REAL renderer (no GUI) and report console/boot errors
     runUiTest(win).catch((e) => {
-      console.error('[UITEST] erro inesperado:', e);
+      console.error('[UITEST] unexpected error:', e);
       app.exit(1);
     });
     return win;
   }
 
-  // Modo anônimo: passa a partition in-memory via query (renderer escolhe).
-  // initialUrl: usado por chrome.windows.create({url}) das extensões — o renderer
-  // abre uma aba nessa URL ao montar (senão a janela abriria em branco/newtab).
+  // Incognito mode: pass in-memory partition via query (renderer chooses).
+  // initialUrl: used by chrome.windows.create({url}) from extensions — renderer
+  // opens a tab at that URL on mount (otherwise window would open blank/newtab).
   const query = {};
   if (opts.incognito) query.incognito = '1';
   if (opts.initialUrl && /^(https?|pilot|file|about):/i.test(opts.initialUrl)) {
@@ -230,13 +230,13 @@ function createWindow(opts = {}) {
 
   if (process.env.LOGICA_PILOT_DEVTOOLS) win.webContents.openDevTools({ mode: 'detach' });
 
-  // força a janela pra frente (garante que o Arquiteto veja a NOVA, não uma velha)
+  // force window to front (ensures Architect sees the NEW one, not an old one)
   win.once('ready-to-show', () => { try { win.show(); win.focus(); win.moveTop(); } catch {} });
 
   return win;
 }
 
-/** Decide tema escuro a partir das settings + nativeTheme. */
+/** Decide dark theme from settings + nativeTheme. */
 function resolveDark() {
   try {
     const mode = settingsStore.get().theme;
@@ -246,7 +246,7 @@ function resolveDark() {
   return nativeTheme.shouldUseDarkColors;
 }
 
-/** Reaplica o backgroundColor nativo de todas as janelas (mata flash no resize). */
+/** Reapply native backgroundColor to all windows (kills flash on resize). */
 function applyWindowBackground() {
   const bg = nativeTheme.shouldUseDarkColors ? '#0b0d12' : '#f1f3f4';
   for (const w of windows) {
@@ -257,20 +257,20 @@ function applyWindowBackground() {
   return nativeTheme.shouldUseDarkColors;
 }
 
-// ── Self-test sem GUI: prova o caminho Electron(Chromium) + CDP + percepção ──
+// ── Self-test without GUI: proves Electron(browser engine) + CDP + perception path ──
 async function runSmoke(win) {
   const url = argValue('--url') || 'https://example.com';
   try {
     const page = new ElectronPage(win.webContents);
-    console.log('[SMOKE] navegando para', url);
+    console.log('[SMOKE] navigating to', url);
     await page.goto(url);
     const snap = await perception.snapshot(page);
-    console.log(`[SMOKE] título="${snap.title}" elementos=${snap.elements.length}`);
-    console.log('[SMOKE] mapa (trecho):');
+    console.log(`[SMOKE] title="${snap.title}" elements=${snap.elements.length}`);
+    console.log('[SMOKE] map (excerpt):');
     console.log(perception.format(snap).split('\n').slice(0, 10).join('\n'));
     const shot = await actions.screenshot(page);
     console.log(`[SMOKE] screenshot OK (${Math.round(shot.length / 1024)}KB base64)`);
-    console.log('[SMOKE] PASS ✅ — Chromium real dirigido via CDP do Electron.');
+    console.log('[SMOKE] PASS ✅ — real browser engine driven via CDP from Electron.');
     app.exit(0);
   } catch (e) {
     console.error('[SMOKE] FAIL ❌', e.message);
@@ -283,14 +283,14 @@ function argValue(flag) {
   return i >= 0 ? process.argv[i + 1] : null;
 }
 
-// ── Teste de UI headless: carrega index.html real e caça erros de boot ──────────
+// ── Headless UI test: load real index.html and hunt for boot errors ──────────
 async function runUiTest(win) {
   const errors = [];
   const warnings = [];
 
   win.webContents.on('console-message', (...a) => {
     // Electron <=33: (event, level, message, line, sourceId)
-    // Electron novo: (event{level,message,lineNumber,sourceId})
+    // Newer Electron: (event{level,message,lineNumber,sourceId})
     let level, message, line, src;
     if (a.length >= 3 && typeof a[1] === 'number') {
       level = a[1]; message = a[2]; line = a[3]; src = a[4];
@@ -348,8 +348,8 @@ async function runUiTest(win) {
 
   console.log('[UITEST] probe: ' + JSON.stringify(probe));
 
-  // diagnóstico do FEED — pega o webContents do GUEST (home pilot://newtab) direto
-  // e faz o fetch da rota DENTRO do contexto/partition da home.
+  // Feed diagnostics — grab webContents of GUEST (home pilot://newtab) directly
+  // and fetch from route INSIDE its context/partition.
   let news = {};
   try {
     let guest = null;
@@ -369,7 +369,7 @@ async function runUiTest(win) {
   } catch (e) { news = { outerErr: e.message }; }
   console.log('[UITEST] news: ' + JSON.stringify(news));
 
-  // diagnóstico do menu ⋮ — simula o clique e reporta o estado
+  // Menu ⋮ diagnostics — simulate click and report state
   let menu = {};
   try {
     menu = await win.webContents.executeJavaScript(
@@ -400,14 +400,14 @@ async function runUiTest(win) {
   app.exit(errors.length === 0 ? 0 : 1);
 }
 
-// ── Protocolo pilot:// → start page + páginas internas (history/downloads) ────
+// ── Pilot:// protocol → start page + internal pages (history/downloads) ────
 //
-// Cada página pilot:// roda num <webview> ISOLADO, sem window.pilot. Para falar com
-// o main ela usa fetch() de mesma origem (supportFetchAPI liga isso). Três tipos:
-//   • assets estáticos  → pilot://<host>/<arquivo>      (lê do dir do host)
-//   • rotas de DADOS     → GET  pilot://<host>/_data/... (retornam JSON dos stores)
-//   • rotas de AÇÃO      → POST pilot://<host>/_action/.. (executam no main, {ok})
-// _data/_action NÃO tocam disco — são despachadas antes da resolução de arquivo.
+// Each pilot:// page runs in an isolated <webview>, without window.pilot. To talk to
+// main it uses fetch() of same origin (supportFetchAPI enables this). Three types:
+//   • static assets  → pilot://<host>/<file>      (read from host's dir)
+//   • DATA routes    → GET  pilot://<host>/_data/... (return JSON from stores)
+//   • ACTION routes  → POST pilot://<host>/_action/.. (execute in main, {ok})
+// _data/_action don't touch disk — dispatched before file resolution.
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 function jsonResponse(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: JSON_HEADERS });
@@ -421,7 +421,7 @@ function registerPilotProtocol() {
     const pathname = url.pathname || '/';
     const method = (request.method || 'GET').toUpperCase();
 
-    // ── rotas dinâmicas (data/action) — antes de qualquer leitura de arquivo ──
+    // ── dynamic routes (data/action) — before any file read ──
     if (pathname.startsWith('/_data/') || pathname.startsWith('/_action/')) {
       try {
         return await handlePilotApi(host, pathname, method, request);
@@ -430,13 +430,13 @@ function registerPilotProtocol() {
       }
     }
 
-    // ── assets estáticos ──
+    // ── static assets ──
     const entry = PILOT_HOSTS[host];
     if (!entry) return new Response('Not Found', { status: 404 });
     const rel = pathname === '/' || pathname === '' ? entry.index : pathname.replace(/^\/+/, '');
     const baseDir = entry.dir;
     const resolved = path.normalize(path.join(baseDir, rel));
-    // trava de path traversal: precisa ficar DENTRO do dir do host (separador incluso)
+    // path traversal lock: must stay INSIDE host's dir (separator inclusive)
     if (resolved !== baseDir && !resolved.startsWith(baseDir + path.sep)) {
       return new Response('Forbidden', { status: 403 });
     }
@@ -448,32 +448,32 @@ function registerPilotProtocol() {
     }
   };
 
-  // Sessão DEFAULT — cobre navegações pilot:// app-wide.
+  // DEFAULT session — covers app-wide pilot:// navigations.
   protocol.handle('pilot', pilotProtocolHandler);
 
-  // Sessão da PARTITION dos webviews — CRÍTICO p/ o feed. O handle global serve a
-  // sessão default, mas o fetch() de DENTRO do webview roda na partition
-  // persist:logica-pilot; sem o handler registrado NAQUELA sessão, o fetch dava erro
-  // de rede opaco (era o bug do feed "não consegui carregar"). Provado no harness
-  // exp-registry: pilot://_data/news → FEED-OK numa WebContentsView dessa sessão.
+  // Session of webviews PARTITION — CRITICAL for feed. Global handle serves default
+  // session, but fetch() from INSIDE webview runs in partition persist:logica-pilot;
+  // without handler registered in THAT session, fetch gave opaque network error
+  // (was the feed bug "couldn't load"). Proven in harness exp-registry: pilot://_data/news
+  // → FEED-OK in a WebContentsView of that partition.
   try {
     session.fromPartition('persist:logica-pilot').protocol.handle('pilot', pilotProtocolHandler);
   } catch (e) {
-    console.warn('[pilot://] registro na sessão da partition falhou:', e && e.message);
+    console.warn('[pilot://] registration in partition session failed:', e && e.message);
   }
 }
 
-/** Lê o corpo JSON de um request POST (tolerante a corpo vazio/ inválido). */
+/** Read JSON body from POST request (tolerant of empty/invalid body). */
 async function readJsonBody(request) {
   try { return (await request.json()) || {}; } catch { return {}; }
 }
 
 /**
- * Despacha rotas pilot://<host>/_data/... (GET) e /_action/... (POST).
- * Retorna sempre uma Response JSON. Erros viram {ok:false}.
+ * Dispatch pilot://<host>/_data/... (GET) and /_action/... (POST) routes.
+ * Always return JSON Response. Errors become {ok:false}.
  */
-// Carrega o catálogo de traduções (renderer/i18n/locales.js) no processo principal
-// p/ servir à home isolada (pilot://). Cache; lê via VM com shim de window.
+// Load translation catalog (renderer/i18n/locales.js) in main process
+// to serve to isolated home (pilot://). Cached; read via VM with window shim.
 let _uiLocales = null;
 function loadLocales() {
   if (_uiLocales) return _uiLocales;
@@ -483,14 +483,14 @@ function loadLocales() {
     require('vm').runInNewContext(src, sandbox, { timeout: 1000 });
     _uiLocales = sandbox.window.LP_LOCALES || {};
   } catch (e) {
-    console.warn('[i18n] loadLocales falhou:', e && e.message);
+    console.warn('[i18n] loadLocales failed:', e && e.message);
     _uiLocales = {};
   }
   return _uiLocales;
 }
 
-// Resolve o idioma da UI: 'auto'/vazio → idioma do SO (app.getLocale), com fallback
-// inteligente (en-US→en, pt-PT→pt-BR) p/ um locale suportado.
+// Resolve UI language: 'auto'/empty → OS language (app.getLocale), with smart fallback
+// (en-US→en, pt-PT→pt-BR) to a supported locale.
 function resolveUiLang(setting) {
   const codes = Object.keys(loadLocales());
   let want = setting;
@@ -510,15 +510,15 @@ async function handlePilotApi(host, pathname, method, request) {
       const limit = clampInt(q.get('limit'), 8, 1, 24);
       return jsonResponse({ ok: true, items: historyStore.topSites(limit) });
     }
-    // Feed de notícias PT-BR/Brasil — o main busca RSS server-side (sem CORS) e
-    // devolve JSON. ?cat=top|brasil|mundo|tecnologia|esportes|economia|entretenimento
+    // Brazil news feed — main fetches RSS server-side (no CORS) and
+    // returns JSON. ?cat=top|brasil|mundo|tecnologia|esportes|economia|entretenimento
     if (method === 'GET' && pathname === '/_data/news') {
       const cat = (q.get('cat') || 'top').toLowerCase();
       const data = await newsFeed.getNews(cat);
-      return jsonResponse(data, data.ok ? 200 : 200); // 200 sempre; o front trata ok:false
+      return jsonResponse(data, data.ok ? 200 : 200); // 200 always; front handles ok:false
     }
-    // i18n da home: a home é isolada (pilot://) e não compartilha window com a casca,
-    // então o main entrega o idioma resolvido + o mapa de strings (lê locales.js).
+    // Home i18n: home is isolated (pilot://) and doesn't share window with shell,
+    // so main delivers resolved language + string map (read locales.js).
     if (method === 'GET' && pathname === '/_data/i18n') {
       const lang = resolveUiLang(settingsStore.get().language);
       return jsonResponse({ ok: true, lang, map: loadLocales()[lang] || {} });
@@ -530,10 +530,10 @@ async function handlePilotApi(host, pathname, method, request) {
     if (method === 'GET' && pathname === '/_data/list') {
       const search = (q.get('q') || '').trim();
       const limit = clampInt(q.get('limit'), 300, 1, 2000);
-      // query() já filtra por prefixo/substring e ordena por relevância; sem termo
-      // usamos recent() (ordenado por última visita) — melhor p/ agrupar por dia.
+      // query() already filters by prefix/substring and sorts by relevance; without term
+      // we use recent() (sorted by last visit) — better for grouping by day.
       const items = search ? historyStore.query(search, limit) : historyStore.recent(limit);
-      // normaliza para { url, title, ts, visitCount }
+      // normalize to { url, title, ts, visitCount }
       const norm = items.map((e) => ({
         url: e.url,
         title: e.title || '',
@@ -567,10 +567,10 @@ async function handlePilotApi(host, pathname, method, request) {
     }
   }
 
-  return jsonResponse({ ok: false, error: 'rota desconhecida' }, 404);
+  return jsonResponse({ ok: false, error: 'unknown route' }, 404);
 }
 
-/** Inteiro seguro a partir de query string, com default e clamp [min,max]. */
+/** Safe integer from query string, with default and clamp [min,max]. */
 function clampInt(raw, def, min, max) {
   const n = parseInt(raw, 10);
   if (!Number.isFinite(n)) return def;
@@ -587,7 +587,7 @@ function contentType(p) {
   return 'application/octet-stream';
 }
 
-// ── Broadcast a todas as janelas ──────────────────────────────────────────────
+// ── Broadcast to all windows ──────────────────────────────────────────────
 function broadcast(channel, payload) {
   for (const w of windows) {
     if (!w.isDestroyed()) {
@@ -596,10 +596,10 @@ function broadcast(channel, payload) {
   }
 }
 
-// ── IPC: rodar o agente autônomo na aba ativa (INTACTO) ───────────────────────
+// ── IPC: run autonomous agent on active tab (INTACT) ───────────────────────
 ipcMain.handle('pilot:run', async (evt, { guestId, objective, vision, model }) => {
   const guest = webContents.fromId(guestId);
-  if (!guest) return { success: false, result: 'Aba não encontrada para pilotar.' };
+  if (!guest) return { success: false, result: 'Tab not found to pilot.' };
 
   const page = new ElectronPage(guest);
   const token = { cancelled: false };
@@ -632,7 +632,7 @@ ipcMain.handle('pilot:stop', (evt, { guestId }) => {
   return true;
 });
 
-// ── Controle de janela (multi-janela via fromWebContents) ─────────────────────
+// ── Window control (multi-window via fromWebContents) ─────────────────────
 ipcMain.handle('win:control', (evt, action) => {
   const win = BrowserWindow.fromWebContents(evt.sender);
   if (!win) return false;
@@ -646,10 +646,10 @@ ipcMain.handle('open:external', (evt, url) => {
   try { shell.openExternal(url); } catch {}
 });
 
-// ── Menu ⋮ — janela flutuante CUSTOM (identidade Logica), sempre acima do <webview> ──
-// O <webview> é camada nativa do Chromium e pinta sobre qualquer HTML do renderer.
-// Uma BrowserWindow sem moldura é uma janela do SO → fica acima, e a estilizamos
-// como parte do app (cantos arredondados, tema, sombra).
+// ── Menu ⋮ — floating CUSTOM window (Logica identity), always above <webview> ──
+// The <webview> is native browser engine layer and paints over any HTML in renderer.
+// A frameless BrowserWindow is an OS window → stays on top, and we style it
+// as part of the app (rounded corners, theme, shadow).
 let menuPopupWin = null;
 let menuPopupParent = null;
 
@@ -704,10 +704,10 @@ ipcMain.on('appmenu:close', () => {
   if (menuPopupWin && !menuPopupWin.isDestroyed()) menuPopupWin.close();
 });
 
-// ── Painel flutuante (Configurações / Sobre) — mesma camada do SO do menu ⋮ ──
-// Mesmo motivo do menu: o <webview> é camada nativa e pinta acima de qualquer
-// HTML do renderer. Uma BrowserWindow sem moldura (janela do SO) fica acima.
-// Janela MAIOR, centralizada na parent. Reusa os handlers IPC já existentes
+// ── Floating panel (Settings / About) — same OS layer as menu ⋮ ──
+// Same reason as menu: <webview> is native layer and paints over any renderer HTML.
+// A frameless BrowserWindow (OS window) stays on top.
+// LARGER window, centered in parent. Reuses existing IPC handlers
 // (theme:set, settings:get/set, search:getEngines, data:clear, app:info).
 let panelWin = null;
 
@@ -750,25 +750,25 @@ ipcMain.on('panel:close', () => {
   if (panelWin && !panelWin.isDestroyed()) panelWin.close();
 });
 
-// ── Prompt de permissão — janela flutuante (camada do SO, acima do <webview>) ──
-// O <webview> pinta acima de qualquer HTML do renderer, então o prompt antigo
-// (#perm-prompt) ficava atrás dele. Aqui o pedido vira uma BrowserWindow sem
-// moldura no topo-centro da mãe. A FILA/TIMEOUT de fato vivem no webview-manager
-// (pendingPermissions); aqui só serializamos a UI: um prompt por vez. O clique
-// responde via webviewManager.respondPermission(requestId, granted).
-// guestId da aba ATIVA por janela (alimentado por 'tabs:activated'). A janela de
-// localizar flutuante usa isto p/ saber em qual <webview> rodar findInPage.
+// ── Permission prompt — floating window (OS layer, above <webview>) ──
+// The <webview> paints over any renderer HTML, so the old prompt
+// (#perm-prompt) was behind it. Here the request becomes a frameless BrowserWindow
+// in top-center of parent. QUEUE/TIMEOUT actually live in webview-manager
+// (pendingPermissions); here we just serialize the UI: one prompt at a time. Click
+// responds via webviewManager.respondPermission(requestId, granted).
+// guestId of ACTIVE tab per window (fed by 'tabs:activated'). Find bar
+// floating window uses this to know which <webview> to run findInPage on.
 const activeGuestByWindow = new WeakMap(); // BrowserWindow -> guestId
 
 let permPopupWin = null;
 let permPopupParent = null;
-const permUiQueue = []; // pedidos aguardando a UI ({ requestId, origin, permission, dark })
-let permCurrent = null; // pedido atualmente exibido
+const permUiQueue = []; // requests waiting for UI ({ requestId, origin, permission, dark })
+let permCurrent = null; // request currently displayed
 
 ipcMain.handle('perm:open', (evt, req = {}) => {
   const parent = BrowserWindow.fromWebContents(evt.sender);
   if (!parent || !req || !req.requestId) return false;
-  // guarda a janela-mãe (a última que pediu); o prompt posiciona-se sobre ela.
+  // store parent window (last one to ask); prompt positions over it.
   permPopupParent = parent;
   permUiQueue.push(req);
   if (!permPopupWin) showNextPermPrompt();
@@ -785,7 +785,7 @@ function showNextPermPrompt() {
   const width = Math.min(440, Math.max(320, cb.width - 48));
   const height = 56;
   const x = Math.round(cb.x + (cb.width - width) / 2);
-  const y = Math.round(cb.y + 86); // logo abaixo da toolbar
+  const y = Math.round(cb.y + 86); // just below toolbar
 
   permPopupWin = new BrowserWindow({
     width, height, x, y,
@@ -808,12 +808,12 @@ function showNextPermPrompt() {
       permPopupWin.show();
     } catch {}
   });
-  // perder o foco = negar (paridade com Esc/closeAll do prompt antigo).
+  // lose focus = deny (parity with Esc/closeAll of old prompt).
   permPopupWin.on('blur', () => { resolvePermPrompt(false); });
   permPopupWin.on('closed', () => { permPopupWin = null; });
 }
 
-// Responde o pedido atual no webview-manager, fecha a janela e mostra o próximo.
+// Respond to current request in webview-manager, close window, show next.
 function resolvePermPrompt(granted) {
   const req = permCurrent;
   permCurrent = null;
@@ -826,16 +826,16 @@ function resolvePermPrompt(granted) {
 
 ipcMain.on('perm:respond', (_evt, granted) => resolvePermPrompt(!!granted));
 
-// ── Localizar na página — janela flutuante (camada do SO, acima do <webview>) ──
-// O findbar HTML ficava atrás do <webview>. Aqui vira uma BrowserWindow sem
-// moldura no topo-direito da mãe. A busca roda na <webview> ATIVA (wc.findInPage);
-// o resultado (found-in-page) é encaminhado de volta à janela flutuante.
+// ── Find on page — floating window (OS layer, above <webview>) ──
+// HTML findbar was behind <webview>. Here it becomes a frameless BrowserWindow
+// in top-right of parent. Search runs on ACTIVE <webview> (wc.findInPage);
+// result (found-in-page) is forwarded back to floating window.
 let findPopupWin = null;
 let findPopupParent = null;
-let findActiveWc = null;       // webContents da aba ativa onde rodamos a busca
-let findFoundHandler = null;   // listener de found-in-page atual (p/ remover ao fechar)
+let findActiveWc = null;       // webContents of active tab where we run search
+let findFoundHandler = null;   // current found-in-page listener (to remove on close)
 
-// Resolve o webContents da aba ativa da janela-mãe do find.
+// Resolve webContents of active tab of find popup's parent window.
 function findResolveActiveWc() {
   if (!findPopupParent || findPopupParent.isDestroyed()) return null;
   const guestId = activeGuestByWindow.get(findPopupParent);
@@ -848,7 +848,7 @@ ipcMain.handle('find:open', (evt, { dark, query } = {}) => {
   if (!parent) return false;
   findPopupParent = parent;
 
-  // já aberta: só refoca (⌘F repetido). Atualiza a query se veio uma seleção.
+  // already open: just refocus (Cmd+F repeated). Update query if a selection came.
   if (findPopupWin && !findPopupWin.isDestroyed()) {
     try { findPopupWin.webContents.send('find:data', { dark, query }); findPopupWin.focus(); } catch {}
     return true;
@@ -857,7 +857,7 @@ ipcMain.handle('find:open', (evt, { dark, query } = {}) => {
   const cb = parent.getContentBounds();
   const width = 340;
   const height = 46;
-  const x = Math.round(cb.x + cb.width - width - 16); // topo-direito
+  const x = Math.round(cb.x + cb.width - width - 16); // top-right
   const y = Math.round(cb.y + 80);
 
   findPopupWin = new BrowserWindow({
@@ -882,7 +882,7 @@ ipcMain.handle('find:open', (evt, { dark, query } = {}) => {
   findPopupWin.on('closed', () => {
     findStopAndUnbind();
     findPopupWin = null;
-    // avisa a janela-mãe que a barra fechou (reseta o estado do findbar.js).
+    // notify parent window that find bar closed (reset findbar.js state).
     if (findPopupParent && !findPopupParent.isDestroyed()) {
       try { findPopupParent.webContents.send('find:closed'); } catch {}
     }
@@ -890,7 +890,7 @@ ipcMain.handle('find:open', (evt, { dark, query } = {}) => {
   return true;
 });
 
-// liga (uma vez) o listener de found-in-page no wc ativo p/ encaminhar o contador.
+// attach (once) found-in-page listener on active wc to forward counter.
 function findBindActiveWc(wc) {
   if (findActiveWc === wc) return;
   findUnbindFound();
@@ -916,7 +916,7 @@ function findUnbindFound() {
   findFoundHandler = null;
 }
 
-// para a busca na aba ativa e desliga o listener.
+// stop search on active tab and detach listener.
 function findStopAndUnbind() {
   if (findActiveWc && !findActiveWc.isDestroyed()) {
     try { findActiveWc.stopFindInPage('clearSelection'); } catch {}
@@ -943,23 +943,22 @@ ipcMain.on('find:close', () => {
   else findStopAndUnbind();
 });
 
-// ── Sugestões da omnibox — janela flutuante NÃO-FOCÁVEL (camada do SO) ──────────
-// O dropdown HTML (#omni-suggest) ficava ATRÁS do <webview> (camada nativa do
-// Chromium). Aqui a lista vira uma BrowserWindow sem moldura, posicionada LOGO
-// ABAIXO da .address-wrap (rect enviado pelo renderer) e mostrada com
-// `showInactive()` — assim a BARRA DE ENDEREÇO da janela-mãe MANTÉM O FOCO e
-// continua tratando digitação/setas/Enter/Esc. A flutuante só EXIBE a lista e o
-// índice selecionado, e aceita CLIQUE (janela inativa ainda recebe cliques).
-// Uma por janela-mãe. NÃO fechamos no blur (a flutuante nunca tem foco); o
-// fechamento é explícito via 'omni:close' do renderer (Esc/blur/navegar/vazia).
+// ── Omnibox suggestions — non-focusable floating window (OS layer) ──────────
+// HTML dropdown (#omni-suggest) was BEHIND <webview> (native browser engine layer).
+// Here list becomes a frameless BrowserWindow, positioned RIGHT BELOW .address-wrap
+// (rect sent by renderer) and shown with `showInactive()` — so the ADDRESS BAR of
+// parent window KEEPS FOCUS and keeps handling typing/arrows/Enter/Esc. Floating
+// window just DISPLAYS the list and selected index, accepts CLICK (inactive window
+// still receives clicks). One per parent window. DON'T close on blur (floating never
+// gets focus); closing is explicit via 'omni:close' from renderer (Esc/blur/navigate/empty).
 let omniPopupWin = null;
 let omniPopupParent = null;
 
-// Calcula a geometria (x/y/largura/altura) a partir do rect da .address-wrap.
+// Calculate geometry (x/y/width/height) from .address-wrap rect.
 function omniBounds(parent, rect, count) {
   const cb = parent.getContentBounds();
   const width = Math.round(rect && rect.width ? rect.width : Math.min(560, cb.width - 32));
-  // altura: 6px de padding (3 em cima + 3 embaixo) + ~37px por item, com teto.
+  // height: 6px padding (3 top + 3 bottom) + ~37px per item, with ceiling.
   const n = Math.max(1, Math.min(8, count || 1));
   let height = 12 + n * 37;
   height = Math.max(46, Math.min(height, cb.height - 100));
@@ -976,13 +975,13 @@ ipcMain.handle('omni:open', (evt, { items, selected, rect, dark } = {}) => {
   omniPopupParent = parent;
 
   const count = Array.isArray(items) ? items.length : 0;
-  if (!count) { // nada a mostrar → garante fechada
+  if (!count) { // nothing to show → ensure closed
     if (omniPopupWin && !omniPopupWin.isDestroyed()) omniPopupWin.close();
     return false;
   }
   const b = omniBounds(parent, rect, count);
 
-  // já aberta: reusa a MESMA janela (reposiciona + reenvia dados, não recria).
+  // already open: reuse SAME window (reposition + resend data, don't recreate).
   if (omniPopupWin && !omniPopupWin.isDestroyed()) {
     try {
       omniPopupWin.setBounds(b);
@@ -996,7 +995,7 @@ ipcMain.handle('omni:open', (evt, { items, selected, rect, dark } = {}) => {
     x: b.x, y: b.y, width: b.width, height: b.height,
     frame: false, resizable: false, movable: false, minimizable: false,
     maximizable: false, fullscreenable: false, skipTaskbar: true,
-    focusable: false,        // NÃO-FOCÁVEL: nunca rouba o foco da barra de endereço
+    focusable: false,        // NON-FOCUSABLE: never steal focus from address bar
     transparent: true, hasShadow: true, roundedCorners: true, parent, show: false,
     backgroundColor: '#00000000',
     webPreferences: {
@@ -1009,17 +1008,17 @@ ipcMain.handle('omni:open', (evt, { items, selected, rect, dark } = {}) => {
   omniPopupWin.webContents.once('did-finish-load', () => {
     try {
       omniPopupWin.webContents.send('omni:data', { items, selected, dark });
-      // showInactive: mostra SEM focar → a barra de endereço da mãe mantém o foco.
+      // showInactive: show WITHOUT focus → parent's address bar keeps focus.
       omniPopupWin.showInactive();
     } catch {}
   });
-  // NÃO fechar no blur (a flutuante nunca tem foco). Só limpa a ref ao destruir.
+  // DON'T close on blur (floating never has focus). Just clear ref on destroy.
   omniPopupWin.on('closed', () => { omniPopupWin = null; });
   return true;
 });
 
-// Atualiza items/selected sem recriar a janela (cada tecla/seta). Reposiciona se
-// veio rect (a largura/posição da address-wrap pode mudar com resize da janela).
+// Update items/selected without recreating window (each key/arrow). Reposition if
+// rect came (address-wrap width/position may change on window resize).
 ipcMain.handle('omni:update', (evt, { items, selected, rect, dark } = {}) => {
   const parent = BrowserWindow.fromWebContents(evt.sender);
   const count = Array.isArray(items) ? items.length : 0;
@@ -1039,7 +1038,7 @@ ipcMain.on('omni:close', () => {
   if (omniPopupWin && !omniPopupWin.isDestroyed()) omniPopupWin.close();
 });
 
-// clique numa sugestão na flutuante → main → renderer principal (índice escolhido).
+// click on suggestion in floating window → main → renderer (chosen index).
 ipcMain.on('omni:choose', (_evt, index) => {
   if (omniPopupWin && !omniPopupWin.isDestroyed()) omniPopupWin.close();
   if (omniPopupParent && !omniPopupParent.isDestroyed() && Number.isInteger(index)) {
@@ -1047,7 +1046,7 @@ ipcMain.on('omni:choose', (_evt, index) => {
   }
 });
 
-// ── Tema ──────────────────────────────────────────────────────────────────────
+// ── Theme ──────────────────────────────────────────────────────────────────────
 ipcMain.handle('theme:get', () => {
   return {
     source: settingsStore.get().theme, // 'light' | 'dark' | 'system'
@@ -1060,24 +1059,24 @@ ipcMain.handle('theme:set', (evt, { mode } = {}) => {
   const next = valid ? mode : 'system';
   nativeTheme.themeSource = next; // 'system' | 'light' | 'dark'
   settingsStore.set({ theme: next });
-  // atualiza o backgroundColor de todas as janelas (mata flash no resize)
+  // update backgroundColor of all windows (kill flash on resize)
   const dark = applyWindowBackground();
   return { shouldUseDarkColors: dark };
 });
 
-// ── Settings ────────────────────────────────────────────────────────────────
+// ── Settings ────────────────────────────────────────────────────────────
 ipcMain.handle('settings:get', () => settingsStore.get());
 ipcMain.handle('settings:set', (evt, patch) => {
   const next = settingsStore.set(patch || {});
-  // se a chave da IA mudou, reconfigura o cérebro do Pilot na hora.
+  // if AI key changed, reconfigure Pilot's brain on the fly.
   if (patch && 'aiApiKey' in patch) { try { llm.configure({ apiKey: next.aiApiKey }); } catch {} }
-  // propaga pra TODAS as janelas-casca (o painel flutuante de Settings é janela
-  // separada; sem isto a casca aberta ficava com searchEngine/homepage/tema stale).
+  // propagate to ALL shell windows (Settings floating panel is separate window;
+  // without this open shell would have stale searchEngine/homepage/theme).
   try { broadcast('settings:changed', settingsStore.get()); } catch {}
   return next;
 });
 
-// ── About / versões ───────────────────────────────────────────────────────────
+// ── About / versions ───────────────────────────────────────────────────────────
 ipcMain.handle('app:info', () => ({
   appVersion: pkg.version,
   chrome: process.versions.chrome,
@@ -1086,12 +1085,12 @@ ipcMain.handle('app:info', () => ({
   node: process.versions.node,
 }));
 
-// ── Nova janela / anônima ─────────────────────────────────────────────────────
+// ── New window / incognito ─────────────────────────────────────────────────────
 ipcMain.handle('win:new', (evt, opts = {}) => {
   createWindow({ incognito: !!(opts && opts.incognito) });
 });
 
-// ── Limpar dados de navegação ─────────────────────────────────────────────────
+// ── Clear navigation data ─────────────────────────────────────────────────
 ipcMain.handle('data:clear', async () => {
   try {
     const ses = session.fromPartition(PARTITION);
@@ -1104,7 +1103,7 @@ ipcMain.handle('data:clear', async () => {
   }
 });
 
-// ── Histórico ───────────────────────────────────────────────────────────────
+// ── History ───────────────────────────────────────────────────────────────
 ipcMain.on('history:add', (evt, entry) => {
   try { historyStore.add(entry || {}); } catch {}
 });
@@ -1118,18 +1117,18 @@ ipcMain.handle('history:topSites', (evt, { limit } = {}) => historyStore.topSite
 ipcMain.handle('history:recent', (evt, { limit } = {}) => historyStore.recent(limit));
 ipcMain.handle('history:clear', (evt, { range } = {}) => historyStore.clear(range || 'all'));
 
-// ── Downloads ───────────────────────────────────────────────────────────────
+// ── Downloads ───────────────────────────────────────────────────────────
 ipcMain.handle('downloads:list', () => downloadsStore.list());
 ipcMain.handle('downloads:action', (evt, { id, action } = {}) =>
   downloadsStore.action(id, action),
 );
 
-// ── Permissões ─────────────────────────────────────────────────────────────
+// ── Permissions ─────────────────────────────────────────────────────────
 ipcMain.handle('permission:respond', (evt, { requestId, granted } = {}) =>
   webviewManager.respondPermission(requestId, !!granted),
 );
 
-// ── Imprimir a aba ativa ─────────────────────────────────────────────────────
+// ── Print active tab ─────────────────────────────────────────────────────
 ipcMain.handle('print:start', (evt, { guestId } = {}) => {
   const wc = webContents.fromId(guestId);
   if (!wc) return false;
@@ -1141,10 +1140,10 @@ ipcMain.handle('print:start', (evt, { guestId } = {}) => {
   }
 });
 
-// ── DevTools da página — guarda de CDP exclusivo ─────────────────────────────
+// ── Page DevTools — exclusive CDP guard ─────────────────────────────
 ipcMain.handle('devtools:open', (evt, { guestId } = {}) => {
-  // O Pilot usa CDP (debugger) nessa webContents. DevTools é um 2º consumidor
-  // de CDP → conflito. Recusar enquanto houver run ativo.
+  // Pilot uses CDP (debugger) on this webContents. DevTools is a 2nd CDP consumer
+  // → conflict. Reject if run is active.
   if (runs.has(guestId)) return { ok: false, reason: 'pilot-running' };
   const wc = webContents.fromId(guestId);
   if (!wc) return { ok: false, reason: 'not-found' };
@@ -1156,13 +1155,13 @@ ipcMain.handle('devtools:open', (evt, { guestId } = {}) => {
   }
 });
 
-// ── Catálogo de motores de busca ──────────────────────────────────────────────
+// ── Catalog of search engines ──────────────────────────────────────────────
 ipcMain.handle('search:getEngines', () => searchEngines.getEngines());
 
-// ── Favoritos (bookmarks) ─────────────────────────────────────────────────────
-// Convenção de IPC: o renderer manda OBJETO; o preload é pass-through; aqui
-// desestruturamos o objeto. Toda mutação é broadcast p/ as janelas reagirem
-// (barra + estrela sincronizadas em multi-janela).
+// ── Bookmarks (bookmarks) ─────────────────────────────────────────────────
+// IPC convention: renderer sends OBJECT; preload is pass-through; here
+// we destructure object. All mutations are broadcast to windows so they react
+// (bar + star synced in multi-window).
 ipcMain.handle('bookmarks:list', () => bookmarksStore.list());
 ipcMain.handle('bookmarks:isBookmarked', (evt, { url } = {}) =>
   bookmarksStore.isBookmarked(url),
@@ -1188,7 +1187,7 @@ ipcMain.handle('bookmarks:update', (evt, { url, patch } = {}) => {
   return rec;
 });
 
-// ── Find-in-page via IPC (de reserva; barra vive no renderer no fluxo padrão) ─
+// ── Find-in-page via IPC (backup; bar lives in renderer in standard flow) ─
 ipcMain.handle('find:start', (evt, { guestId, text, options } = {}) => {
   const wc = webContents.fromId(guestId);
   if (!wc || !text) return { requestId: null };
@@ -1205,25 +1204,25 @@ ipcMain.handle('find:stop', (evt, { guestId, action } = {}) => {
   try { wc.stopFindInPage(action === 'keepSelection' ? 'keepSelection' : 'clearSelection'); } catch {}
 });
 
-// ── Extensões do Chrome ───────────────────────────────────────────────────────
-// O renderer é dono das <webview>. Quando uma extensão chama chrome.tabs.create,
-// o extensions-manager pede ao renderer criar a aba (canal 'ext:createTab') e o
-// renderer responde aqui com o guestId da nova webview.
+// ── Chrome extensions ───────────────────────────────────────────────────────
+// Renderer owns <webview>. When extension calls chrome.tabs.create,
+// extensions-manager asks renderer to create tab (channel 'ext:createTab') and
+// renderer responds here with new webview's guestId.
 ipcMain.on('ext:tabCreated', (evt, { reqId, guestId } = {}) => {
   try { extensionsManager.resolveTabCreate(reqId, guestId); } catch {}
 });
 
-// Aba ativa mudou no renderer → avisa o sistema de extensões (selectTab) e
-// registra o guestId da aba ativa POR JANELA (a barra de localizar flutuante
-// precisa saber em qual <webview> rodar findInPage). O mapa é declarado lá em
-// cima (activeGuestByWindow), antes dos handlers da janela de localizar.
+// Active tab changed in renderer → notify extensions system (selectTab) and
+// register active tab's guestId PER WINDOW (floating find bar needs to know
+// which <webview> to run findInPage on). Map declared above (activeGuestByWindow),
+// before find bar window handlers.
 ipcMain.on('tabs:activated', (evt, { guestId } = {}) => {
   try { extensionsManager.activateTab(guestId); } catch {}
   const win = BrowserWindow.fromWebContents(evt.sender);
   if (win && guestId != null) activeGuestByWindow.set(win, guestId);
 });
 
-// Botão "Extensões" / item do menu → abre a Chrome Web Store numa aba.
+// "Extensions" button / menu item → open Chrome Web Store in a tab.
 ipcMain.handle('ext:open', (evt, { target } = {}) => {
   const url = target === 'manage'
     ? 'https://chromewebstore.google.com/category/extensions'
@@ -1235,14 +1234,14 @@ ipcMain.handle('ext:open', (evt, { target } = {}) => {
   return { ok: true, url };
 });
 
-// Instalar extensão DESEMPACOTADA de uma pasta (caminho que SEMPRE funciona,
-// sem depender da Web Store detectar o browser). Abre seletor de pasta.
+// Install unpacked extension from folder (path that ALWAYS works,
+// independent of Web Store detecting the browser). Opens folder picker.
 ipcMain.handle('ext:install-unpacked', async (evt) => {
   const win = BrowserWindow.fromWebContents(evt.sender);
   let res;
   try {
     res = await dialog.showOpenDialog(win || undefined, {
-      title: 'Escolha a pasta da extensão (com manifest.json)',
+      title: 'Choose extension folder (with manifest.json)',
       properties: ['openDirectory'],
     });
   } catch (e) {
@@ -1251,11 +1250,11 @@ ipcMain.handle('ext:install-unpacked', async (evt) => {
   if (res.canceled || !res.filePaths || !res.filePaths[0]) return { ok: false, canceled: true };
   try {
     const ext = await extensionsManager.loadUnpacked(res.filePaths[0]);
-    const name = (ext && ext.name) || 'extensão';
+    const name = (ext && ext.name) || 'extension';
     try {
       dialog.showMessageBox(win || undefined, {
         type: 'info', title: 'Logica Pilot',
-        message: 'Extensão instalada', detail: name + ' está ativa. O ícone aparece na barra de extensões.',
+        message: 'Extension installed', detail: name + ' is active. Icon appears in extension bar.',
       });
     } catch {}
     return { ok: true, name, id: ext && ext.id };
@@ -1263,7 +1262,7 @@ ipcMain.handle('ext:install-unpacked', async (evt) => {
     try {
       dialog.showMessageBox(win || undefined, {
         type: 'error', title: 'Logica Pilot',
-        message: 'Não consegui instalar a extensão', detail: e.message,
+        message: 'Could not install extension', detail: e.message,
       });
     } catch {}
     return { ok: false, error: e.message };
@@ -1272,19 +1271,19 @@ ipcMain.handle('ext:install-unpacked', async (evt) => {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
-  // Migração 1x do userData: o app rodava sem nome ("Electron"), então os dados
-  // (extensões instaladas, histórico, favoritos, settings, cookies da partition)
-  // ficaram em .../Electron. Agora que o nome é "Logica Pilot", o userData aponta
-  // p/ .../Logica Pilot — renomeamos o dir antigo p/ não perder nada. rename é
-  // instantâneo (mesmo volume) e roda ANTES de qualquer store/extensão ler o path.
+  // 1x userData migration: app ran without name ("Electron"), so data
+  // (installed extensions, history, bookmarks, settings, cookies of partition)
+  // ended up in .../Electron. Now that name is "Logica Pilot", userData points to
+  // .../Logica Pilot — rename old dir to not lose anything. rename is instant
+  // (same volume) and runs BEFORE any store/extension reads path.
   try {
     const appData = app.getPath('appData');
     const newUD = path.join(appData, 'Logica Pilot');
     const oldUD = path.join(appData, 'Electron');
-    // marcador que prova ser NOSSO dado (não de outro app Electron sem nome): a
-    // partition persist:logica-pilot. O Electron já cria o dir novo (cache/cookies)
-    // antes daqui, então copiamos SÓ os nossos itens que ainda não existem no novo
-    // (rename falharia: dir novo já existe).
+    // marker proving it's OUR data (not another unnamed Electron app): the
+    // partition persist:logica-pilot. Electron already creates new dir (cache/cookies)
+    // before here, so we copy only our items that don't yet exist in new
+    // (rename would fail: new dir already exists).
     const ours = fs.existsSync(path.join(oldUD, 'Partitions', 'logica-pilot'));
     if (oldUD !== newUD && ours) {
       const items = ['settings.json', 'history.json', 'bookmarks.json', 'downloads.json',
@@ -1297,26 +1296,26 @@ app.whenReady().then(() => {
           if (fs.existsSync(src) && !fs.existsSync(dst)) { fs.cpSync(src, dst, { recursive: true }); migrated++; }
         } catch {}
       }
-      if (migrated) console.log('[name] userData migrado (Electron → Logica Pilot):', migrated, 'itens');
+      if (migrated) console.log('[name] userData migrated (Electron → Logica Pilot):', migrated, 'items');
     }
   } catch (e) {
-    console.warn('[name] migração de userData falhou (segue com dir novo):', e && e.message);
+    console.warn('[name] userData migration failed (continuing with new dir):', e && e.message);
   }
 
-  // Stores (precisam de app.getPath, só disponível após whenReady).
+  // Stores (need app.getPath, only available after whenReady).
   const userData = app.getPath('userData');
   settingsStore.init(userData);
-  // injeta a chave da IA (das settings do usuário) no cérebro do Pilot — habilita
-  // o Pilot out-of-the-box (Anthropic direto) quando não há LogicaProxy local.
+  // inject AI key (from user settings) into Pilot's brain — enables
+  // Pilot out-of-the-box (Anthropic direct) when no local LogicaProxy.
   try { llm.configure({ apiKey: settingsStore.get().aiApiKey }); } catch {}
   historyStore.init(userData);
   downloadsStore.init(userData, shell);
   bookmarksStore.init(userData);
 
-  // Aplica o tema persistido ao nativeTheme.
+  // Apply persisted theme to nativeTheme.
   try { nativeTheme.themeSource = settingsStore.get().theme; } catch {}
 
-  // Liga as dependências do webview-manager (envio ao host, downloads, busca).
+  // Wire up webview-manager dependencies (send to host, downloads, search).
   webviewManager.configure({
     sendToHost: (win, channel, payload) => {
       if (win && !win.isDestroyed()) {
@@ -1327,12 +1326,12 @@ app.whenReady().then(() => {
     registerDownload: (item, emit) => downloadsStore.register(item, emit),
     getSearchEngine: () => settingsStore.get().searchEngine,
     buildSearchUrl: (id, q) => searchEngines.buildSearchUrl(id, q),
-    // sistema de extensões: o webview-manager chama addTab(wc, win) na equip()
+    // extensions system: webview-manager calls addTab(wc, win) in equip()
     extensions: extensionsManager,
   });
 
-  // Extensões do Chrome: configura a ponte (renderer é dono das webviews) e
-  // inicializa na session da partition. Best-effort — falha não derruba o browser.
+  // Chrome extensions: configure bridge (renderer owns webviews) and
+  // initialize in partition session. Best-effort — failure doesn't kill browser.
   extensionsManager.configure({
     sendToWindow: (win, channel, payload) => {
       if (win && !win.isDestroyed()) {
@@ -1344,19 +1343,19 @@ app.whenReady().then(() => {
   });
   extensionsManager
     .init(session.fromPartition(PARTITION), userData)
-    .then((ex) => { if (ex) console.log('[ext] sistema de extensões pronto'); })
-    .catch((e) => console.error('[ext] init falhou:', e && e.message));
+    .then((ex) => { if (ex) console.log('[ext] extensions system ready'); })
+    .catch((e) => console.error('[ext] init failed:', e && e.message));
 
   registerPilotProtocol();
-  registerViewIpc(); // Fase 1: handlers view:* (inertes com a flag OFF)
+  registerViewIpc(); // Phase 1: view:* handlers (inert with flag OFF)
 
-  // Application Menu nativo (accelerators funcionam sobre o <webview>).
+  // Native Application Menu (accelerators work over <webview>).
   Menu.setApplicationMenu(buildMenu(getActiveWindow));
 
-  // nativeTheme muda (OS trocou o esquema) → reavalia 'system' no renderer.
+  // nativeTheme changed (OS switched scheme) → reevaluate 'system' in renderer.
   nativeTheme.on('updated', () => {
-    // só reaplica a cor nativa se a escolha efetiva for 'system' (em light/dark
-    // fixo o SO não afeta a cor — reaplicar regrediria uma janela em modo fixo).
+    // only reapply native color if effective choice is 'system' (on light/dark
+    // fixed the OS doesn't affect color — reapplying would regress a fixed-mode window).
     let choice = 'system';
     try { choice = settingsStore.get().theme; } catch {}
     if (choice === 'system') applyWindowBackground();
@@ -1366,9 +1365,9 @@ app.whenReady().then(() => {
   createWindow();
 });
 
-/** Janela ativa para o menu (foco) ou a primeira disponível.
- *  Se uma janela FLUTUANTE (menu ⋮ / painel) estiver focada, roteia pra mãe —
- *  senão as ações do menu bar nativo cairiam numa janela sem listener. */
+/** Active window for menu (focused) or first available.
+ *  If a FLOATING window (menu ⋮ / panel) is focused, route to parent —
+ *  else native menu bar actions would land in a window with no listener. */
 function getActiveWindow() {
   const f = BrowserWindow.getFocusedWindow();
   if (f && windows.has(f)) return f;
@@ -1387,7 +1386,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// Persiste os stores ao sair (flush imediato dos debounces).
+// Persist stores on exit (immediate flush of debounces).
 app.on('before-quit', () => {
   try { settingsStore.flush(); } catch {}
   try { historyStore.flush(); } catch {}

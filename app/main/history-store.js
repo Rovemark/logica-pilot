@@ -1,24 +1,24 @@
 'use strict';
 
 /**
- * history-store.js — Histórico de navegação persistente (paridade Chrome).
+ * history-store.js — Persistent navigation history (Chrome parity).
  *
- * Armazena entradas { url, title, visitCount, lastVisit, firstVisit } em
- * userData/history.json com escrita debounced. Dedup por URL (mesma URL ++visitCount).
- * Alimenta as sugestões do omnibox (query) e o most-visited do newtab (topSites).
+ * Stores entries { url, title, visitCount, lastVisit, firstVisit } in
+ * userData/history.json with debounced writes. Dedup by URL (same URL increments visitCount).
+ * Feeds omnibox suggestions (query) and new tab most-visited (topSites).
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const MAX_ENTRIES = 5000; // teto duro para o arquivo não crescer sem limite
+const MAX_ENTRIES = 5000; // hard cap so file doesn't grow unbounded
 
 let filePath = null;
 /** @type {Map<string, {url,title,visitCount,lastVisit,firstVisit}>} */
 let byUrl = new Map();
 let writeTimer = null;
 
-/** Inicializa apontando para o diretório de dados do usuário. */
+/** Initializes pointing to user data directory. */
 function init(userDataDir) {
   filePath = path.join(userDataDir, 'history.json');
   load();
@@ -49,7 +49,7 @@ function normalize(e) {
   };
 }
 
-/** URLs internas/vazias não entram no histórico. */
+/** Internal/empty URLs do not enter history. */
 function isTrackable(url) {
   if (!url || typeof url !== 'string') return false;
   if (url.startsWith('pilot://')) return false;
@@ -59,7 +59,7 @@ function isTrackable(url) {
   return /^https?:\/\//i.test(url) || /^file:\/\//i.test(url);
 }
 
-/** Registra/atualiza uma visita (dedup por url, ++visitCount, atualiza título). */
+/** Registers/updates a visit (dedup by url, increment visitCount, update title). */
 function add({ url, title, ts } = {}) {
   if (!isTrackable(url)) return;
   const now = Number.isFinite(ts) ? ts : Date.now();
@@ -82,9 +82,9 @@ function add({ url, title, ts } = {}) {
 }
 
 /**
- * Atualiza SÓ o título de uma URL já existente (sem ++visitCount).
- * Usado pelo page-title-updated, que chega depois do did-navigate (que cria a
- * entrada com o título antigo da aba). Evita inflar visitCount em ~2x por navegação.
+ * Updates ONLY the title of an already-existing URL (without incrementing visitCount).
+ * Used by page-title-updated, which arrives after did-navigate (which creates the
+ * entry with the old tab title). Prevents inflating visitCount by ~2x per navigation.
  */
 function updateTitle(url, title) {
   if (!isTrackable(url) || !title) return;
@@ -95,7 +95,7 @@ function updateTitle(url, title) {
   }
 }
 
-/** Se passar do teto, remove as entradas menos relevantes (menor visitCount + mais antigas). */
+/** If exceeding the cap, removes least relevant entries (lower visitCount and older). */
 function enforceCap() {
   if (byUrl.size <= MAX_ENTRIES) return;
   const all = [...byUrl.values()].sort((a, b) => {
@@ -106,14 +106,14 @@ function enforceCap() {
   for (let i = 0; i < toRemove; i++) byUrl.delete(all[i].url);
 }
 
-/** Pontuação de relevância: frequência + recência (decai com o tempo). */
+/** Relevance score: frequency + recency (decays over time). */
 function score(e) {
   const ageDays = (Date.now() - e.lastVisit) / 86400000;
-  const recency = 1 / (1 + ageDays); // 1.0 hoje → cai com o tempo
+  const recency = 1 / (1 + ageDays); // 1.0 today → decays over time
   return e.visitCount * 2 + recency * 5;
 }
 
-/** Sugestões por prefixo (match em url ou título), ordenadas por relevância. */
+/** Suggestions by prefix (match on url or title), ordered by relevance. */
 function query(prefix, limit = 8) {
   const p = String(prefix || '').toLowerCase().trim();
   let entries = [...byUrl.values()];
@@ -131,7 +131,7 @@ function query(prefix, limit = 8) {
   }));
 }
 
-/** Sites mais visitados (para o grid do newtab). */
+/** Most visited sites (for new tab grid). */
 function topSites(limit = 8) {
   const entries = [...byUrl.values()].sort((a, b) => {
     if (b.visitCount !== a.visitCount) return b.visitCount - a.visitCount;
@@ -144,7 +144,7 @@ function topSites(limit = 8) {
   }));
 }
 
-/** Itens mais recentes (para a tela de histórico). */
+/** Most recent items (for history screen). */
 function recent(limit = 100) {
   const entries = [...byUrl.values()].sort((a, b) => b.lastVisit - a.lastVisit);
   return entries.slice(0, Math.max(0, limit)).map((e) => ({
@@ -155,7 +155,7 @@ function recent(limit = 100) {
   }));
 }
 
-/** Remove uma única entrada pela URL. Retorna true se removeu. */
+/** Removes a single entry by URL. Returns true if removed. */
 function remove(url) {
   if (!url || typeof url !== 'string') return false;
   const had = byUrl.delete(url);
@@ -163,7 +163,7 @@ function remove(url) {
   return had;
 }
 
-/** Limpa por intervalo: 'hour' | 'day' | 'all'. Retorna true. */
+/** Clears by range: 'hour' | 'day' | 'all'. Returns true. */
 function clear(range = 'all') {
   if (range === 'all') {
     byUrl.clear();
@@ -189,7 +189,7 @@ function flush() {
   try {
     fs.writeFileSync(filePath, JSON.stringify([...byUrl.values()]), 'utf8');
   } catch {
-    // disco indisponível — histórico fica só em memória
+    // disk unavailable — history remains in memory only
   }
 }
 

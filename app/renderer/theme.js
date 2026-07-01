@@ -1,9 +1,9 @@
 'use strict';
 
-/* theme.js — sistema de tema da casca.
-   Carregado cedo no <head> p/ aplicar o tema antes do paint principal.
-   Escolha do usuário: 'light' | 'dark' | 'system' (persistida em localStorage 'lp.theme').
-   Quando 'system', resolve via matchMedia e re-resolve no evento nativo do main. */
+/* theme.js — shell theme system.
+   Loaded early in <head> to apply the theme before main paint.
+   User choice: 'light' | 'dark' | 'system' (persisted in localStorage 'lp.theme').
+   When 'system', resolves via matchMedia and re-resolves on native main event. */
 
 (function () {
   const STORAGE_KEY = 'lp.theme';
@@ -11,7 +11,7 @@
   const root = document.documentElement;
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
 
-  // override vindo do main (nativeTheme) — tem prioridade sobre matchMedia quando definido
+  // override from main (nativeTheme) — takes priority over matchMedia when set
   let nativeDark = null;
 
   function load() {
@@ -25,7 +25,7 @@
     return nativeDark ? 'dark' : 'light';
   }
 
-  // grava só o atributo resolvido (light|dark) no <html>
+  // writes only the resolved attribute (light|dark) to <html>
   function paint(choice) {
     const resolved = choice === 'system' ? resolveSystem() : choice;
     root.setAttribute('data-theme', resolved);
@@ -33,9 +33,9 @@
   }
 
   let current = load();
-  paint(current); // aplica imediatamente (antes do resto do app)
+  paint(current); // applies immediately (before the rest of the app)
 
-  // transição suave temporária (não bloqueia o boot)
+  // temporary smooth transition (does not block boot)
   function withTransition(fn) {
     root.classList.add('theme-transition');
     fn();
@@ -44,11 +44,11 @@
 
   function persist(choice) {
     try { localStorage.setItem(STORAGE_KEY, choice); } catch {}
-    // informa o main p/ ajustar nativeTheme.themeSource + backgroundColor da janela
+    // informs main to adjust nativeTheme.themeSource + window backgroundColor
     try { window.pilot && window.pilot.setTheme && window.pilot.setTheme({ mode: choice }); } catch {}
   }
 
-  // aplica uma escolha do usuário (com transição + persistência)
+  // applies a user choice (with transition + persistence)
   function apply(choice) {
     if (!VALID.includes(choice)) choice = 'system';
     current = choice;
@@ -58,7 +58,7 @@
     return choice;
   }
 
-  // cicla light -> dark -> system
+  // cycles light -> dark -> system
   function cycle() {
     const next = current === 'light' ? 'dark' : current === 'dark' ? 'system' : 'light';
     return apply(next);
@@ -67,31 +67,31 @@
   function getChoice() { return current; }
   function getResolved() { return current === 'system' ? resolveSystem() : current; }
 
-  // observadores (renderer.js atualiza o ícone do botão)
+  // observers (renderer.js updates the button icon)
   const listeners = new Set();
   function onChange(cb) { if (typeof cb === 'function') listeners.add(cb); }
   function notify() { for (const cb of listeners) { try { cb(current, getResolved()); } catch {} } }
 
-  // re-resolve 'system' quando o SO troca (fallback do matchMedia)
+  // re-resolve 'system' when the OS changes (fallback from matchMedia)
   mq.addEventListener && mq.addEventListener('change', () => {
     if (current === 'system') { paint('system'); notify(); }
   });
 
-  // expõe API global p/ renderer.js
+  // exposes global API for renderer.js
   window.LPTheme = { load, apply, cycle, getChoice, getResolved, onChange };
 
-  // liga o evento nativo do main quando o preload estiver pronto.
+  // binds the native main event when preload is ready
   function bindNative() {
     if (!window.pilot) return;
-    // estado inicial do nativeTheme (resolve 'system' sem depender só do matchMedia)
+    // initial nativeTheme state (resolves 'system' without relying solely on matchMedia)
     if (window.pilot.getTheme) {
       Promise.resolve()
         .then(() => window.pilot.getTheme())
         .then((st) => {
           if (!st) return;
           if (typeof st.shouldUseDarkColors === 'boolean') nativeDark = st.shouldUseDarkColors;
-          // reconcilia: a escolha persistida no main (settings.json) prevalece sobre o
-          // cache do localStorage, eliminando divergência permanente em 'light'/'dark'.
+          // reconciles: the persisted choice in main (settings.json) takes precedence over
+          // localStorage cache, eliminating permanent divergence in 'light'/'dark'.
           if (VALID.includes(st.source) && st.source !== current) {
             current = st.source;
             try { localStorage.setItem(STORAGE_KEY, current); } catch {}
@@ -106,7 +106,7 @@
         if (current === 'system') { paint('system'); notify(); }
       });
     }
-    // garante que o main saiba da escolha persistida no boot (backgroundColor)
+    // ensures main knows of the persisted choice on boot (backgroundColor)
     try { window.pilot.setTheme && window.pilot.setTheme({ mode: current }); } catch {}
   }
 

@@ -1,27 +1,27 @@
 'use strict';
 
 /**
- * extensions-manager.js — Suporte a EXTENSÕES DO CHROME (Manifest V2/V3) no Logica Pilot.
+ * extensions-manager.js — Support for CHROME EXTENSIONS (Manifest V2/V3) in Logica Pilot.
  *
- * Usa as libs do Samuel Maddock (open-source, licença GPL-3.0 — válida porque o
- * produto é GPL-3.0-or-later):
- *   - electron-chrome-extensions@4.1.x  → APIs chrome.* + <browser-action-list>
- *   - electron-chrome-web-store@0.6.x   → instalar/atualizar extensões da Web Store
+ * Uses the libraries by Samuel Maddock (open-source, GPL-3.0 license — valid because the
+ * product is GPL-3.0-or-later):
+ *   - electron-chrome-extensions@4.1.x  → chrome.* APIs + <browser-action-list>
+ *   - electron-chrome-web-store@0.6.x   → install/update extensions from the Web Store
  *
- * Versões FIXADAS para Electron 33 (Chromium 130): a partir de
- * electron-chrome-extensions@4.2.0 / web-store@0.7.0 as libs passaram a exigir
- * Electron 35+ (protocolo webui://, contextBridge.executeInMainWorld). As 4.1.x /
- * 0.6.x são as últimas da era Electron 25–33.
+ * Versions PINNED for Electron 33 (Chromium 130): starting from
+ * electron-chrome-extensions@4.2.0 / web-store@0.7.0 the libraries began requiring
+ * Electron 35+ (webui:// protocol, contextBridge.executeInMainWorld). The 4.1.x /
+ * 0.6.x versions are the last from the Electron 25–33 era.
  *
- * ── DESAFIO ARQUITETURAL ───────────────────────────────────────────────────────
- * No Logica Pilot, o RENDERER é dono das <webview> (não o main). A lib espera que o
- * main crie abas e devolva [webContents, BrowserWindow] de forma síncrona-promise.
- * Ponte: createTab() pede ao renderer (canal 'ext:createTab'), o renderer cria a
- * <webview>, e no did-attach-webview o renderer reporta o guestId (canal
- * 'ext:tabCreated'); aqui resolvemos a promise com webContents.fromId(guestId).
+ * ── ARCHITECTURAL CHALLENGE ────────────────────────────────────────────────────
+ * In Logica Pilot, the RENDERER owns the <webview> instances (not the main process). The library expects
+ * the main process to create tabs and return [webContents, BrowserWindow] synchronously via promise.
+ * Bridge: createTab() asks the renderer (channel 'ext:createTab'), the renderer creates the
+ * <webview>, and on did-attach-webview the renderer reports the guestId (channel
+ * 'ext:tabCreated'); here we resolve the promise with webContents.fromId(guestId).
  *
- * selectTab()/removeTab() também voltam ao renderer (canais 'ext:selectTab' /
- * 'ext:removeTab') para ele ativar/fechar a aba correspondente ao guestId.
+ * selectTab()/removeTab() also route back to the renderer (channels 'ext:selectTab' /
+ * 'ext:removeTab') to activate/close the tab corresponding to the guestId.
  */
 
 const path = require('path');
@@ -34,28 +34,28 @@ try {
   ({ ElectronChromeExtensions } = require('electron-chrome-extensions'));
   webStore = require('electron-chrome-web-store');
 } catch (e) {
-  // Falha de require não pode derrubar o browser: extensões viram no-op.
-  console.error('[ext] libs de extensão indisponíveis:', e && e.message);
+  // Require failure cannot crash the browser: extensions become no-op.
+  console.error('[ext] extension libraries unavailable:', e && e.message);
 }
 
-// Instância única (uma session/partition no app inteiro).
+// Singleton instance (one session/partition across the entire app).
 let extensions = null;
-// Diretório onde as extensões instaladas/descompactadas vivem.
+// Directory where installed/unpacked extensions live.
 let extensionsPath = null;
 let _session = null;
 
-// Ponte de criação de aba: requestId → { resolve, reject, timer }.
+// Tab creation bridge: requestId → { resolve, reject, timer }.
 const pendingTabCreates = new Map();
 let tabCreateSeq = 0;
 const TAB_CREATE_TIMEOUT_MS = 15000;
 
-// Dependências injetadas pelo main.
+// Dependencies injected by main.
 let deps = {
-  // (channel, payload) → envia ao renderer de UMA janela (o host)
+  // (channel, payload) → sends to renderer of ONE window (the host)
   sendToWindow: null,
-  // () → BrowserWindow ativa/foco (fallback p/ createWindow / janela alvo)
+  // () → active/focused BrowserWindow (fallback for createWindow / target window)
   getActiveWindow: null,
-  // (opts) → cria nova BrowserWindow e devolve a instância (p/ chrome.windows.create)
+  // (opts) → creates new BrowserWindow and returns the instance (for chrome.windows.create)
   createBrowserWindow: null,
 };
 
@@ -63,16 +63,16 @@ function configure(options = {}) {
   deps = { ...deps, ...options };
 }
 
-/** A integração está ativa? (libs presentes + instância criada) */
+/** Is the integration active? (libraries present + instance created) */
 function isEnabled() {
   return !!extensions;
 }
 
 /**
- * Inicializa o sistema de extensões para uma session (a partition do app).
- * Deve ser chamado UMA vez no app.whenReady, depois de configure().
+ * Initializes the extensions system for a session (the app's partition).
+ * Must be called ONCE on app.whenReady, after configure().
  *
- * @param {Electron.Session} ses  session da partition 'persist:logica-pilot'
+ * @param {Electron.Session} ses  session of the 'persist:logica-pilot' partition
  * @param {string} userDataDir    app.getPath('userData')
  */
 async function init(ses, userDataDir) {
@@ -83,17 +83,17 @@ async function init(ses, userDataDir) {
   extensionsPath = path.join(userDataDir, 'extensions');
   try { fs.mkdirSync(extensionsPath, { recursive: true }); } catch {}
 
-  // O preload da lib (browser-action) precisa ser injetado em TODA página que
-  // hospede <browser-action-list> — ou seja, o renderer da casca. Registramos
-  // como preload de session p/ garantir que a UI (index.html) o receba.
-  // (O webview-manager também injeta no app/preload.js do renderer principal.)
+  // The library's preload (browser-action) must be injected into EVERY page that
+  // hosts <browser-action-list> — i.e., the shell renderer. We register
+  // it as a session preload to ensure the UI (index.html) receives it.
+  // (The webview-manager also injects it in app/preload.js of the main renderer.)
   const browserActionPreload = require.resolve(
     'electron-chrome-extensions/dist/browser-action',
   );
 
   try {
     extensions = new ElectronChromeExtensions({
-      license: 'GPL-3.0', // produto é GPL-3.0-or-later → licença válida e grátis
+      license: 'GPL-3.0', // product is GPL-3.0-or-later → valid free license
       session: ses,
       createTab,
       selectTab,
@@ -102,20 +102,20 @@ async function init(ses, userDataDir) {
       removeWindow,
     });
   } catch (e) {
-    console.error('[ext] falha ao instanciar ElectronChromeExtensions:', e && e.message);
+    console.error('[ext] failed to instantiate ElectronChromeExtensions:', e && e.message);
     extensions = null;
     return null;
   }
 
-  // Habilita a Chrome Web Store na mesma session + carrega extensões já instaladas
-  // e desempacotadas. loadExtensions=true (default) carrega o que está em
-  // extensionsPath; allowUnpackedExtensions=true permite as desempacotadas.
+  // Enables the Web Store in the same session + loads already-installed
+  // and unpacked extensions. loadExtensions=true (default) loads what is in
+  // extensionsPath; allowUnpackedExtensions=true permits unpacked ones.
   if (webStore && typeof webStore.installChromeWebStore === 'function') {
-    // FIX do preload da loja: a lib usa `opts.modulePath || __dirname`, e o __dirname
-    // dela (dist/cjs/browser) faz o web-store-preload.js virar
-    // .../dist/cjs/browser/dist/renderer/web-store-preload.js (ENOENT) → a integração
-    // que INTERCEPTA o "Add to Chrome" (o que o Edge faz nativo) não carregava.
-    // Passamos a RAIZ do pacote p/ montar o path certo.
+    // FIX for store preload: the library uses `opts.modulePath || __dirname`, and its __dirname
+    // (dist/cjs/browser) makes web-store-preload.js become
+    // .../dist/cjs/browser/dist/renderer/web-store-preload.js (ENOENT) → the integration
+    // that INTERCEPTS "Add to Chrome" (what Edge does natively) did not load.
+    // We pass the PACKAGE ROOT to construct the correct path.
     let webStoreModulePath;
     try {
       const entry = require.resolve('electron-chrome-web-store');
@@ -133,26 +133,26 @@ async function init(ses, userDataDir) {
         ...(webStoreModulePath ? { modulePath: webStoreModulePath } : {}),
       });
     } catch (e) {
-      console.error('[ext] installChromeWebStore falhou:', e && e.message);
+      console.error('[ext] installChromeWebStore failed:', e && e.message);
     }
   }
 
-  // Carrega ainda extensões desempacotadas soltas em <extensionsPath>/<id>/manifest.json
-  // que não tenham vindo da store (ex.: dev arrastou uma pasta). Best-effort.
+  // Also loads unpacked extensions loose in <extensionsPath>/<id>/manifest.json
+  // that did not come from the store (e.g., developer dragged a folder). Best-effort.
   await loadUnpackedExtensions(ses).catch(() => {});
 
   return extensions;
 }
 
-/** Caminho exposto p/ o preload (browser-action) — usado pelo webview-manager. */
+/** Path exposed to preload (browser-action) — used by webview-manager. */
 function getBrowserActionPreloadPath() {
   try { return require.resolve('electron-chrome-extensions/dist/browser-action'); }
   catch { return null; }
 }
 
 /**
- * Carrega extensões desempacotadas de <extensionsPath>/* que tenham manifest.json,
- * ignorando as que a session já carregou (a web-store já carrega as "instaladas").
+ * Loads unpacked extensions from <extensionsPath>/* that have manifest.json,
+ * ignoring those already loaded by the session (the web-store already loads the "installed" ones).
  */
 async function loadUnpackedExtensions(ses) {
   if (!extensionsPath || !ses) return;
@@ -164,13 +164,13 @@ async function loadUnpackedExtensions(ses) {
   for (const ent of entries) {
     if (!ent.isDirectory()) continue;
     const dir = path.join(extensionsPath, ent.name);
-    // Web-store guarda como <id>/<version>/; uma desempacotada solta tem manifest direto.
+    // Web-store stores as <id>/<version>/; a loose unpacked one has manifest directly.
     const manifest = path.join(dir, 'manifest.json');
     let target = null;
     if (fs.existsSync(manifest)) {
       target = dir;
     } else {
-      // tenta <dir>/<versão>/manifest.json (layout da store)
+      // tries <dir>/<version>/manifest.json (store layout)
       try {
         const subs = await fs.promises.readdir(dir, { withFileTypes: true });
         const sub = subs.find((s) => s.isDirectory() && fs.existsSync(path.join(dir, s.name, 'manifest.json')));
@@ -180,32 +180,32 @@ async function loadUnpackedExtensions(ses) {
     if (!target) continue;
     try {
       const ext = await ses.loadExtension(target, { allowFileAccess: true });
-      if (ext) console.log('[ext] carregada:', ext.name, ext.version);
+      if (ext) console.log('[ext] loaded:', ext.name, ext.version);
     } catch (e) {
-      // já carregada (id duplicado) ou inválida — ignora silenciosamente
+      // already loaded (duplicate id) or invalid — ignore silently
       if (e && !/already/i.test(String(e.message))) {
-        console.error('[ext] loadExtension falhou', ent.name, e.message);
+        console.error('[ext] loadExtension failed', ent.name, e.message);
       }
     }
   }
 }
 
-// ── Ponte de tabs (renderer é dono das <webview>) ──────────────────────────────
+// ── Tab bridge (renderer owns the <webview> instances) ──────────────────────
 
 /**
- * chrome.tabs.create → pede ao renderer criar uma aba e resolve com
- * [webContents, BrowserWindow] quando ele reportar o guestId.
+ * chrome.tabs.create → asks renderer to create a tab and resolves with
+ * [webContents, BrowserWindow] when it reports the guestId.
  */
 function createTab(details = {}) {
   return new Promise((resolve, reject) => {
     const win = pickWindow(details.windowId);
-    if (!win) { reject(new Error('Nenhuma janela para criar a aba.')); return; }
+    if (!win) { reject(new Error('No window available to create tab.')); return; }
 
     const reqId = `extreq_${Date.now()}_${++tabCreateSeq}`;
     const timer = setTimeout(() => {
       if (pendingTabCreates.has(reqId)) {
         pendingTabCreates.delete(reqId);
-        reject(new Error('Timeout ao criar aba para extensão.'));
+        reject(new Error('Timeout creating extension tab.'));
       }
     }, TAB_CREATE_TIMEOUT_MS);
     if (timer.unref) timer.unref();
@@ -220,69 +220,69 @@ function createTab(details = {}) {
   });
 }
 
-/** Chamado pelo handler IPC quando o renderer reporta o guestId da aba criada. */
+/** Called by IPC handler when renderer reports the guestId of the created tab. */
 function resolveTabCreate(reqId, guestId) {
   const slot = pendingTabCreates.get(reqId);
   if (!slot) return false;
   pendingTabCreates.delete(reqId);
   try { clearTimeout(slot.timer); } catch {}
   const wc = guestId != null ? webContents.fromId(guestId) : null;
-  if (!wc) { slot.reject(new Error('webContents da aba não encontrado.')); return true; }
+  if (!wc) { slot.reject(new Error('Tab webContents not found.')); return true; }
   slot.resolve([wc, slot.win]);
   return true;
 }
 
-/** chrome.tabs.update(active) → ativa a aba do guestId no renderer. */
+/** chrome.tabs.update(active) → activates the tab of guestId in renderer. */
 function selectTab(tab, browserWindow) {
   const win = browserWindow || pickWindow();
   if (!tab || !win) return;
   send(win, 'ext:selectTab', { guestId: tab.id });
 }
 
-/** chrome.tabs.remove → fecha a aba do guestId no renderer. */
+/** chrome.tabs.remove → closes the tab of guestId in renderer. */
 function removeTab(tab, browserWindow) {
   const win = browserWindow || pickWindow();
   if (!tab || !win) return;
   send(win, 'ext:removeTab', { guestId: tab.id });
 }
 
-/** chrome.windows.create → cria uma BrowserWindow nova e devolve. */
+/** chrome.windows.create → creates a new BrowserWindow and returns it. */
 function createWindow(details = {}) {
   if (deps.createBrowserWindow) {
     const win = deps.createBrowserWindow({ url: details.url });
     return Promise.resolve(win);
   }
-  return Promise.reject(new Error('createWindow não configurado.'));
+  return Promise.reject(new Error('createWindow not configured.'));
 }
 
-/** chrome.windows.remove → fecha a janela. */
+/** chrome.windows.remove → closes the window. */
 function removeWindow(browserWindow) {
   try { if (browserWindow && !browserWindow.isDestroyed()) browserWindow.close(); } catch {}
 }
 
-// ── Registro de abas (chamado pelo webview-manager.equip) ──────────────────────
+// ── Tab registration (called by webview-manager.equip) ────────────────────
 
-/** Registra o webContents de uma <webview> como uma aba para o sistema de extensões. */
+/** Registers a <webview> webContents as a tab for the extensions system. */
 function addTab(wc, win) {
   if (!extensions || !wc) return;
   const browserWin = win || pickWindow();
   if (!browserWin) return;
   try { extensions.addTab(wc, browserWin); } catch (e) {
-    console.error('[ext] addTab falhou:', e && e.message);
+    console.error('[ext] addTab failed:', e && e.message);
   }
 }
 
-/** Notifica que a aba ativa mudou (renderer → 'tabs:activated'). */
+/** Notifies that the active tab changed (renderer → 'tabs:activated'). */
 function activateTab(guestId) {
   if (!extensions || guestId == null) return;
   const wc = webContents.fromId(guestId);
   if (!wc) return;
   try { extensions.selectTab(wc); } catch (e) {
-    console.error('[ext] selectTab falhou:', e && e.message);
+    console.error('[ext] selectTab failed:', e && e.message);
   }
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function pickWindow(windowId) {
   if (typeof windowId === 'number') {
@@ -304,26 +304,26 @@ function send(win, channel, payload) {
   }
 }
 
-/** Instala uma extensão da Chrome Web Store pelo ID (programático — NÃO depende
- *  da loja reconhecer o browser; bypassa o bloqueio "não é Chrome"). */
+/** Installs an extension from the Web Store by ID (programmatic — does NOT depend
+ *  on the store recognizing the browser; bypasses the "not Chrome" block). */
 async function installById(id, opts = {}) {
   if (!webStore || typeof webStore.installExtension !== 'function') {
-    throw new Error('Suporte à Chrome Web Store indisponível.');
+    throw new Error('Web Store support unavailable.');
   }
-  if (!/^[a-p]{32}$/.test(String(id || ''))) throw new Error('ID de extensão inválido.');
+  if (!/^[a-p]{32}$/.test(String(id || ''))) throw new Error('Invalid extension ID.');
   return webStore.installExtension(id, { session: _session || undefined, ...opts });
 }
 
-// Handler IPC: instala da Web Store pelo ID (registrado aqui p/ não tocar no main.js).
+// IPC handler: installs from the Web Store by ID (registered here to avoid touching main.js).
 ipcMain.handle('ext:install-id', async (evt, { id } = {}) => {
   const win = BrowserWindow.fromWebContents(evt.sender);
   try {
     const ext = await installById(id);
-    const name = (ext && (ext.name || (ext.manifest && ext.manifest.name))) || 'extensão';
+    const name = (ext && (ext.name || (ext.manifest && ext.manifest.name))) || 'extension';
     try {
       dialog.showMessageBox(win || undefined, {
         type: 'info', title: 'Logica Pilot',
-        message: 'Extensão instalada', detail: name + ' está ativa. O ícone aparece na barra de extensões.',
+        message: 'Extension installed', detail: name + ' is now active. The icon appears in the extension bar.',
       });
     } catch {}
     return { ok: true, name };
@@ -331,18 +331,18 @@ ipcMain.handle('ext:install-id', async (evt, { id } = {}) => {
     try {
       dialog.showMessageBox(win || undefined, {
         type: 'error', title: 'Logica Pilot',
-        message: 'Não consegui instalar da Web Store', detail: e.message,
+        message: 'Could not install from the Web Store', detail: e.message,
       });
     } catch {}
     return { ok: false, error: e.message };
   }
 });
 
-/** Carrega uma extensão desempacotada de uma pasta escolhida pelo usuário. */
+/** Loads an unpacked extension from a folder chosen by the user. */
 async function loadUnpacked(dir) {
-  if (!_session) throw new Error('Sistema de extensões não inicializado.');
+  if (!_session) throw new Error('Extensions system not initialized.');
   if (!fs.existsSync(path.join(dir, 'manifest.json'))) {
-    throw new Error('A pasta não contém manifest.json — não é uma extensão desempacotada.');
+    throw new Error('Folder does not contain manifest.json — not an unpacked extension.');
   }
   return _session.loadExtension(dir, { allowFileAccess: true });
 }

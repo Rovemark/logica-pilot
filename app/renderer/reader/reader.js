@@ -1,24 +1,24 @@
 'use strict';
 
 /*
-  reader.js — Modo leitor (window.Reader).
+  reader.js — Reader mode (window.Reader).
 
-  Aciona via dispatchMenu('reader'). Injeta na aba ativa (<webview>) o
-  @mozilla/readability (vendorizado em readability.js, exposto como STRING em
-  window.__READABILITY_SOURCE__ por readability-source.js), extrai o artigo com
-  `new Readability(doc.cloneNode(true)).parse()` e substitui a página por uma
-  versão limpa (tipografia confortável, claro/escuro via prefers-color-scheme).
+  Triggered via dispatchMenu('reader'). Injects into the active tab (<webview>) the
+  @mozilla/readability (vendorized in readability.js, exposed as STRING in
+  window.__READABILITY_SOURCE__ by readability-source.js), extracts the article with
+  `new Readability(doc.cloneNode(true)).parse()` and replaces the page with a
+  clean version (comfortable typography, light/dark via prefers-color-scheme).
 
-  Toggle: acionar de novo na MESMA página restaura o conteúdo original. O estado
-  "ligado" vive DENTRO da página (window.__lpReaderActive), pois um reload/nav
-  descarta tudo — então o toggle reflete o estado real do documento.
+  Toggle: triggering again on the SAME page restores the original content. The
+  "active" state lives INSIDE the page (window.__lpReaderActive), since a reload/nav
+  discards everything — so the toggle reflects the true state of the document.
 
-  Tudo roda no contexto da página via wv.executeJavaScript (sem preload lá).
+  Everything runs in the page context via wv.executeJavaScript (no preload there).
 */
 
 (function () {
-  // Estilo do modo leitor (injetado dentro da página). Tokens próprios — a página
-  // do site NÃO tem o tema do host. Claro/escuro acompanham o SO.
+  // Reader mode styling (injected into the page). Own tokens — the website page
+  // does NOT have the host theme. Light/dark follow the OS.
   var READER_CSS = [
     ':root{color-scheme:light dark;}',
     'html,body{margin:0!important;padding:0!important;background:#faf9f7!important;}',
@@ -56,56 +56,56 @@
   ].join('');
 
   /**
-   * Script executado DENTRO da página. Recebe (css):
-   *  - se o leitor já está ativo → restaura o documento salvo e retorna {restored:true}
-   *  - senão → extrai o artigo com Readability e troca o <body> pela versão limpa
-   * Retorna um objeto serializável (sem DOM) para o host saber o resultado.
+   * Script executed INSIDE the page. Receives (css):
+   *  - if the reader is already active → restores the saved document and returns {restored:true}
+   *  - otherwise → extracts the article with Readability and replaces the <body> with the clean version
+   * Returns a serializable object (no DOM) so the host knows the result.
    *
-   * O FONTE do Readability é CONCATENADO no corpo do script (não via eval) — assim
-   * a `function Readability` é declarada no mesmo escopo executado e fica visível
-   * para a IIFE abaixo. Evita `eval`, contornando CSP de site (sem 'unsafe-eval').
-   * `wv.executeJavaScript` roda num mundo que não sofre a CSP do site p/ o próprio
-   * script, então a declaração de função passa mesmo em páginas com CSP estrita.
+   * The Readability SOURCE is CONCATENATED into the script body (not via eval) — so
+   * the `function Readability` is declared in the same executed scope and is visible
+   * to the IIFE below. Avoids `eval`, bypassing site CSP (no 'unsafe-eval').
+   * `wv.executeJavaScript` runs in a world that doesn't suffer the site's CSP for its own
+   * script, so the function declaration passes even on pages with strict CSP.
    */
   function buildPageScript(readabilitySrc, css) {
-    // [readabilitySrc] declara `function Readability(){…}` + `Readability.prototype`.
-    // Em seguida, a IIFE (recebendo só o css) usa `Readability` diretamente.
+    // [readabilitySrc] declares `function Readability(){…}` + `Readability.prototype`.
+    // Next, the IIFE (receiving only css) uses `Readability` directly.
     return readabilitySrc + '\n;(' + function (RD_CSS) {
       try {
-        // ── toggle OFF: pede reload ao host ─────────────────────────
-        // Restaurar via innerHTML "congela" a página (scripts não re-executam).
-        // Em vez disso, sinalizamos {restored:true} e o HOST dá wv.reload() —
-        // recarrega a página original limpa, com os scripts rodando de novo.
+        // ── toggle OFF: requests reload to host ─────────────────────────
+        // Restoring via innerHTML "freezes" the page (scripts don't re-execute).
+        // Instead, we signal {restored:true} and the HOST calls wv.reload() —
+        // reloads the original page clean, with scripts running again.
         if (window.__lpReaderActive) {
           window.__lpReaderActive = false;
           return { ok: true, restored: true };
         }
 
-        // ── toggle ON: extrai e troca ───────────────────────────────
+        // ── toggle ON: extract and replace ───────────────────────────────
         var savedTitle = document.title;
 
         if (typeof Readability !== 'function') {
-          return { ok: false, error: 'extrator indisponível' };
+          return { ok: false, error: 'extractor unavailable' };
         }
 
-        // Clona o documento (Readability MUTA o doc que recebe).
+        // Clone the document (Readability MUTATES the doc it receives).
         var docClone = document.cloneNode(true);
         var article = null;
         try {
           article = new Readability(docClone).parse();
         } catch (e) {
-          return { ok: false, error: 'falha na extração: ' + (e && e.message) };
+          return { ok: false, error: 'extraction failed: ' + (e && e.message) };
         }
         if (!article || !article.content) {
-          return { ok: false, error: 'sem-artigo' };
+          return { ok: false, error: 'no-article' };
         }
 
-        // Marca ativo SÓ depois de uma extração bem-sucedida. NÃO guardamos o HTML
-        // original: ao sair, o host recarrega a página (reload), evitando o
-        // "congelamento" de scripts que o innerHTML restaurado causava.
+        // Mark active ONLY after successful extraction. We do NOT save the original HTML:
+        // when exiting, the host reloads the page (reload), avoiding the
+        // "freezing" of scripts that restored innerHTML would cause.
         window.__lpReaderActive = true;
 
-        // Monta a página de leitura limpa.
+        // Build the clean reading page.
         function esc(s) {
           return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
@@ -121,10 +121,10 @@
 
         var titleText = article.title || savedTitle || document.location.hostname;
 
-        // Reescreve o documento inteiro (head limpo + body com o artigo).
-        // article.content é HTML sanitizado pelo Readability.
+        // Rewrites the entire document (clean head + body with article).
+        // article.content is HTML sanitized by Readability.
         var head = document.head;
-        // remove estilos/links do site p/ não brigar com o leitor
+        // remove site styles/links to avoid conflicting with the reader
         try {
           var olds = document.querySelectorAll('link[rel="stylesheet"],style');
           for (var i = 0; i < olds.length; i++) olds[i].parentNode && olds[i].parentNode.removeChild(olds[i]);
@@ -147,35 +147,35 @@
 
         return { ok: true, restored: false, title: titleText, length: article.length || 0 };
       } catch (e) {
-        return { ok: false, error: (e && e.message) || 'erro desconhecido no leitor' };
+        return { ok: false, error: (e && e.message) || 'unknown reader error' };
       }
     }.toString() + ')(' + JSON.stringify(css) + ');';
   }
 
   var Reader = {
     /**
-     * Alterna o modo leitor na webview informada.
-     * @param {Electron.WebviewTag} wv  webview da aba ativa
+     * Toggles reader mode in the given webview.
+     * @param {Electron.WebviewTag} wv  webview of the active tab
      * @returns {Promise<{ok:boolean, restored?:boolean, error?:string, title?:string}>}
      */
     async toggle(wv) {
-      if (!wv) return { ok: false, error: 'sem aba ativa' };
+      if (!wv) return { ok: false, error: 'no active tab' };
       var src = window.__READABILITY_SOURCE__;
       if (typeof src !== 'string' || !src.length) {
-        return { ok: false, error: 'extrator não carregado (readability-source.js)' };
+        return { ok: false, error: 'extractor not loaded (readability-source.js)' };
       }
       var script = buildPageScript(src, READER_CSS);
       try {
-        // userGesture=true: alguns sites exigem gesto p/ scroll/foco.
+        // userGesture=true: some sites require a gesture for scroll/focus.
         var res = await wv.executeJavaScript(script, true);
-        // SAIR do modo leitor: recarrega a página original (limpa, scripts rodando)
-        // em vez de restaurar innerHTML — o restore "congelava" a página.
+        // EXIT reader mode: reloads the original page (clean, scripts running)
+        // instead of restoring innerHTML — restoring "froze" the page.
         if (res && res.ok && res.restored) {
           try { wv.reload(); } catch (e) {}
         }
-        return res || { ok: false, error: 'sem resposta da página' };
+        return res || { ok: false, error: 'no response from page' };
       } catch (e) {
-        return { ok: false, error: (e && e.message) || 'falha ao executar na página' };
+        return { ok: false, error: (e && e.message) || 'failed to execute on page' };
       }
     },
   };

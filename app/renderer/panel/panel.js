@@ -1,8 +1,8 @@
 'use strict';
 
-/* panel.js — UI do painel flutuante. Renderiza 'settings' ou 'about' conforme
-   o { type } enviado pelo main. Sem HTML inline com handlers — tudo via DOM API
-   (CSP: script-src 'self'). Reusa os canais existentes via window.panel.* */
+/* panel.js — UI of the floating panel. Renders 'settings' or 'about' based on
+   the { type } sent by main. No inline HTML with handlers — everything via DOM API
+   (CSP: script-src 'self'). Reuses existing channels via window.panel.* */
 
 const titleEl = document.getElementById('ph-title');
 const bodyEl = document.getElementById('pb');
@@ -11,7 +11,7 @@ const closeBtn = document.getElementById('ph-close');
 closeBtn.addEventListener('click', () => window.panel.close());
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.panel.close(); });
 
-// helper: cria elemento com classe/texto
+// helper: creates element with class/text
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -19,7 +19,7 @@ function el(tag, cls, text) {
   return n;
 }
 
-// monta uma linha de settings: rótulo + dica + controle à direita
+// builds a settings row: label + hint + control on the right
 function settingsRow(label, hint, control) {
   const row = el('div', 'row');
   const left = el('div', 'rl');
@@ -36,9 +36,9 @@ window.panel.onData(async ({ type, dark }) => {
   return renderSettings();
 });
 
-// ── ABOUT — prova visual de Chromium ──────────────────────────────────────────
+// ── ABOUT — visual proof of the browser engine ────────────────────────────────
 async function renderAbout() {
-  titleEl.textContent = 'Sobre';
+  titleEl.textContent = 'About';
   bodyEl.innerHTML = '';
 
   const v = (window.panel && window.panel.versions) || {};
@@ -47,8 +47,8 @@ async function renderAbout() {
     const info = await window.panel.appInfo();
     if (info) {
       appVersion = info.appVersion || '';
-      // process.versions do preload já cobre chrome/electron/v8/node; o app:info
-      // confirma do main (mesma fonte). Mantém o que vier do appInfo se presente.
+      // process.versions from preload already covers browser/electron/v8/node; the app:info
+      // confirms from main (same source). Keeps what comes from appInfo if present.
       v.chrome = info.chrome || v.chrome;
       v.electron = info.electron || v.electron;
       v.v8 = info.v8 || v.v8;
@@ -61,14 +61,14 @@ async function renderAbout() {
   hero.appendChild(el('span', 'mark', '◢'));
   const ht = el('div', 'ht');
   ht.appendChild(el('strong', null, 'Logica Pilot'));
-  ht.appendChild(el('span', 'sub', 'Navegador autônomo · motor Chromium'));
+  ht.appendChild(el('span', 'sub', 'Autonomous browser · browser engine'));
   hero.appendChild(ht);
   bodyEl.appendChild(hero);
 
-  // grade de versões (prova de Chromium)
+  // version grid (proof of the browser)
   const rows = [
-    ['Versão', appVersion || '—'],
-    ['Chromium', v.chrome || '—'],
+    ['Version', appVersion || '—'],
+    ['Browser', v.chrome || '—'],
     ['Electron', v.electron || '—'],
     ['V8', v.v8 || '—'],
     ['Node.js', v.node || '—'],
@@ -80,12 +80,12 @@ async function renderAbout() {
   }
   bodyEl.appendChild(dl);
 
-  bodyEl.appendChild(el('span', 'engine-tag', '⚡ Renderizado pelo Chromium ' + (v.chrome || '')));
+  bodyEl.appendChild(el('span', 'engine-tag', '⚡ Rendered by the browser engine ' + (v.chrome || '')));
 }
 
-// ── SETTINGS — tema, motor de busca, homepage, limpar dados ───────────────────
+// ── SETTINGS — theme, search engine, homepage, clear data ─────────────────────
 async function renderSettings() {
-  // carrega settings + aplica o idioma (segue o SO se 'auto') no documento do painel
+  // loads settings + applies language (follows OS if 'auto') in the panel document
   let settings = { theme: 'system', searchEngine: 'google', homepage: 'pilot://newtab', language: 'auto' };
   try { const s = await window.panel.settingsGet(); if (s) settings = Object.assign(settings, s); } catch {}
   try { if (window.i18n) window.i18n.setLang(settings.language || 'auto'); } catch {}
@@ -101,7 +101,7 @@ async function renderSettings() {
       { id: 'duckduckgo', name: 'DuckDuckGo' }, { id: 'brave', name: 'Brave Search' }];
   }
 
-  // Tema
+  // Theme
   const themeSel = el('select');
   themeSel.id = 'set-theme';
   for (const [val, key] of [['system', 'settings.theme.system'], ['light', 'settings.theme.light'], ['dark', 'settings.theme.dark']]) {
@@ -111,7 +111,7 @@ async function renderSettings() {
   }
   themeSel.addEventListener('change', () => {
     const mode = themeSel.value;
-    // persiste no main (settings.json + nativeTheme + backgroundColor das janelas).
+    // persists in main (settings.json + nativeTheme + backgroundColor of windows).
     try { window.panel.setTheme({ mode }); } catch {}
     try { window.panel.settingsSet({ theme: mode }); } catch {}
     document.body.classList.toggle('light', mode === 'light'
@@ -119,7 +119,7 @@ async function renderSettings() {
   });
   bodyEl.appendChild(settingsRow(t('settings.theme'), t('settings.themeDesc'), themeSel));
 
-  // Idioma (detecção automática + escolha manual)
+  // Language (auto-detection + manual choice)
   const langSel = el('select');
   langSel.id = 'set-language';
   const langOpts = [['auto', t('settings.language.auto')]].concat(
@@ -132,11 +132,11 @@ async function renderSettings() {
   langSel.addEventListener('change', () => {
     try { window.panel.settingsSet({ language: langSel.value }); } catch {}
     try { if (window.i18n) window.i18n.setLang(langSel.value); } catch {}
-    renderSettings(); // re-renderiza o painel já no novo idioma
+    renderSettings(); // re-renders the panel in the new language
   });
   bodyEl.appendChild(settingsRow(t('settings.language'), t('settings.languageDesc'), langSel));
 
-  // Motor de busca
+  // Search engine
   const engSel = el('select');
   engSel.id = 'set-engine';
   for (const e of engines) {
@@ -164,7 +164,7 @@ async function renderSettings() {
   homeInp.addEventListener('blur', persistHome);
   bodyEl.appendChild(settingsRow(t('settings.home'), t('settings.homeDesc'), homeInp));
 
-  // Chave da IA do Pilot (out-of-the-box: Anthropic direto, sem LogicaProxy)
+  // Pilot AI key (out-of-the-box: Anthropic directly, no LogicaProxy)
   const aiInp = el('input');
   aiInp.type = 'password';
   aiInp.id = 'set-aikey';
@@ -177,7 +177,7 @@ async function renderSettings() {
   aiInp.addEventListener('blur', persistAi);
   bodyEl.appendChild(settingsRow(t('settings.aiKey'), t('settings.aiKeyDesc'), aiInp));
 
-  // Limpar dados de navegação
+  // Clear browsing data
   const clearBtn = el('button', 'btn danger', t('settings.clearBtn'));
   clearBtn.id = 'set-clear';
   clearBtn.addEventListener('click', async () => {

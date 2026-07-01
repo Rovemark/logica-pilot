@@ -1,15 +1,15 @@
 'use strict';
 
-// Ponte da lista de sugestões da omnibox flutuante (janela do SO) com o main.
-// A janela é NÃO-FOCÁVEL: a barra de endereço da janela-mãe mantém o foco e trata
-// o teclado. Esta janela só EXIBE a lista (onData) e manda o índice do CLIQUE
-// (choose) de volta ao main, que repassa ao renderer principal.
+// Bridge between the floating omnibox suggestion list (system window) and the main process.
+// The window is NON-FOCUSABLE: the address bar of the parent window retains focus and handles
+// keyboard input. This window only DISPLAYS the list (onData) and sends back the index of the CLICK
+// (choose) to the main process, which forwards it to the main renderer.
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('omniPopup', {
-  // recebe { items, selected, dark } — renderiza a lista + o índice selecionado.
-  // mesmo canal serve p/ abertura inicial e p/ cada atualização (não recria a janela).
+  // receives { items, selected, dark } — renders the list + the selected index.
+  // the same channel serves for initial opening and for each update (does not recreate the window).
   onData: (cb) => ipcRenderer.on('omni:data', (_e, d) => cb(d)),
-  // usuário CLICOU numa sugestão → manda o índice escolhido ao main.
+  // user CLICKED a suggestion → sends the chosen index to the main process.
   choose: (index) => ipcRenderer.send('omni:choose', index),
 });

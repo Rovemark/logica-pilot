@@ -1,7 +1,7 @@
-// Página de downloads (pilot://downloads) — lógica autossuficiente.
-// Roda num <webview> isolado: SEM window.pilot. Conversa com o main por fetch()
-// de mesma origem (pilot://downloads/_data|_action). Auto-refresh enquanto há
-// download ativo (progresso). Ações: abrir, mostrar na pasta, cancelar.
+// Downloads page (pilot://downloads) — self-contained logic.
+// Runs in an isolated <webview>: NO window.pilot. Communicates with main via fetch()
+// from same origin (pilot://downloads/_data|_action). Auto-refresh while there's an
+// active download (progress). Actions: open, show in folder, cancel.
 (function () {
   'use strict';
 
@@ -21,8 +21,8 @@
     return Math.min(100, Math.round((d.receivedBytes / d.totalBytes) * 100));
   }
   var STATE_LABEL = {
-    started: 'baixando…', progress: 'baixando…',
-    completed: 'concluído', cancelled: 'cancelado', interrupted: 'interrompido'
+    started: 'downloading…', progress: 'downloading…',
+    completed: 'completed', cancelled: 'cancelled', interrupted: 'interrupted'
   };
   function isActive(d) { return d.state === 'started' || d.state === 'progress'; }
 
@@ -77,17 +77,17 @@
     var actions = document.createElement('span');
     actions.className = 'dl-actions';
     if (done) {
-      actions.appendChild(makeAction(d.id, 'open', 'Abrir', false));
-      actions.appendChild(makeAction(d.id, 'showInFolder', 'Mostrar na pasta', false));
+      actions.appendChild(makeAction(d.id, 'open', 'Open', false));
+      actions.appendChild(makeAction(d.id, 'showInFolder', 'Show in folder', false));
     } else if (isActive(d)) {
-      actions.appendChild(makeAction(d.id, 'cancel', 'Cancelar', true));
+      actions.appendChild(makeAction(d.id, 'cancel', 'Cancel', true));
     }
 
     item.appendChild(icon);
     item.appendChild(main);
     item.appendChild(actions);
 
-    // barra de progresso só enquanto não concluído
+    // progress bar only while not completed
     if (!done) {
       var bar = document.createElement('span');
       bar.className = 'dl-bar';
@@ -107,7 +107,7 @@
     b.textContent = label;
     b.addEventListener('click', function () {
       postAction(id, action).then(function (res) {
-        // 'cancel' muda o estado → recarrega; open/show não mudam a lista
+        // 'cancel' changes state → reload; open/show do not change the list
         if (action === 'cancel' && res && res.ok) reload();
       });
     });
@@ -119,7 +119,7 @@
       listEl.textContent = '';
       var p = document.createElement('p');
       p.className = 'empty';
-      p.textContent = 'Nenhum download ainda.';
+      p.textContent = 'No downloads yet.';
       listEl.appendChild(p);
       stopPolling();
       return;
@@ -129,13 +129,13 @@
     items.forEach(function (d) { frag.appendChild(buildRow(d)); });
     listEl.appendChild(frag);
 
-    // mantém polling enquanto houver download em andamento
+    // keep polling while there's an active download
     if (items.some(isActive)) startPolling(); else stopPolling();
   }
 
   function reload() { fetchList().then(render); }
 
-  // ── polling (só enquanto há download ativo) ──────────────────
+  // ── polling (only while there's an active download) ──────────────────
   function startPolling() {
     if (pollTimer) return;
     pollTimer = setInterval(reload, 700);

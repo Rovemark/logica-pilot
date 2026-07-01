@@ -1,16 +1,16 @@
 'use strict';
 
-// Ponte do painel flutuante (Settings/About) com o processo principal.
-// REUSA os canais IPC JÁ EXISTENTES do main (theme:set, settings:get/set,
-// search:getEngines, data:clear, app:info). Canais novos: só panel:open/panel:close.
+// Bridge for the floating panel (Settings/About) with the main process.
+// REUSES the existing IPC channels from main (theme:set, settings:get/set,
+// search:getEngines, data:clear, app:info). New channels: only panel:open/panel:close.
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('panel', {
-  // dados de abertura ({ type, dark }) enviados pelo main no did-finish-load
+  // data sent from main on did-finish-load ({ type, dark })
   onData: (cb) => ipcRenderer.on('panel:data', (_e, d) => cb(d)),
   close: () => ipcRenderer.send('panel:close'),
 
-  // ── canais reusados (mesmos do preload.js da casca) ──
+  // ── reused channels (same as shell preload.js) ──
   appInfo: () => ipcRenderer.invoke('app:info'),
   settingsGet: () => ipcRenderer.invoke('settings:get'),
   settingsSet: (patch) => ipcRenderer.invoke('settings:set', patch),
@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('panel', {
   setTheme: (payload) => ipcRenderer.invoke('theme:set', payload),
   clearData: (opts) => ipcRenderer.invoke('data:clear', opts || {}),
 
-  // prova de Chromium direto do process.versions (sem IPC)
+  // proof of browser engine version from process.versions (no IPC)
   versions: {
     chrome: process.versions.chrome,
     electron: process.versions.electron,

@@ -1,24 +1,24 @@
 'use strict';
 
 /**
- * view-registry.js — Núcleo da migração <webview> → WebContentsView.
+ * view-registry.js — Core of the <webview> → WebContentsView migration.
  *
- * O processo PRINCIPAL passa a ser dono das páginas: cada aba é uma
- * `WebContentsView` (camada Chromium real) criada, posicionada, mostrada/escondida
- * e destruída aqui. A casca (renderer) deixa de criar `<webview>` e vira só um
- * controle remoto: manda comandos (criar/trocar/navegar) por IPC e recebe eventos
- * de estado (url/título/favicon/loading) de volta.
+ * The MAIN process now owns the pages: each tab is a `WebContentsView`
+ * (real browser engine layer) created, positioned, shown/hidden, and destroyed here.
+ * The shell (renderer) stops creating `<webview>` and becomes just a remote control:
+ * sends commands (create/switch/navigate) via IPC and receives state events
+ * (url/title/favicon/loading) back.
  *
- * Vantagens sobre `<webview>`:
- *  - sem a camada legada/frágil do `<webview>` (corridas de attach, cobertura de overlay);
- *  - a página nasce já na SESSÃO certa (partition) → o protocolo pilot:// e o fetch
- *    do feed são determinísticos (sem corrida de wiring);
- *  - z-order controlado pelo main → popovers viram views in-window por cima da página;
- *  - o webContents é direto (sem guestId via DOM) → Pilot/CDP e extensões mais limpos.
+ * Advantages over `<webview>`:
+ *  - no legacy/fragile `<webview>` layer (race conditions, overlay glitches);
+ *  - the page is born in the RIGHT SESSION (partition) → pilot:// protocol and feed
+ *    fetch are deterministic (no wiring race);
+ *  - z-order controlled by main → popovers become in-window views above the page;
+ *  - webContents is direct (no guestId via DOM) → cleaner Pilot/CDP and extensions.
  *
- * Este módulo é AGNÓSTICO de layout: quem chama injeta `getContentBounds()` (a área
- * onde a página deve aparecer, abaixo da toolbar/tabstrip e ao lado do painel Pilot)
- * e `emit(channel, payload)` (como mandar eventos pra casca daquela janela).
+ * This module is LAYOUT-AGNOSTIC: the caller injects `getContentBounds()` (the area
+ * where the page should appear, below the toolbar/tabstrip and beside the Pilot panel)
+ * and `emit(channel, payload)` (how to send events to the shell of that window).
  */
 
 const { WebContentsView, session } = require('electron');
@@ -26,20 +26,20 @@ const { WebContentsView, session } = require('electron');
 const PARTITION = 'persist:logica-pilot';
 
 /**
- * Cria um registry por JANELA da casca. Mantém o estado das abas daquela janela.
+ * Creates a registry per WINDOW of the shell. Maintains tab state for that window.
  * @param {object} opts
- * @param {import('electron').BaseWindow} opts.window  janela host (tem .contentView)
+ * @param {import('electron').BaseWindow} opts.window  host window (has .contentView)
  * @param {() => {x:number,y:number,width:number,height:number}} opts.getContentBounds
- * @param {(channel:string, payload:any) => void} opts.emit  manda evento p/ a casca
- * @param {string} [opts.preload]  caminho do preload das páginas (canal página→casca)
- * @param {boolean} [opts.incognito]  usa sessão efêmera (sem persistir)
+ * @param {(channel:string, payload:any) => void} opts.emit  sends event to the shell
+ * @param {string} [opts.preload]  preload path for pages (page→shell channel)
+ * @param {boolean} [opts.incognito]  uses ephemeral session (no persistence)
  */
 function createRegistry(opts) {
   const win = opts.window;
   const getContentBounds = opts.getContentBounds;
   const emit = opts.emit || (() => {});
   const preload = opts.preload || null;
-  const partition = opts.incognito ? '' : PARTITION; // '' = sessão default em memória? não — usamos fromPartition só p/ persist
+  const partition = opts.incognito ? '' : PARTITION; // '' = default in-memory session? no — we only use fromPartition for persist
 
   /** @type {Map<string, {view: import('electron').WebContentsView, wc: import('electron').WebContents, url: string}>} */
   const tabs = new Map();
@@ -47,7 +47,7 @@ function createRegistry(opts) {
   let destroyed = false;
 
   function ses() {
-    // partition persistente compartilhada por todas as abas normais.
+    // persistent partition shared by all normal tabs.
     return opts.incognito
       ? session.fromPartition('logica-pilot-incognito-' + Date.now())
       : session.fromPartition(PARTITION);
@@ -57,7 +57,7 @@ function createRegistry(opts) {
     try {
       return { canGoBack: wc.navigationHistory.canGoBack(), canGoForward: wc.navigationHistory.canGoForward() };
     } catch {
-      // fallback p/ Electron mais antigo
+      // fallback for older Electron
       try { return { canGoBack: wc.canGoBack(), canGoForward: wc.canGoForward() }; } catch { return { canGoBack: false, canGoForward: false }; }
     }
   }
@@ -83,15 +83,15 @@ function createRegistry(opts) {
     wc.on('media-paused', () => emit('tab:audio', { tabId, audible: false }));
   }
 
-  /** Cria uma aba e sua WebContentsView (não ativa por padrão — chame activate). */
+  /** Creates a tab and its WebContentsView (not active by default — call activate). */
   function createTab(tabId, { url } = {}) {
     if (destroyed || tabs.has(tabId)) return tabId;
     const webPreferences = {
       session: ses(),
       sandbox: false,
       contextIsolation: true,
-      // preload da PÁGINA (canal página→casca via IPC). Guardado por protocolo
-      // dentro do próprio preload, igual ao webview-preload de hoje.
+      // PAGE preload (page→shell channel via IPC). Stored by protocol
+      // within the preload itself, same as today's webview-preload.
       ...(preload ? { preload } : {}),
     };
     const view = new WebContentsView({ webPreferences });
@@ -100,21 +100,21 @@ function createRegistry(opts) {
     win.contentView.addChildView(view);
     wireEvents(tabId, wc);
     if (url) wc.loadURL(url);
-    // nasce escondida; só a ativa fica visível
+    // born hidden; only the active one is visible
     try { view.setVisible(false); } catch {}
     return tabId;
   }
 
-  /** Mostra a aba dada (esconde as outras) e a traz pro topo da pilha de views. */
+  /** Shows the given tab (hides others) and brings it to the top of the view stack. */
   function activateTab(tabId) {
     if (destroyed || !tabs.has(tabId)) return;
     activeId = tabId;
     for (const [id, t] of tabs) {
       try { t.view.setVisible(id === tabId); } catch {}
     }
-    // re-adicionar a ativa garante z-order no topo (acima das outras abas).
-    // Popovers (adicionados depois) continuam acima desta — quem gerencia popover
-    // re-empilha por cima após o switch.
+    // re-adding the active tab guarantees z-order at the top (above other tabs).
+    // Popovers (added later) stay above this — whoever manages popovers
+    // re-stacks above the switch.
     try {
       win.contentView.removeChildView(tabs.get(tabId).view);
       win.contentView.addChildView(tabs.get(tabId).view);
@@ -124,7 +124,7 @@ function createRegistry(opts) {
     emit('tab:activated', { tabId, url: tabs.get(tabId).url, ...navState(wc) });
   }
 
-  /** Fecha e destrói a aba. */
+  /** Closes and destroys the tab. */
   function closeTab(tabId) {
     const t = tabs.get(tabId);
     if (!t) return;
@@ -135,7 +135,7 @@ function createRegistry(opts) {
     if (activeId === tabId) activeId = null;
   }
 
-  /** Posiciona a view ativa na área de conteúdo (chamado no boot, resize, toggle do painel). */
+  /** Positions the active view in the content area (called on boot, resize, panel toggle). */
   function layout() {
     if (destroyed || !activeId) return;
     const t = tabs.get(activeId);
@@ -144,7 +144,7 @@ function createRegistry(opts) {
     try { t.view.setBounds({ x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) }); } catch {}
   }
 
-  // ── comandos de navegação (vindos da casca por IPC) ──────────────────────
+  // ── navigation commands (from shell via IPC) ──────────────────────
   function withWc(tabId, fn) {
     const t = tabs.get(tabId || activeId);
     if (t && !t.wc.isDestroyed()) try { fn(t.wc); } catch {}
@@ -156,7 +156,7 @@ function createRegistry(opts) {
   const reloadHard = (tabId) => withWc(tabId, (wc) => wc.reloadIgnoringCache());
   const stop = (tabId) => withWc(tabId, (wc) => wc.stop());
 
-  // ── acessores ────────────────────────────────────────────────────────────
+  // ── accessors ────────────────────────────────────────────────────────────
   const has = (tabId) => tabs.has(tabId);
   const getActiveId = () => activeId;
   const getWebContents = (tabId) => { const t = tabs.get(tabId || activeId); return t ? t.wc : null; };

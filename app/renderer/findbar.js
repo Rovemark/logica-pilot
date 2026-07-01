@@ -1,8 +1,8 @@
 'use strict';
 
-/* findbar.js — localizar na página (⌘F).
-   Usa a API do próprio <webview> (wv.findInPage / evento found-in-page),
-   sem IPC (decisão do spec §2.3). Contador n/N + prev/next/✕. */
+/* findbar.js — find on page (⌘F).
+   Uses the webview's own API (wv.findInPage / found-in-page event),
+   without IPC (per spec §2.3). Counter n/N + prev/next/✕. */
 
 (function () {
   class FindBar {
@@ -15,16 +15,16 @@
       this.closeBtn = document.getElementById('find-close');
 
       this.getActiveWebview = () => null;
-      this.boundWv = null;        // webview com listener ligado
+      this.boundWv = null;        // webview with listener attached
       this.onFound = null;
       this.lastRequestId = 0;
-      // Caminho primário: barra "Localizar" como JANELA FLUTUANTE (camada do SO,
-      // acima do <webview>). A flutuante é dona da busca enquanto aberta — então
-      // este módulo só rastreia se ela está aberta (p/ ⌘G/⌘⇧G e fechar no Esc).
+      // Primary path: Find bar as FLOATING WINDOW (OS layer,
+      // above the <webview>). The floating window owns the search while open — so
+      // this module only tracks whether it is open (for ⌘G/⌘⇧G and close on Esc).
       this._floatOpen = false;
     }
 
-    // a flutuante existe? (IPC presente em runtime)
+    // Does the floating window exist? (IPC present at runtime)
     _useFloat() { return !!(window.pilot && window.pilot.findOpen); }
 
     init({ getActiveWebview }) {
@@ -40,18 +40,18 @@
       this.closeBtn.addEventListener('click', () => this.close());
     }
 
-    // isOpen reflete a flutuante (caminho primário) ou a barra HTML (fallback).
+    // isOpen reflects the floating window (primary path) or the HTML bar (fallback).
     get isOpen() { return this._useFloat() ? this._floatOpen : !this.bar.hidden; }
 
     open() {
       if (this._useFloat()) {
         const dark = document.documentElement.getAttribute('data-theme') !== 'light';
-        // pré-preenche com a seleção atual da página, se houver (paridade Chrome).
+        // pre-fills with current page selection, if any (parity with the browser).
         let query = '';
         try { query = (window.getSelection && String(window.getSelection())) || ''; } catch {}
         try { window.pilot.findOpen({ dark, query: query.trim().slice(0, 200) }); this._floatOpen = true; return; } catch {}
       }
-      // fallback: barra HTML (fica atrás do webview, mas preserva a função)
+      // fallback: HTML bar (sits behind the webview, but preserves functionality)
       const wv = this.getActiveWebview();
       if (!wv) return;
       this._bind(wv);
@@ -74,11 +74,11 @@
       this._unbind();
     }
 
-    // ⌘G / ⌘⇧G: com a flutuante aberta, reabrir foca-a (ela trata Enter/⇧Enter).
+    // ⌘G / ⌘⇧G: with the floating window open, reopen focuses it (it handles Enter/⇧Enter).
     next() { if (!this.isOpen) return; if (this._useFloat()) this.open(); else this.search(true, true); }
     prev() { if (!this.isOpen) return; if (this._useFloat()) this.open(); else this.search(false, true); }
 
-    // o main avisa que a janela flutuante fechou (Esc/✕/destruída) → reseta estado.
+    // main notifies that the floating window closed (Esc/✕/destroyed) → reset state.
     notifyClosed() { this._floatOpen = false; }
 
     search(forward = true, findNext = false) {

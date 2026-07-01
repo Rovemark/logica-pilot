@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * search-engines.js — Catálogo de motores de busca (paridade Chrome).
+ * search-engines.js — Catalog of search engines (Chrome parity).
  *
- * Cada motor tem um `searchTemplate` (URL de busca com {q}) e um `suggestTemplate`
- * (endpoint de autocomplete, opcional). O renderer usa o template para montar a URL
- * a partir do que o usuário digita no omnibox. `{q}` é substituído pelo termo já
- * URL-encodado.
+ * Each engine has a `searchTemplate` (search URL with {q}) and a `suggestTemplate`
+ * (autocomplete endpoint, optional). The renderer uses the template to build the URL
+ * from what the user types in the omnibox. `{q}` is replaced with the term already
+ * URL-encoded.
  */
 
 const ENGINES = [
@@ -36,17 +36,17 @@ const ENGINES = [
   },
 ];
 
-/** Lista completa do catálogo (cópia defensiva). */
+/** Complete catalog list (defensive copy). */
 function getEngines() {
   return ENGINES.map((e) => ({ ...e }));
 }
 
-/** Resolve um motor por id; cai no Google se não achar. */
+/** Resolves an engine by id; defaults to Google if not found. */
 function getEngine(id) {
   return ENGINES.find((e) => e.id === id) || ENGINES[0];
 }
 
-/** Monta a URL de busca final substituindo {q} pelo termo (já encodado pelo caller, se quiser). */
+/** Builds the final search URL by replacing {q} with the term (already encoded by caller, if desired). */
 function buildSearchUrl(id, query) {
   const engine = getEngine(id);
   return engine.searchTemplate.replace('{q}', encodeURIComponent(query));

@@ -1,13 +1,13 @@
 'use strict';
 
 /**
- * settings.js — Preferências persistentes do navegador (tema, motor de busca, homepage).
+ * settings.js — Persistent browser preferences (theme, search engine, homepage).
  *
- * Guarda em userData/settings.json com escrita debounced. Defaults seguros:
+ * Stored in userData/settings.json with debounced writes. Safe defaults:
  *   { theme: 'system', searchEngine: 'google', homepage: 'pilot://newtab' }.
  *
- * Não depende de Electron diretamente: recebe o caminho do arquivo via init()
- * (chamado pelo main com app.getPath('userData')) para facilitar teste/portabilidade.
+ * Does not depend directly on Electron: receives the file path via init()
+ * (called by main with app.getPath('userData')) to facilitate testing/portability.
  */
 
 const fs = require('fs');
@@ -15,28 +15,28 @@ const path = require('path');
 
 const DEFAULTS = Object.freeze({
   theme: 'system', // 'light' | 'dark' | 'system'
-  searchEngine: 'google', // id do catálogo (search-engines.js)
+  searchEngine: 'google', // id from the catalog (search-engines.js)
   homepage: 'pilot://newtab',
-  showBookmarksBar: false, // exibir a barra de favoritos abaixo da toolbar
-  language: 'auto', // 'auto' (segue o SO) | 'pt-BR' | 'en' | 'es'
-  aiApiKey: '', // chave Anthropic do usuário (sk-ant-…) p/ o Pilot sem LogicaProxy
+  showBookmarksBar: false, // display the bookmarks bar below the toolbar
+  language: 'auto', // 'auto' (follows the OS) | 'pt-BR' | 'en' | 'es'
+  aiApiKey: '', // user's Anthropic key (sk-ant-…) for Pilot without LogicaProxy
 });
 
-// idiomas suportados pela casca (devem existir em renderer/i18n/locales.js)
+// supported languages by the shell (must exist in renderer/i18n/locales.js)
 const LANGUAGES = ['pt-BR', 'en', 'es', 'fr', 'de', 'it', 'nl', 'pl', 'ru', 'ja', 'ko', 'zh-CN'];
 
 let filePath = null;
 let state = { ...DEFAULTS };
 let writeTimer = null;
 
-/** Inicializa o store apontando para o diretório de dados do usuário. */
+/** Initializes the store pointing to the user data directory. */
 function init(userDataDir) {
   filePath = path.join(userDataDir, 'settings.json');
   load();
   return get();
 }
 
-/** Lê o JSON do disco (tolerante a arquivo ausente/corrompido → mantém defaults). */
+/** Reads the JSON from disk (tolerant of missing/corrupted files → keeps defaults). */
 function load() {
   try {
     const raw = fs.readFileSync(filePath, 'utf8');
@@ -49,7 +49,7 @@ function load() {
   }
 }
 
-/** Garante valores válidos (não confiar cegamente no disco). */
+/** Ensures valid values (do not blindly trust disk data). */
 function sanitize(s) {
   const out = { ...DEFAULTS };
   if (s.theme === 'light' || s.theme === 'dark' || s.theme === 'system') out.theme = s.theme;
@@ -61,12 +61,12 @@ function sanitize(s) {
   return out;
 }
 
-/** Snapshot completo das settings (cópia, para o caller não mutar o estado interno). */
+/** Complete snapshot of settings (a copy, so the caller cannot mutate internal state). */
 function get() {
   return { ...state };
 }
 
-/** Aplica um patch parcial, persiste e devolve o settings completo. */
+/** Applies a partial patch, persists it, and returns the complete settings. */
 function set(patch = {}) {
   const next = sanitize({ ...state, ...patch });
   state = next;
@@ -74,7 +74,7 @@ function set(patch = {}) {
   return get();
 }
 
-/** Escrita debounced (~200ms) para não martelar o disco. */
+/** Debounced write (~200ms) to avoid hammering the disk. */
 function scheduleWrite() {
   if (!filePath) return;
   if (writeTimer) clearTimeout(writeTimer);
@@ -82,13 +82,13 @@ function scheduleWrite() {
   if (writeTimer.unref) writeTimer.unref();
 }
 
-/** Persiste imediatamente (usado no debounce e em saída). */
+/** Persists immediately (used in debounce and on shutdown). */
 function flush() {
   if (!filePath) return;
   try {
     fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf8');
   } catch {
-    // disco indisponível — settings continuam em memória; nada fatal
+    // disk unavailable — settings remain in memory; nothing critical
   }
 }
 

@@ -1,6 +1,6 @@
-// Página de histórico (pilot://history) — lógica autossuficiente.
-// Roda num <webview> isolado: SEM window.pilot. Conversa com o main por fetch()
-// de mesma origem (pilot://history/_data|_action). A navegação usa location.href.
+// History page (pilot://history) — self-contained logic.
+// Runs in an isolated <webview>: NO window.pilot. Communicates with main via fetch()
+// of same origin (pilot://history/_data|_action). Navigation uses location.href.
 (function () {
   'use strict';
 
@@ -25,14 +25,14 @@
     var today = startOfDay(Date.now());
     var day = startOfDay(ts);
     var diff = Math.round((today - day) / 86400000);
-    if (diff === 0) return 'Hoje';
-    if (diff === 1) return 'Ontem';
-    return new Date(ts).toLocaleDateString('pt-BR', {
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    return new Date(ts).toLocaleDateString('en-US', {
       weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
     });
   }
   function timeLabel(ts) {
-    return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }
 
   // ── data ─────────────────────────────────────────────────────
@@ -88,8 +88,8 @@
     var del = document.createElement('button');
     del.className = 'hi-del';
     del.type = 'button';
-    del.title = 'Remover do histórico';
-    del.setAttribute('aria-label', 'Remover do histórico');
+    del.title = 'Remove from history';
+    del.setAttribute('aria-label', 'Remove from history');
     del.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>';
 
     row.appendChild(favWrap);
@@ -108,9 +108,9 @@
         if (res && res.ok) {
           var group = row.parentNode;
           row.remove();
-          // se o grupo do dia ficou sem itens (só o label), remove o grupo
+          // if the day group has no items left (just the label), remove the group
           if (group && group.querySelectorAll('.hist-item').length === 0) group.remove();
-          if (!listEl.querySelector('.hist-item')) renderEmpty('Sem histórico.');
+          if (!listEl.querySelector('.hist-item')) renderEmpty('No history.');
         }
       });
     });
@@ -128,8 +128,8 @@
   }
 
   function render(items) {
-    if (!items.length) { renderEmpty('Sem histórico ainda.'); return; }
-    // agrupa por dia preservando a ordem (items já vêm do mais recente)
+    if (!items.length) { renderEmpty('No history yet.'); return; }
+    // group by day while preserving order (items already come from most recent)
     var groups = [];
     var index = {};
     items.forEach(function (e) {
@@ -158,7 +158,7 @@
     fetchList(q).then(render);
   }
 
-  // ── busca (debounced) ────────────────────────────────────────
+  // ── search (debounced) ───────────────────────────────────────
   var debounceTimer = null;
   function onSearch() {
     clearTimeout(debounceTimer);
@@ -167,7 +167,7 @@
   if (searchInput) searchInput.addEventListener('input', onSearch);
   if (searchForm) searchForm.addEventListener('submit', function (e) { e.preventDefault(); reload(searchInput.value.trim()); });
 
-  // ── limpar tudo ──────────────────────────────────────────────
+  // ── clear all ────────────────────────────────────────────────
   if (clearBtn) {
     clearBtn.addEventListener('click', function () {
       postAction('/_action/clear', { range: 'all' }).then(function (res) {

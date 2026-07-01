@@ -1,15 +1,15 @@
 'use strict';
 
-/* omni.js — UI da lista de sugestões da omnibox flutuante (janela do SO, acima
-   do <webview>). NÃO trata teclado: a barra de endereço da janela-mãe mantém o
-   foco (a flutuante é showInactive) e continua tratando digitação/setas/Enter/Esc.
-   Aqui só renderizamos os itens + o índice selecionado e mandamos o índice no
-   CLIQUE (janela inativa ainda recebe cliques do mouse). Sem HTML inline com
-   handlers (CSP: script-src 'self'). */
+/* omni.js — UI of the omnibox floating suggestion list (SO window, above
+   the <webview>). Does NOT handle keyboard: the parent window's address bar
+   keeps focus (the floating window is showInactive) and continues handling
+   typing/arrows/Enter/Esc. Here we only render the items + the selected index
+   and send the index on CLICK (inactive window still receives mouse clicks).
+   No inline HTML with handlers (CSP: script-src 'self'). */
 
 const listEl = document.getElementById('omni-list');
 
-// separa host/resto p/ realce (mesma lógica do omnibox.js, anti-spoofing)
+// splits host/rest for highlighting (same logic as omnibox.js, anti-spoofing)
 function splitUrl(url) {
   try {
     const u = new URL(url);
@@ -19,7 +19,7 @@ function splitUrl(url) {
   } catch { return { ok: false }; }
 }
 
-// ícone de busca (lupa) — mesmo SVG do renderSuggest
+// search icon (magnifying glass) — same SVG as renderSuggest
 function searchIcon() {
   const span = document.createElement('span');
   span.className = 'oi-ico';
@@ -27,7 +27,7 @@ function searchIcon() {
   return span;
 }
 
-// ícone genérico (globo) p/ quando não há favicon
+// generic icon (globe) for when there is no favicon
 function globeIcon() {
   const span = document.createElement('span');
   span.className = 'oi-ico';
@@ -35,7 +35,7 @@ function globeIcon() {
   return span;
 }
 
-// ícone de favicon (img) — esconde no erro (favicon quebrado)
+// favicon icon (img) — hides on error (broken favicon)
 function faviconIcon(src) {
   const span = document.createElement('span');
   span.className = 'oi-ico';
@@ -79,7 +79,7 @@ function render({ items, selected, dark } = {}) {
     row.setAttribute('role', 'option');
     if (i === selected) row.setAttribute('aria-selected', 'true');
 
-    // ícone: lupa (busca) | favicon (se houver) | globo (fallback)
+    // icon: magnifying glass (search) | favicon (if available) | globe (fallback)
     if (it.type === 'search') {
       row.appendChild(searchIcon());
     } else if (it.favicon) {
@@ -88,7 +88,7 @@ function render({ items, selected, dark } = {}) {
       row.appendChild(globeIcon());
     }
 
-    // texto principal + (histórico) título
+    // main text + (history) title
     const main = buildMain(it);
     if (it.title && it.type === 'history') {
       const t = document.createElement('span');
@@ -98,9 +98,9 @@ function render({ items, selected, dark } = {}) {
     }
     row.appendChild(main);
 
-    // CLIQUE → manda o índice ao main (que repassa pro renderer principal).
-    // mousedown (não 'click') casa com o gesto do dropdown HTML antigo e age
-    // antes de qualquer blur.
+    // CLICK → sends the index to main (which passes it to the main renderer).
+    // mousedown (not 'click') matches the gesture of the old HTML dropdown and acts
+    // before any blur.
     row.addEventListener('mousedown', (e) => {
       e.preventDefault();
       window.omniPopup.choose(i);

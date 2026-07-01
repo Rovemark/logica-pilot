@@ -1,68 +1,68 @@
 'use strict';
 
 /**
- * webview-manager.js — Ponto de entrada arquitetural das webviews (paridade Chrome).
+ * webview-manager.js — Architectural entry point for webviews (parity with the browser).
  *
- * O main NÃO cria as <webview> (o renderer é dono delas). Mas o main precisa do
- * `webContents` de cada webview para ligar features que SÓ vivem no main:
- *   - menu de contexto nativo (context-menu)
- *   - setWindowOpenHandler (substitui o evento 'new-window', MORTO no Electron 33)
- *   - found-in-page (resultado do find)
- * E, UMA vez por session da partition 'persist:logica-pilot':
+ * The main process does NOT create the <webview> elements (the renderer owns them). But the main
+ * process needs the `webContents` of each webview to wire features that ONLY live in the main:
+ *   - native context menu (context-menu)
+ *   - setWindowOpenHandler (replaces the 'new-window' event, deprecated in Electron 33)
+ *   - found-in-page (find results)
+ * And, ONCE per session of the 'persist:logica-pilot' partition:
  *   - will-download (downloads)
- *   - setPermissionRequestHandler (câmera/mic/geo/notif)
+ *   - setPermissionRequestHandler (camera/mic/geolocation/notifications)
  *
- * O hook é `win.webContents.on('did-attach-webview', (e, wc) => equip(wc, win))`,
- * registrado pelo main em createWindow().
+ * The hook is `win.webContents.on('did-attach-webview', (e, wc) => equip(wc, win))`,
+ * registered by the main in createWindow().
  *
- * CDP é EXCLUSIVO: o Pilot anexa `webContents.debugger` na aba. Abrir DevTools
- * cria um segundo consumidor de CDP no mesmo webContents → conflito. Por isso o
- * gate de DevTools (runs.has(guestId)) é checado no main antes de abrir.
+ * CDP is EXCLUSIVE: Pilot attaches `webContents.debugger` on the tab. Opening DevTools
+ * creates a second CDP consumer on the same webContents → conflict. That's why the
+ * DevTools gate (runs.has(guestId)) is checked in the main before opening.
  */
 
 const { Menu, session, clipboard } = require('electron');
 
 const PARTITION = 'persist:logica-pilot';
 
-// WeakSet de webContents já equipados (evita ligar handlers 2x).
+// WeakSet of webContents already equipped (prevents wiring handlers twice).
 const equippedWC = new WeakSet();
-// Sessions de partition já configuradas (will-download + permissões), por nome.
+// Sessions of partition already configured (will-download + permissions), by name.
 const wiredSessions = new Set();
-// guestId → { wc }  — registro vivo das webviews para lookups do main.
+// guestId → { wc }  — live registry of webviews for main process lookups.
 const guests = new Map();
 
-// Callbacks de permissão pendentes: requestId → { callback, timer, guestId, origin, permission }.
+// Pending permission callbacks: requestId → { callback, timer, guestId, origin, permission }.
 const pendingPermissions = new Map();
 let permissionSeq = 0;
-// Permissões já concedidas pelo usuário: chave `${origin}|${permission}`.
-// Consultadas pelo setPermissionCheckHandler (navigator.permissions.query / enumerateDevices).
+// Permissions already granted by the user: key `${origin}|${permission}`.
+// Consulted by the setPermissionCheckHandler (navigator.permissions.query / enumerateDevices).
 const grantedPermissions = new Set();
-// Timeout p/ pedido de permissão sem resposta (evita callback órfão pendurando a página).
+// Timeout for permission request without response (prevents orphaned callback hanging the page).
 const PERMISSION_TIMEOUT_MS = 30000;
 
-// Dependências injetadas pelo main (para não acoplar IPC/stores aqui).
+// Dependencies injected by the main (to avoid coupling IPC/stores here).
 let deps = {
-  // (channel, payload) => envia ao renderer da janela dona da webview
+  // (channel, payload) => sends to renderer of the window that owns the webview
   sendToHost: null,
-  // (item, emit) => registra download no downloads-store; retorna record
+  // (item, emit) => registers download in downloads-store; returns record
   registerDownload: null,
-  // motor de busca default (id) para "Pesquisar no Google/…" do menu de contexto
+  // default search engine (id) for "Search in Google/…" context menu
   getSearchEngine: null,
-  // (id, query) => url de busca
+  // (id, query) => search URL
   buildSearchUrl: null,
-  // sistema de extensões do Chrome (extensions-manager): addTab(wc, win)
+  // Chrome extensions system (extensions-manager): addTab(wc, win)
   extensions: null,
 };
 
-/** Configura as dependências (chamado uma vez pelo main no boot). */
+/** Configures dependencies (called once by the main at boot). */
 function configure(options = {}) {
   deps = { ...deps, ...options };
 }
 
 /**
- * Equipa um webContents de webview com os handlers de feature do main.
+ * Equips a webview webContents with the main process feature handlers.
  * @param {import('electron').WebContents} wc
- * @param {import('electron').BrowserWindow} hostWin  janela dona da webview
+ * @param {import('electron').BrowserWindow} hostWin  window that owns the webview
  */
 function equip(wc, hostWin) {
   if (!wc || equippedWC.has(wc)) return;
@@ -72,7 +72,7 @@ function equip(wc, hostWin) {
   guests.set(guestId, { wc });
   wc.once('destroyed', () => {
     guests.delete(guestId);
-    // varre pedidos de permissão órfãos deste guest: nega e limpa (sem callback pendurado).
+    // sweep orphaned permission requests from this guest: deny and clean up (no hanging callback).
     for (const [id, slot] of pendingPermissions) {
       if (slot.guestId === guestId) {
         try { clearTimeout(slot.timer); } catch {}
@@ -86,28 +86,28 @@ function equip(wc, hostWin) {
   wireContextMenu(wc, hostWin);
   wireFoundInPage(wc, hostWin);
 
-  // Extensões do Chrome: registra esta <webview> como uma "aba" para que content
-  // scripts, botões de ação (browser actions) e popups das extensões funcionem.
+  // Browser extensions: register this <webview> as a "tab" so that content
+  // scripts, action buttons (browser actions), and extension popups work.
   if (deps.extensions && typeof deps.extensions.addTab === 'function') {
     try { deps.extensions.addTab(wc, hostWin); } catch (e) {
-      // best-effort: a navegação não pode quebrar por causa de extensão
+      // best-effort: navigation should not break because of an extension
     }
   }
 
-  // Session da partition: configurar UMA vez (downloads + permissões).
+  // Partition session: configure ONCE (downloads + permissions).
   wireSession(wc.session);
 }
 
-/** Resolve a webContents da webview pelo guestId, se ainda viva. */
+/** Resolves the webview's webContents by guestId, if still alive. */
 function getGuest(guestId) {
   const slot = guests.get(guestId);
   return slot ? slot.wc : null;
 }
 
-// ── window.open / target=_blank (substitui 'new-window' morto) ───────────────
+// ── window.open / target=_blank (replaces deprecated 'new-window') ───────────────
 function wireWindowOpen(wc, hostWin) {
   wc.setWindowOpenHandler(({ url, disposition }) => {
-    // Renderer é dono das webviews → pedir que ELE crie a aba.
+    // Renderer owns the webviews → ask IT to create the tab.
     sendHost(hostWin, 'tab:open', {
       url,
       background: disposition === 'background-tab',
@@ -116,7 +116,7 @@ function wireWindowOpen(wc, hostWin) {
   });
 }
 
-// ── Menu de contexto NATIVO (right-click) ────────────────────────────────────
+// ── Native context menu (right-click) ────────────────────────────────────
 function wireContextMenu(wc, hostWin) {
   wc.on('context-menu', (_e, params) => {
     const template = buildContextTemplate(wc, hostWin, params);
@@ -126,58 +126,58 @@ function wireContextMenu(wc, hostWin) {
   });
 }
 
-/** Monta o template do menu de contexto condicional aos params do clique. */
+/** Builds the context menu template conditional on click parameters. */
 function buildContextTemplate(wc, hostWin, params) {
   const t = [];
   const editFlags = params.editFlags || {};
 
-  // Link → abrir em nova aba (volta ao renderer) + copiar endereço.
+  // Link → open in new tab (back to renderer) + copy address.
   if (params.linkURL) {
     t.push({
-      label: 'Abrir link em nova aba',
+      label: 'Open link in new tab',
       click: () => sendHost(hostWin, 'tab:open', { url: params.linkURL, background: false }),
     });
     t.push({
-      label: 'Abrir link em nova aba (segundo plano)',
+      label: 'Open link in new tab (background)',
       click: () => sendHost(hostWin, 'tab:open', { url: params.linkURL, background: true }),
     });
     t.push({
-      label: 'Copiar endereço do link',
+      label: 'Copy link address',
       click: () => { try { clipboard.writeText(params.linkURL); } catch {} },
     });
     t.push({ type: 'separator' });
   }
 
-  // Imagem → salvar / copiar.
+  // Image → save / copy.
   if (params.mediaType === 'image' && params.srcURL) {
     t.push({
-      label: 'Salvar imagem como…',
+      label: 'Save image as…',
       click: () => { try { wc.downloadURL(params.srcURL); } catch {} },
     });
     t.push({
-      label: 'Copiar imagem',
+      label: 'Copy image',
       click: () => { try { wc.copyImageAt(params.x, params.y); } catch {} },
     });
     t.push({
-      label: 'Copiar endereço da imagem',
+      label: 'Copy image address',
       click: () => { try { clipboard.writeText(params.srcURL); } catch {} },
     });
     t.push({ type: 'separator' });
   }
 
-  // Campo editável → recortar/copiar/colar (respeitando editFlags).
+  // Editable field → cut/copy/paste (respecting editFlags).
   if (params.isEditable) {
-    t.push({ label: 'Recortar', enabled: !!editFlags.canCut, click: () => { try { wc.cut(); } catch {} } });
-    t.push({ label: 'Copiar', enabled: !!editFlags.canCopy, click: () => { try { wc.copy(); } catch {} } });
-    t.push({ label: 'Colar', enabled: !!editFlags.canPaste, click: () => { try { wc.paste(); } catch {} } });
-    t.push({ label: 'Selecionar tudo', enabled: !!editFlags.canSelectAll, click: () => { try { wc.selectAll(); } catch {} } });
+    t.push({ label: 'Cut', enabled: !!editFlags.canCut, click: () => { try { wc.cut(); } catch {} } });
+    t.push({ label: 'Copy', enabled: !!editFlags.canCopy, click: () => { try { wc.copy(); } catch {} } });
+    t.push({ label: 'Paste', enabled: !!editFlags.canPaste, click: () => { try { wc.paste(); } catch {} } });
+    t.push({ label: 'Select All', enabled: !!editFlags.canSelectAll, click: () => { try { wc.selectAll(); } catch {} } });
     t.push({ type: 'separator' });
   } else if (params.selectionText) {
-    // Seleção de texto → copiar + pesquisar.
-    t.push({ label: 'Copiar', click: () => { try { wc.copy(); } catch {} } });
+    // Text selection → copy + search.
+    t.push({ label: 'Copy', click: () => { try { wc.copy(); } catch {} } });
     const term = params.selectionText.trim().slice(0, 120);
     t.push({
-      label: `Pesquisar por "${term.length > 40 ? term.slice(0, 40) + '…' : term}"`,
+      label: `Search for "${term.length > 40 ? term.slice(0, 40) + '…' : term}"`,
       click: () => {
         const engineId = deps.getSearchEngine ? deps.getSearchEngine() : 'google';
         const url = deps.buildSearchUrl
@@ -189,29 +189,29 @@ function buildContextTemplate(wc, hostWin, params) {
     t.push({ type: 'separator' });
   }
 
-  // Navegação sempre disponível.
+  // Navigation always available.
   t.push({
-    label: 'Voltar',
+    label: 'Back',
     enabled: canGoBack(wc),
     click: () => { try { goBack(wc); } catch {} },
   });
   t.push({
-    label: 'Avançar',
+    label: 'Forward',
     enabled: canGoForward(wc),
     click: () => { try { goForward(wc); } catch {} },
   });
-  t.push({ label: 'Recarregar', click: () => { try { wc.reload(); } catch {} } });
+  t.push({ label: 'Reload', click: () => { try { wc.reload(); } catch {} } });
   t.push({ type: 'separator' });
   t.push({
-    label: 'Inspecionar elemento',
+    label: 'Inspect element',
     click: () => { try { wc.inspectElement(params.x, params.y); } catch {} },
   });
 
   return t;
 }
 
-// navigationHistory é a API nova (Electron 33); canGoBack/goBack diretos foram
-// depreciados. Fallback defensivo para ambas as formas.
+// navigationHistory is the new API (Electron 33); direct canGoBack/goBack have been
+// deprecated. Defensive fallback for both forms.
 function canGoBack(wc) {
   try {
     if (wc.navigationHistory && typeof wc.navigationHistory.canGoBack === 'function') {
@@ -237,7 +237,7 @@ function goForward(wc) {
   else wc.goForward();
 }
 
-// ── found-in-page → manda o contador ao renderer ─────────────────────────────
+// ── found-in-page → send the counter to renderer ─────────────────────────────
 function wireFoundInPage(wc, hostWin) {
   wc.on('found-in-page', (_e, result) => {
     sendHost(hostWin, 'find:result', {
@@ -248,10 +248,10 @@ function wireFoundInPage(wc, hostWin) {
   });
 }
 
-// ── Session da partition: downloads + permissões (UMA vez) ────────────────────
+// ── Partition session: downloads + permissions (ONCE) ────────────────────
 function wireSession(ses) {
   if (!ses) return;
-  // chave estável por session (usa o storagePath se houver; senão a própria ref)
+  // stable key per session (uses storagePath if present; otherwise the ref itself)
   const key = ses.storagePath || PARTITION;
   if (wiredSessions.has(key)) return;
   wiredSessions.add(key);
@@ -260,28 +260,28 @@ function wireSession(ses) {
   ses.on('will-download', (_e, item) => {
     if (!deps.registerDownload) return;
     deps.registerDownload(item, (payload) => {
-      // emite a TODAS as janelas (renderer decide se mostra)
+      // emits to ALL windows (renderer decides whether to show)
       broadcast('downloads:event', payload);
     });
   });
 
-  // Permissões: default DENY para desconhecidas; pergunta para as sensíveis.
+  // Permissions: default DENY for unknown ones; prompt for sensitive ones.
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
     const sensitive = ['media', 'geolocation', 'notifications'];
     if (!sensitive.includes(permission)) {
-      // tudo que não for sensível: negar por padrão (mais seguro que o default do Electron)
+      // anything not sensitive: deny by default (safer than Electron's default)
       callback(false);
       return;
     }
     const requestId = `perm_${Date.now()}_${++permissionSeq}`;
     const origin = (details && (details.requestingUrl || details.requestingOrigin)) || '';
-    // timeout de segurança: se ninguém responder, nega (libera a página sem pendurar).
+    // security timeout: if nobody responds, deny (frees the page without hanging).
     const timer = setTimeout(() => {
       if (pendingPermissions.has(requestId)) respondPermission(requestId, false);
     }, PERMISSION_TIMEOUT_MS);
     if (timer.unref) timer.unref();
     pendingPermissions.set(requestId, { callback, timer, guestId: wc.id, origin, permission });
-    // pergunta à UI da janela que contém essa webview
+    // prompt the window's UI that contains this webview
     const win = ownerWindow(wc);
     sendHost(win, 'permission:request', {
       requestId,
@@ -291,8 +291,8 @@ function wireSession(ses) {
     });
   });
 
-  // Checagem síncrona (navigator.permissions.query, enumerateDevices labels…):
-  // reflete o que o usuário JÁ concedeu; deny-by-default para o resto.
+  // Synchronous check (navigator.permissions.query, enumerateDevices labels…):
+  // reflects what the user has ALREADY granted; deny-by-default for everything else.
   ses.setPermissionCheckHandler((_wc, permission, requestingOrigin) => {
     const sensitive = ['media', 'geolocation', 'notifications'];
     if (!sensitive.includes(permission)) return false;
@@ -300,13 +300,13 @@ function wireSession(ses) {
   });
 }
 
-/** Resolve a permissão pendente (chamado pelo handler IPC 'permission:respond'). */
+/** Resolves a pending permission (called by the 'permission:respond' IPC handler). */
 function respondPermission(requestId, granted) {
   const slot = pendingPermissions.get(requestId);
   if (!slot) return false;
   pendingPermissions.delete(requestId);
   try { clearTimeout(slot.timer); } catch {}
-  // memoriza concessões p/ o check handler síncrono (permissions.query/enumerateDevices).
+  // memorizes grants for the synchronous check handler (permissions.query/enumerateDevices).
   if (granted && slot.origin && slot.permission) {
     grantedPermissions.add(`${slot.origin}|${slot.permission}`);
   }
@@ -314,7 +314,7 @@ function respondPermission(requestId, granted) {
   return true;
 }
 
-// ── Helpers de envio ──────────────────────────────────────────────────────────
+// ── Send helpers ──────────────────────────────────────────────────────────
 function sendHost(win, channel, payload) {
   if (deps.sendToHost) { deps.sendToHost(win, channel, payload); return; }
   if (win && !win.isDestroyed()) {
@@ -323,13 +323,13 @@ function sendHost(win, channel, payload) {
 }
 
 function broadcast(channel, payload) {
-  // delega ao main, que conhece todas as janelas
+  // delegates to the main, which knows all windows
   if (deps.broadcast) { deps.broadcast(channel, payload); return; }
 }
 
-/** Tenta achar a BrowserWindow dona de uma webContents de webview. */
+/** Attempts to find the BrowserWindow that owns a webview webContents. */
 function ownerWindow(wc) {
-  // O hostWebContents aponta para a página que embute a <webview>.
+  // The hostWebContents points to the page that embeds the <webview>.
   try {
     const { BrowserWindow } = require('electron');
     const hostWC = wc.hostWebContents;
@@ -338,7 +338,7 @@ function ownerWindow(wc) {
       if (win) return win;
     }
   } catch {}
-  // fallback: primeira janela disponível
+  // fallback: first available window
   try {
     const { BrowserWindow } = require('electron');
     return BrowserWindow.getAllWindows()[0] || null;

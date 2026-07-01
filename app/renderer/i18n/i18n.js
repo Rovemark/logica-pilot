@@ -1,30 +1,30 @@
 'use strict';
 /**
- * i18n.js — Runtime de internacionalização da casca.
- * Carregado por <script> DEPOIS de locales.js, ANTES de renderer.js.
+ * i18n.js — Runtime for shell internationalization.
+ * Loaded by <script> AFTER locales.js, BEFORE renderer.js.
  *
- * Uso no HTML (declarativo):
+ * Usage in HTML (declarative):
  *   data-i18n="key"        → textContent
  *   data-i18n-title="key"  → title
  *   data-i18n-ph="key"     → placeholder
  *   data-i18n-aria="key"   → aria-label
- * Uso no JS: window.i18n.t('key', { var: valor })
+ * Usage in JS: window.i18n.t('key', { var: value })
  *
- * Idioma inicial: window.LP_LANG (injetado), senão o do <html lang>, senão pt-BR.
- * Trocar idioma: window.i18n.setLang('en') → reaplica no DOM + emite 'i18n:changed'.
+ * Initial language: window.LP_LANG (injected), otherwise the <html lang>, otherwise pt-BR.
+ * Change language: window.i18n.setLang('en') → reapplies to DOM + emits 'i18n:changed'.
  */
 (function () {
   const LOCALES = window.LP_LOCALES || {};
   const FALLBACK = 'pt-BR';
 
   function pick(lang) {
-    // 'auto'/vazio → idioma do sistema (Electron seta navigator.language pelo SO)
+    // 'auto'/empty → system language (Electron sets navigator.language from OS)
     if (!lang || lang === 'auto') {
       lang = (typeof navigator !== 'undefined' &&
         (navigator.language || (navigator.languages && navigator.languages[0]))) || FALLBACK;
     }
     if (LOCALES[lang]) return lang;
-    // tolera 'en-US' → 'en', 'pt-PT' → 'pt-BR', 'es-419' → 'es'
+    // tolerates 'en-US' → 'en', 'pt-PT' → 'pt-BR', 'es-419' → 'es'
     const base = String(lang).toLowerCase().split('-')[0];
     const hit = Object.keys(LOCALES).find((k) => k.toLowerCase().split('-')[0] === base);
     return hit || FALLBACK;

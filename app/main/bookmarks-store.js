@@ -1,27 +1,27 @@
 'use strict';
 
 /**
- * bookmarks-store.js — Favoritos (bookmarks) persistentes (paridade Chrome).
+ * bookmarks-store.js — Persistent bookmarks (parity with Chrome).
  *
- * Armazena entradas { url, title, favicon, ts } em userData/bookmarks.json com
- * escrita debounced. Dedup por URL (uma URL = um favorito). Alimenta a estrela da
- * omnibox, a barra de favoritos e o gerenciador.
+ * Stores entries { url, title, favicon, ts } in userData/bookmarks.json with
+ * debounced writes. Dedup by URL (one URL = one bookmark). Feeds the omnibox star,
+ * the bookmarks bar, and the bookmark manager.
  *
- * Mesmo PADRÃO de store do history-store.js / settings.js: init(userData),
- * estado em memória, debounce + flush, tolerante a disco ausente/corrompido.
+ * Same PATTERN as history-store.js / settings.js: init(userData),
+ * state in memory, debounce + flush, tolerant to missing/corrupted disk.
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const MAX_ENTRIES = 5000; // teto duro para o arquivo não crescer sem limite
+const MAX_ENTRIES = 5000; // hard ceiling so the file doesn't grow unbounded
 
 let filePath = null;
-/** @type {Map<string, {url,title,favicon,ts}>} ordem de inserção = ordem da barra */
+/** @type {Map<string, {url,title,favicon,ts}>} insertion order = bookmarks bar order */
 let byUrl = new Map();
 let writeTimer = null;
 
-/** Inicializa apontando para o diretório de dados do usuário. */
+/** Initializes pointing to the user data directory. */
 function init(userDataDir) {
   filePath = path.join(userDataDir, 'bookmarks.json');
   load();
@@ -51,17 +51,17 @@ function normalize(e) {
   };
 }
 
-/** URLs internas/vazias não são favoritáveis (sem sentido salvar pilot://newtab). */
+/** Internal/empty URLs are not bookmarkable (no point in saving pilot://newtab). */
 function isBookmarkable(url) {
   if (!url || typeof url !== 'string') return false;
   if (url.startsWith('about:')) return false;
   if (url.startsWith('chrome://') || url.startsWith('devtools://')) return false;
-  // pilot:// (newtab) não vira favorito; http/https/file sim
+  // pilot:// (newtab) does not become a bookmark; http/https/file do
   if (url.startsWith('pilot://')) return false;
   return /^https?:\/\//i.test(url) || /^file:\/\//i.test(url);
 }
 
-/** Lista (array) na ordem de inserção — é como a barra de favoritos exibe. */
+/** List (array) in insertion order — this is how the bookmarks bar displays it. */
 function list() {
   return [...byUrl.values()].map((e) => ({ ...e }));
 }
@@ -70,13 +70,13 @@ function isBookmarked(url) {
   return !!url && byUrl.has(url);
 }
 
-/** Adiciona/atualiza um favorito (dedup por url). Retorna o registro salvo (ou null). */
+/** Adds/updates a bookmark (dedup by url). Returns the saved record (or null). */
 function add({ url, title, favicon, ts } = {}) {
   if (!isBookmarkable(url)) return null;
   const now = Number.isFinite(ts) ? ts : Date.now();
   const existing = byUrl.get(url);
   if (existing) {
-    // atualiza metadados sem perder a posição na barra
+    // updates metadata without losing position in the bar
     if (title) existing.title = title;
     if (favicon) existing.favicon = favicon;
     scheduleWrite();
@@ -89,7 +89,7 @@ function add({ url, title, favicon, ts } = {}) {
   return { ...rec };
 }
 
-/** Remove um favorito por URL. Retorna true se removeu. */
+/** Removes a bookmark by URL. Returns true if removed. */
 function remove(url) {
   const ok = byUrl.delete(url);
   if (ok) scheduleWrite();
@@ -97,8 +97,8 @@ function remove(url) {
 }
 
 /**
- * Alterna o favorito da URL. Retorna { bookmarked: bool } com o estado FINAL.
- * Se não estava → adiciona (precisa de title/favicon); se estava → remove.
+ * Toggles the bookmark for a URL. Returns { bookmarked: bool } with the FINAL state.
+ * If it wasn't bookmarked → adds it (requires title/favicon); if it was → removes it.
  */
 function toggle({ url, title, favicon } = {}) {
   if (!isBookmarkable(url)) return { bookmarked: false };
@@ -111,7 +111,7 @@ function toggle({ url, title, favicon } = {}) {
   return { bookmarked: true };
 }
 
-/** Edita um favorito existente (patch parcial: title/favicon/url). Retorna o registro ou null. */
+/** Edits an existing bookmark (partial patch: title/favicon/url). Returns the record or null. */
 function update(url, patch = {}) {
   const existing = byUrl.get(url);
   if (!existing) return null;
@@ -119,15 +119,15 @@ function update(url, patch = {}) {
   if (typeof patch.title === 'string' && patch.title) next.title = patch.title;
   if (typeof patch.favicon === 'string') next.favicon = patch.favicon;
 
-  // troca de URL (re-chaveia preservando posição relativa)
+  // URL change (re-keys while preserving relative position)
   if (typeof patch.url === 'string' && patch.url && patch.url !== url) {
     if (!isBookmarkable(patch.url)) return { ...existing };
     next.url = patch.url;
-    // reconstrói o Map preservando a ordem, trocando a entrada no lugar
+    // rebuilds the Map preserving order, swapping the entry in place
     const rebuilt = new Map();
     for (const [k, v] of byUrl) {
       if (k === url) rebuilt.set(next.url, normalize(next));
-      else if (k === next.url) continue; // evita duplicar se já existia
+      else if (k === next.url) continue; // avoids duplication if it already existed
       else rebuilt.set(k, v);
     }
     byUrl = rebuilt;
@@ -140,7 +140,7 @@ function update(url, patch = {}) {
   return { ...next };
 }
 
-/** Se passar do teto, remove os favoritos mais antigos. */
+/** If the ceiling is exceeded, removes the oldest bookmarks. */
 function enforceCap() {
   if (byUrl.size <= MAX_ENTRIES) return;
   const all = [...byUrl.values()].sort((a, b) => a.ts - b.ts);
@@ -160,7 +160,7 @@ function flush() {
   try {
     fs.writeFileSync(filePath, JSON.stringify([...byUrl.values()], null, 2), 'utf8');
   } catch {
-    // disco indisponível — favoritos ficam só em memória
+    // disk unavailable — bookmarks remain in memory only
   }
 }
 
