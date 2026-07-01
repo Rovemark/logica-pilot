@@ -1,7 +1,7 @@
 {
   "name": "logica-pilot",
   "productName": "Logica Pilot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "The AI-native browser and a token-efficient Playwright replacement: a pure-CDP engine (zero-dependency core), hybrid perception (accessibility tree + vision) and a controlled autonomous loop — shipped as a CLI, an MCP server and a desktop browser with native ad-blocking and Chrome extensions.",
   "author": "Andre Ambrósio / Rovemark",
