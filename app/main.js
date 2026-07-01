@@ -80,8 +80,8 @@ process.on('unhandledRejection', (reason) => {
 
 // Useful browser engine flags (non-fatal if ignored)
 app.commandLine.appendSwitch('disable-features', 'AutomationControlled');
-// Screenshot mode: force an English UI everywhere (shell + newtab webview) for the README.
-if (process.env.LOGICA_PILOT_CAPTURE) app.commandLine.appendSwitch('lang', 'en-US');
+// Screenshot / film mode: force an English UI (shell + newtab + web content) for the README.
+if (process.env.LOGICA_PILOT_CAPTURE || process.env.LOGICA_PILOT_FILM) app.commandLine.appendSwitch('lang', 'en-US');
 
 // Present as Google Chrome: clean UA (without "Electron/Logica Pilot") so sites
 // don't break AND so Chrome Web Store recognizes the browser (warning
@@ -236,6 +236,10 @@ function createWindow(opts = {}) {
   if (process.env.LOGICA_PILOT_CAPTURE) {
     win.webContents.once('did-finish-load', () => { runCapture(win).catch((e) => console.error('[capture]', e && e.message)); });
   }
+  // Film mode: capture frames WHILE the Pilot executes a task (→ action GIF).
+  if (process.env.LOGICA_PILOT_FILM) {
+    win.webContents.once('did-finish-load', () => { runFilm(win).catch((e) => console.error('[film]', e && e.message)); });
+  }
 
   if (process.env.LOGICA_PILOT_DEVTOOLS) win.webContents.openDevTools({ mode: 'detach' });
 
@@ -344,6 +348,40 @@ async function runCapture(win) {
       await shotOf(menuPopupWin, 'ext-menu.png', 400);
     }
   } catch (e) { console.error('[capture] error', e && e.message); }
+  app.exit(0);
+}
+
+// ── Film mode: capture frames WHILE the Pilot autonomously executes a task ────
+async function runFilm(win) {
+  const dir = process.env.LOGICA_PILOT_FILM;
+  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  const wc = win.webContents;
+  const js = (code) => wc.executeJavaScript(code, true).catch(() => {});
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let n = 0;
+  const frame = async () => {
+    try {
+      const img = await wc.capturePage();
+      fs.writeFileSync(path.join(dir, `f${String(n).padStart(3, '0')}.png`), img.toPNG());
+      n++;
+    } catch {}
+  };
+  try {
+    try { win.show(); win.focus(); } catch {}
+    try { settingsStore.set({ language: 'en' }); } catch {}
+    await js(`window.i18n && window.i18n.setLang('en')`);
+    // Hacker News: English + LEAN HTML → the Pilot is fast, so the timeline fills with
+    // clear steps (scroll/read) that stay on one page (no huge-article stall).
+    await js(`window.dispatchMenu && window.dispatchMenu('open-url','https://news.ycombinator.com')`);
+    await sleep(3500);
+    await js(`window.dispatchMenu && window.dispatchMenu('toggle-pilot');` +
+      `var g=document.getElementById('goal');` +
+      `if(g){g.value='Scroll through the stories and tell me the title and points of the highest-scoring story on this page.'; g.dispatchEvent(new Event('input'));}` +
+      `var r=document.getElementById('run'); if(r) r.click();`);
+    // Film ~24s of the run — one frame every ~0.8s.
+    for (let i = 0; i < 30; i++) { await frame(); await sleep(800); }
+    console.log('[film] captured', n, 'frames');
+  } catch (e) { console.error('[film] error', e && e.message); }
   app.exit(0);
 }
 

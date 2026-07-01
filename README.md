@@ -12,12 +12,16 @@ goal is met. Pure CDP engine · zero-dependency core · headless agent mode **an
 browser · **CLI and MCP** with the same 26 tools.
 
 <p align="center">
-  <img src="docs/media/demo.gif" alt="Logica Pilot in action — new tab, autonomous Pilot executing a task, native ad-block" width="100%">
+  <img src="docs/media/pilot-run.gif" alt="The Pilot autonomously scrolls, extracts and answers a goal on a live page" width="100%">
+  <br><em>A real, unedited run: given a goal, the Pilot <strong>navigates, scrolls, extracts and answers on its own</strong> — steps stream on the right, the answer is formatted and in the browser's language.</em>
 </p>
 
 <p align="center">
-  <img src="docs/media/screenshot-pilot.png" alt="The Pilot autonomously executes a real goal on Wikipedia and answers with a formatted result" width="100%">
-  <br><em>A real run: given a goal, the Pilot <strong>scrolls, reads and answers</strong> — in the browser's language, formatted (steps on the right, ad-block counter in the toolbar).</em>
+  <img src="docs/media/screenshot-pilot.png" alt="The Pilot's result: highest-scoring Hacker News story, with steps and a formatted answer" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/media/demo.gif" alt="Logica Pilot tour — new tab, a live page, native ad-block" width="100%">
 </p>
 
 ---
