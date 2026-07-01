@@ -94,6 +94,9 @@ function equip(wc, hostWin) {
     }
   }
 
+  // Ad-block: reset the "blocked on this page" counter on main-frame navigation.
+  wc.on('did-navigate', () => { try { require('./adblock-manager').resetTab(wc.id); } catch {} });
+
   // Partition session: configure ONCE (downloads + permissions).
   wireSession(wc.session);
 }

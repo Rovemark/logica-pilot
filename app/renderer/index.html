@@ -67,12 +67,18 @@
 
     <button id="theme-btn" class="nav-btn" data-i18n-title="theme.title" data-i18n-aria="theme.aria" title="Tema (⌘⇧L)" aria-label="Alternar tema"></button>
 
-    <!-- Fileira de botões das extensões do Chrome (electron-chrome-extensions).
-         O preload injeta a API que define este custom element. partition deve
-         bater com a das <webview>. -->
+    <!-- Ad-block shield: shows the number of blocked requests; click toggles blocking. -->
+    <button id="adblock-btn" class="nav-btn adblock-btn" data-i18n-title="adblock.title" data-i18n-aria="adblock.title" title="Ad-block" aria-label="Ad-block">
+      <svg viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.4 8.6-8 11-4.6-2.4-8-6-8-11V5z"/></svg>
+      <span class="adblock-count" id="adblock-count" hidden>0</span>
+    </button>
+
+    <!-- Row of Chrome extension buttons (electron-chrome-extensions). The preload
+         injects the API that defines this custom element. partition must match the
+         one used by the <webview> tabs. -->
     <browser-action-list id="ext-actions" partition="persist:logica-pilot"></browser-action-list>
 
-    <!-- Botão de extensões (🧩) → abre a Chrome Web Store / gerência -->
+    <!-- Extensions button (🧩) → opens the installed-extensions menu / Web Store. -->
     <button id="ext-btn" class="nav-btn" data-i18n-title="ext.title" data-i18n-aria="ext.title" title="Extensões" aria-label="Extensões">
       <svg viewBox="0 0 24 24"><path d="M20.5 11H19V7a2 2 0 0 0-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4a2 2 0 0 0-2 2v3.8h1.5a2.7 2.7 0 0 1 0 5.4H2V20a2 2 0 0 0 2 2h3.8v-1.5a2.7 2.7 0 0 1 5.4 0V22H17a2 2 0 0 0 2-2v-4h1.5a2.5 2.5 0 0 0 0-5z"/></svg>
     </button>
@@ -85,14 +91,16 @@
     <button id="menu-btn" class="nav-btn" data-i18n-title="menu.title" data-i18n-aria="menu.title" title="Menu" aria-label="Menu">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/></svg>
     </button>
-    <!-- dropdown ⋮ (overlays.js preenche os itens) -->
+    <!-- ⋮ dropdown (overlays.js fills in the items) -->
     <div id="app-menu" class="menu-popover" hidden></div>
+    <!-- 🧩 extensions dropdown (renderer fills in the installed extensions) -->
+    <div id="ext-menu" class="menu-popover" hidden></div>
 
-    <!-- barra de progresso de carregamento -->
+    <!-- page load progress bar -->
     <div id="progress" class="progress" hidden></div>
   </div>
 
-  <!-- Barra de favoritos (toggle ⌘⇧B; bookmarks.js preenche os itens) -->
+  <!-- Bookmarks bar (toggle ⌘⇧B; bookmarks.js fills in the items) -->
   <div id="bookmarks-bar" class="bookmarks-bar" hidden></div>
 
   <!-- Conteúdo: webviews + painel do Pilot -->

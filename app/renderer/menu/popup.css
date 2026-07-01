@@ -1,4 +1,4 @@
-/* Menu ⋮ flutuante — identidade Logica (cantos arredondados, tema, limpo). */
+/* Floating ⋮ menu — Logica identity (rounded corners, themed, clean). */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
@@ -45,5 +45,24 @@ html, body {
 .mi:hover { background: var(--accent-soft); color: var(--accent); }
 .mi .l { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mi .k { font-size: 11.5px; color: var(--muted); }
+
+/* Extension/action icon + glyph */
+.mi .ic { width: 18px; height: 18px; border-radius: 4px; flex: none; object-fit: contain; }
+.mi .gl { width: 18px; text-align: center; flex: none; font-size: 14px; }
+
+/* Section header + empty placeholder */
+.mh { padding: 8px 12px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em;
+      text-transform: uppercase; color: var(--muted); }
+.me { padding: 8px 12px; font-size: 12.5px; color: var(--muted); }
+
+/* Trailing buttons (pin / remove) on extension rows */
+.mi .tb { flex: none; width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent;
+          color: var(--muted); font-size: 13px; cursor: pointer; opacity: .45;
+          display: flex; align-items: center; justify-content: center; transition: opacity .1s, background .1s; }
+.mi:hover .tb { opacity: .7; }
+.mi .tb:hover { background: var(--accent-soft); opacity: 1; }
+.mi .tb.pin.on { opacity: 1; filter: none; }
+.mi .tb.rm:hover { color: #ff6b6b; background: rgba(255, 107, 107, .14); }
+.mi .tb.rm.armed { color: #ff6b6b; opacity: 1; background: rgba(255, 107, 107, .18); font-size: 11px; font-weight: 700; }
 
 .sep { height: 1px; margin: 5px 8px; background: var(--border); }

@@ -20,6 +20,9 @@ const DEFAULTS = Object.freeze({
   showBookmarksBar: false, // display the bookmarks bar below the toolbar
   language: 'auto', // 'auto' (follows the OS) | 'pt-BR' | 'en' | 'es'
   aiApiKey: '', // user's Anthropic key (sk-ant-…) for Pilot without LogicaProxy
+  adBlock: true, // native ad & tracker blocking (EasyList + EasyPrivacy) on by default
+  adBlockAllowlist: [], // hostnames where ad-block is disabled (per-site allow)
+  extPins: {}, // extension id → pinned(bool). Absent = pinned (icon shown in toolbar).
 });
 
 // supported languages by the shell (must exist in renderer/i18n/locales.js)
@@ -58,6 +61,15 @@ function sanitize(s) {
   if (typeof s.showBookmarksBar === 'boolean') out.showBookmarksBar = s.showBookmarksBar;
   if (s.language === 'auto' || LANGUAGES.includes(s.language)) out.language = s.language;
   if (typeof s.aiApiKey === 'string') out.aiApiKey = s.aiApiKey.trim();
+  if (typeof s.adBlock === 'boolean') out.adBlock = s.adBlock;
+  if (Array.isArray(s.adBlockAllowlist)) {
+    out.adBlockAllowlist = s.adBlockAllowlist.filter((h) => typeof h === 'string' && h).slice(0, 5000);
+  }
+  if (s.extPins && typeof s.extPins === 'object' && !Array.isArray(s.extPins)) {
+    const pins = {};
+    for (const [k, v] of Object.entries(s.extPins)) if (typeof v === 'boolean') pins[k] = v;
+    out.extPins = pins;
+  }
   return out;
 }
 

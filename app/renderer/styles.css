@@ -259,7 +259,19 @@ body:not(.darwin) .win-controls { display: flex; }
 .nav-btn:disabled { opacity: .3; }
 .nav-btn:disabled:hover { background: transparent; color: var(--muted); }
 
-/* ── Selo do modo anônimo (toolbar) ────────────────────────── */
+/* ── Ad-block shield (toolbar) ─────────────────────────────── */
+.adblock-btn { color: var(--accent); }
+.adblock-btn svg { fill: currentColor; stroke: none; }         /* on → solid shield */
+.adblock-btn.off { color: var(--muted); }
+.adblock-btn.off svg { fill: none; stroke: currentColor; stroke-width: 2; } /* off → outline */
+.adblock-count {
+  position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px;
+  padding: 0 3px; border-radius: 8px; background: var(--accent-brand);
+  color: #fff; font-size: 9.5px; font-weight: 700; line-height: 15px; text-align: center;
+  box-shadow: 0 0 0 2px var(--bg); pointer-events: none;
+}
+
+/* ── Incognito badge (toolbar) ─────────────────────────────── */
 .incognito-badge {
   display: inline-flex; align-items: center; gap: 6px;
   height: 26px; padding: 0 10px 0 8px; border-radius: 8px;

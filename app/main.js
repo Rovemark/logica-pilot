@@ -34,6 +34,7 @@ const actions = require('../src/actions');
 
 const webviewManager = require('./main/webview-manager');
 const extensionsManager = require('./main/extensions-manager');
+const adblockManager = require('./main/adblock-manager');
 const { buildMenu } = require('./main/menu');
 const historyStore = require('./main/history-store');
 const downloadsStore = require('./main/downloads-store');
@@ -660,9 +661,9 @@ ipcMain.handle('appmenu:popup', (evt, { items, rect, dark } = {}) => {
   menuPopupParent = parent;
 
   const cb = parent.getContentBounds();
-  const width = 270;
+  const width = 288;
   let height = 12;
-  for (const it of items) height += it.sep ? 11 : 33;
+  for (const it of items) height += it.sep ? 11 : (it.header ? 24 : 33);
   height = Math.max(48, Math.min(height, cb.height - 24));
 
   let x = Math.round(cb.x + (rect ? rect.right - width : cb.width - width - 12));
@@ -1070,10 +1071,118 @@ ipcMain.handle('settings:set', (evt, patch) => {
   const next = settingsStore.set(patch || {});
   // if AI key changed, reconfigure Pilot's brain on the fly.
   if (patch && 'aiApiKey' in patch) { try { llm.configure({ apiKey: next.aiApiKey }); } catch {} }
+  // if ad-block toggled, apply live to the webviews' session + sync the shield.
+  if (patch && 'adBlock' in patch) { try { adblockManager.setEnabled(next.adBlock); broadcastAdblockState(); } catch {} }
   // propagate to ALL shell windows (Settings floating panel is separate window;
   // without this open shell would have stale searchEngine/homepage/theme).
   try { broadcast('settings:changed', settingsStore.get()); } catch {}
   return next;
+});
+
+// ── Ad-block (toolbar shield + anchored panel) ──────────────────────────────────
+let adblockPanelWin = null;
+let adblockPanelCtx = null;
+
+function broadcastAdblockState() {
+  const st = {
+    available: adblockManager.isAvailable(),
+    enabled: adblockManager.isEnabled(),
+    count: adblockManager.getCount(),
+  };
+  try { broadcast('adblock:state', st); } catch {}
+  return st;
+}
+// http(s) hostname of a tab (for the per-site allow toggle); internal pages → null.
+function adblockHostOf(guestId) {
+  try {
+    const wc = guestId != null ? webContents.fromId(guestId) : null;
+    if (!wc) return null;
+    const u = new URL(wc.getURL());
+    return /^https?:$/.test(u.protocol) ? u.hostname : null;
+  } catch { return null; }
+}
+function adblockLabels() {
+  const lang = resolveUiLang(settingsStore.get().language);
+  const m = loadLocales()[lang] || {};
+  const pick = (k, fb) => (m[k] != null ? m[k] : fb);
+  return {
+    title: pick('adblock.title', 'Ad blocker'),
+    master: pick('settings.adblock', 'Block ads and trackers'),
+    here: pick('adblock.blockedHere', 'Blocked on this page'),
+    total: pick('adblock.blockedTotal', '{n} blocked in total'),
+    allow: pick('adblock.allowSite', 'Allow ads on this site'),
+    lists: pick('adblock.listsLabel', 'Filter lists'),
+  };
+}
+function adblockPanelData(extra) {
+  const ctx = adblockPanelCtx || {};
+  return Object.assign({ labels: adblockLabels() }, extra || {}, adblockManager.getStats(ctx.host, ctx.guestId));
+}
+
+ipcMain.handle('adblock:get', () => ({
+  available: adblockManager.isAvailable(),
+  enabled: adblockManager.isEnabled(),
+  count: adblockManager.getCount(),
+}));
+ipcMain.handle('adblock:toggle', () => {
+  const enabled = adblockManager.setEnabled(!adblockManager.isEnabled());
+  try { settingsStore.set({ adBlock: enabled }); } catch {}
+  try { broadcast('settings:changed', settingsStore.get()); } catch {}
+  broadcastAdblockState();
+  return { enabled, count: adblockManager.getCount() };
+});
+ipcMain.handle('adblock:panel-data', () => adblockPanelData());
+ipcMain.handle('adblock:setAllowlist', (evt, { host, allowed } = {}) => {
+  adblockManager.setAllowed(host, allowed);
+  return adblockPanelData();
+});
+ipcMain.on('adblock:reload-active', () => {
+  const gid = adblockPanelCtx && adblockPanelCtx.guestId;
+  if (gid != null) { try { const wc = webContents.fromId(gid); if (wc) wc.reload(); } catch {} }
+});
+ipcMain.on('adblock:panel-close', () => {
+  if (adblockPanelWin && !adblockPanelWin.isDestroyed()) adblockPanelWin.close();
+});
+
+// Anchored floating panel under the 🛡️ shield (clones the appmenu:popup pattern —
+// the shell sits behind the <webview>, so the panel must be a native window).
+ipcMain.handle('adblock:panel', (evt, { rect, dark } = {}) => {
+  const parent = BrowserWindow.fromWebContents(evt.sender);
+  if (!parent) return false;
+  if (adblockPanelWin && !adblockPanelWin.isDestroyed()) { adblockPanelWin.close(); adblockPanelWin = null; }
+
+  const guestId = activeGuestByWindow.get(parent);
+  adblockPanelCtx = { host: adblockHostOf(guestId), guestId, parent };
+
+  const cb = parent.getContentBounds();
+  const width = 300;
+  const height = 236;
+  let x = Math.round(cb.x + (rect ? rect.right - width : cb.width - width - 12));
+  let y = Math.round(cb.y + (rect ? rect.bottom + 6 : 88));
+  x = Math.max(cb.x + 6, Math.min(x, cb.x + cb.width - width - 6));
+  y = Math.max(cb.y + 6, Math.min(y, cb.y + cb.height - height - 6));
+
+  adblockPanelWin = new BrowserWindow({
+    width, height, x, y,
+    frame: false, resizable: false, movable: false, minimizable: false,
+    maximizable: false, fullscreenable: false, skipTaskbar: true,
+    hasShadow: true, roundedCorners: true, parent, show: false,
+    backgroundColor: dark === false ? '#ffffff' : '#12151f',
+    webPreferences: {
+      preload: path.join(__dirname, 'renderer', 'adblock', 'adblock-preload.js'),
+      contextIsolation: true, nodeIntegration: false,
+    },
+  });
+  adblockPanelWin.loadFile(path.join(__dirname, 'renderer', 'adblock', 'adblock.html'));
+  adblockPanelWin.webContents.once('did-finish-load', () => {
+    try {
+      adblockPanelWin.webContents.send('adblock:panel-data', adblockPanelData({ dark: dark !== false }));
+      adblockPanelWin.show();
+    } catch {}
+  });
+  adblockPanelWin.on('blur', () => { if (adblockPanelWin && !adblockPanelWin.isDestroyed()) adblockPanelWin.close(); });
+  adblockPanelWin.on('closed', () => { adblockPanelWin = null; });
+  return true;
 });
 
 // ── About / versions ───────────────────────────────────────────────────────────
@@ -1345,6 +1454,20 @@ app.whenReady().then(() => {
     .init(session.fromPartition(PARTITION), userData)
     .then((ex) => { if (ex) console.log('[ext] extensions system ready'); })
     .catch((e) => console.error('[ext] init failed:', e && e.message));
+
+  // Native ad & tracker blocking (EasyList + EasyPrivacy) on the webviews' session.
+  // Reliable where MV3 extensions are not. Best-effort — failure doesn't kill browser.
+  adblockManager
+    .init(session.fromPartition(PARTITION), {
+      enabled: settingsStore.get().adBlock,
+      userDataDir: userData,
+      initialAllowlist: settingsStore.get().adBlockAllowlist || [],
+      saveAllowlist: (arr) => { try { settingsStore.set({ adBlockAllowlist: arr }); } catch {} },
+    })
+    .then((b) => { if (b) console.log('[adblock] ready · enabled=', adblockManager.isEnabled()); })
+    .catch((e) => console.error('[adblock] init failed:', e && e.message));
+  // Push blocked-count updates to the toolbar badge.
+  adblockManager.onCount((count) => broadcast('adblock:count', { count }));
 
   registerPilotProtocol();
   registerViewIpc(); // Phase 1: view:* handlers (inert with flag OFF)

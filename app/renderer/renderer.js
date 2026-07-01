@@ -284,6 +284,12 @@ function openPanelOrOverlay(type) {
 // ── DISPATCH: single source of actions ────────────────────────
 function dispatchMenu(name, arg) {
   const t = active();
+  // Dynamic action: open an installed extension's options/homepage (ext-open:<id>).
+  if (typeof name === 'string' && name.startsWith('ext-open:')) {
+    const id = name.slice('ext-open:'.length);
+    try { window.pilot.extActivate && window.pilot.extActivate({ id }); } catch {}
+    return;
+  }
   switch (name) {
     case 'new-tab': strip.create(HOME); address.focus(); break;
     case 'close-tab': if (strip.activeId) strip.close(strip.activeId); break;
@@ -347,25 +353,49 @@ function openInternal(url) {
   else strip.create(url);
 }
 
-// ── Extensions: floating menu with "Install from folder" (always works) +
-//    "Chrome Web Store". Installing from the store inside <webview> is fragile (the store
-//    detects "not-Chrome"); the unpacked folder is the guaranteed path. ──────
-function openExtensions() {
+// ── Extensions: floating menu listing installed extensions (icon + name +
+//    pin/unpin + remove), plus "Install from folder" and "Chrome Web Store".
+//    Installing from the store inside <webview> is fragile (store detects
+//    "not-Chrome"); the unpacked folder is the guaranteed path. ──────
+const T = (k, v) => (window.i18n ? window.i18n.t(k, v) : k);
+
+async function openExtensions() {
+  const btn = $('#ext-btn');
+  const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+  let list = [];
+  try { list = (window.pilot.extList ? await window.pilot.extList() : []) || []; } catch {}
+
   const items = [];
+  // Offer to install the extension of the current Web Store detail page.
   const t = active();
   const sid = t ? storeIdFromUrl(t.url) : null;
-  if (sid) {
-    let nm = ((t.title || '').replace(/\s*[-–|]\s*Chrome.*$/i, '').trim()) || 'this extension';
-    if (nm.length > 34) nm = nm.slice(0, 34) + '…';
-    items.push({ label: '⬇ Install "' + nm + '" here', action: 'ext-install-current' });
+  if (sid && !list.some((e) => e.id === sid)) {
+    let nm = ((t.title || '').replace(/\s*[-–|]\s*Chrome.*$/i, '').trim()) || 'extension';
+    if (nm.length > 28) nm = nm.slice(0, 28) + '…';
+    items.push({ glyph: '⬇', label: T('ext.install', { name: nm }), action: 'ext-install-current' });
     items.push({ sep: true });
   }
-  items.push({ label: 'Install extension (choose folder)…', action: 'ext-install-unpacked' });
-  items.push({ label: 'Open Chrome Web Store', action: 'ext-store' });
-  const btn = $('#ext-btn');
+
+  items.push({ header: T('ext.installed') });
+  if (!list.length) {
+    items.push({ empty: T('ext.none') });
+  } else {
+    for (const e of list) {
+      items.push({
+        icon: e.icon || null,
+        glyph: e.icon ? null : '🧩',
+        label: e.name,
+        action: 'ext-open:' + e.id,
+        ext: { id: e.id, pinned: e.pinned, hasAction: e.hasAction },
+      });
+    }
+  }
+  items.push({ sep: true });
+  items.push({ glyph: '📁', label: T('ext.installFolder'), action: 'ext-install-unpacked' });
+  items.push({ glyph: '🛒', label: T('ext.webStore'), action: 'ext-store' });
+
   if (window.pilot && window.pilot.showAppMenu && btn) {
     const r = btn.getBoundingClientRect();
-    const dark = document.documentElement.getAttribute('data-theme') !== 'light';
     window.pilot.showAppMenu({ items, rect: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, dark });
   } else if (sid) {
     extInstallById(sid);
@@ -497,6 +527,75 @@ if (window.pilot && window.pilot.onExtRemoveTab) {
     if (t) strip.close(t.id);
   });
 }
+
+// ── Extensions: pin/unpin (toolbar icon visibility) + open options ─────────────
+// <browser-action-list> renders each action into its (open) shadow DOM with
+// id="<extensionId>"; pinning shows/hides individual icons there.
+function applyExtPins() {
+  const list = document.getElementById('ext-actions');
+  const root = list && list.shadowRoot;
+  if (!root || !window.pilot || !window.pilot.extList) return;
+  Promise.resolve(window.pilot.extList()).then((exts) => {
+    for (const e of exts || []) {
+      const el = root.getElementById(e.id);
+      if (el) el.style.display = e.pinned === false ? 'none' : '';
+    }
+  }).catch(() => {});
+}
+(function watchExtActions() {
+  const list = document.getElementById('ext-actions');
+  if (!list) return;
+  let observed = false;
+  const mo = new MutationObserver(() => setTimeout(applyExtPins, 60));
+  let tries = 0;
+  const timer = setInterval(() => {
+    if (list.shadowRoot && !observed) {
+      try { mo.observe(list.shadowRoot, { childList: true, subtree: true }); } catch {}
+      observed = true; applyExtPins();
+    }
+    if (observed || ++tries > 50) clearInterval(timer);
+  }, 120);
+})();
+if (window.pilot && window.pilot.onExtChanged) window.pilot.onExtChanged(() => applyExtPins());
+if (window.pilot && window.pilot.onExtOpenUrl) window.pilot.onExtOpenUrl(({ url }) => { if (url) strip.create(url); });
+
+// ── Ad-block shield (toolbar): shows blocked count; click toggles blocking ─────
+(function initAdblock() {
+  const btn = document.getElementById('adblock-btn');
+  const countEl = document.getElementById('adblock-count');
+  if (!btn || !window.pilot || !window.pilot.adblockGet) return;
+  let enabled = true, count = 0, available = true;
+  function render() {
+    btn.classList.toggle('off', !enabled || !available);
+    if (countEl) {
+      if (enabled && available && count > 0) { countEl.hidden = false; countEl.textContent = count > 999 ? '999+' : String(count); }
+      else countEl.hidden = true;
+    }
+    const base = window.i18n ? window.i18n.t('adblock.title') : 'Ad blocker';
+    btn.title = available ? (base + (enabled ? '' : ' — off')) : (base + ' — unavailable');
+  }
+  window.pilot.adblockGet().then((s) => { enabled = !!s.enabled; count = s.count || 0; available = s.available !== false; render(); }).catch(() => {});
+  btn.addEventListener('click', () => {
+    // Open the anchored panel (on/off + per-page count + per-site allow + lists).
+    if (window.pilot.adblockPanel) {
+      const r = btn.getBoundingClientRect();
+      const dark = document.documentElement.getAttribute('data-theme') !== 'light';
+      window.pilot.adblockPanel({ rect: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }, dark });
+      return;
+    }
+    // Fallback: plain toggle if the panel IPC is unavailable.
+    if (!available) return;
+    window.pilot.adblockToggle().then((s) => { enabled = !!s.enabled; if (typeof s.count === 'number') count = s.count; render(); }).catch(() => {});
+  });
+  if (window.pilot.onAdblockCount) window.pilot.onAdblockCount((d) => { count = (d && d.count) || 0; render(); });
+  // Keep the shield in sync when toggled from the panel or Settings.
+  if (window.pilot.onAdblockState) window.pilot.onAdblockState((s) => {
+    if (!s) return;
+    enabled = !!s.enabled; available = s.available !== false;
+    if (typeof s.count === 'number') count = s.count;
+    render();
+  });
+})();
 
 // Resolves the tab (from TabStrip) whose <webview> has the given webContentsId.
 function tabByGuestId(guestId) {

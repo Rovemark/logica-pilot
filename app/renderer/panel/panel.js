@@ -149,6 +149,17 @@ async function renderSettings() {
   });
   bodyEl.appendChild(settingsRow(t('settings.engine'), t('settings.engineDesc'), engSel));
 
+  // Ad blocker (native EasyList + EasyPrivacy engine)
+  const adbSwitch = el('label', 'switch');
+  const adbChk = el('input');
+  adbChk.type = 'checkbox';
+  adbChk.id = 'set-adblock';
+  adbChk.checked = settings.adBlock !== false;
+  adbChk.addEventListener('change', () => { try { window.panel.settingsSet({ adBlock: adbChk.checked }); } catch {} });
+  adbSwitch.appendChild(adbChk);
+  adbSwitch.appendChild(el('span', 'slider'));
+  bodyEl.appendChild(settingsRow(t('settings.adblock'), t('settings.adblockDesc'), adbSwitch));
+
   // Homepage
   const homeInp = el('input');
   homeInp.type = 'text';

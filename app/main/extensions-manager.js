@@ -5,13 +5,13 @@
  *
  * Uses the libraries by Samuel Maddock (open-source, GPL-3.0 license — valid because the
  * product is GPL-3.0-or-later):
- *   - electron-chrome-extensions@4.1.x  → chrome.* APIs + <browser-action-list>
- *   - electron-chrome-web-store@0.6.x   → install/update extensions from the Web Store
+ *   - electron-chrome-extensions@4.9.x  → chrome.* APIs + <browser-action-list>
+ *   - electron-chrome-web-store@0.13.x  → install/update extensions from the Web Store
  *
- * Versions PINNED for Electron 33 (Chromium 130): starting from
- * electron-chrome-extensions@4.2.0 / web-store@0.7.0 the libraries began requiring
- * Electron 35+ (webui:// protocol, contextBridge.executeInMainWorld). The 4.1.x /
- * 0.6.x versions are the last from the Electron 25–33 era.
+ * These versions target Electron 37+, which exposes the modern `session.extensions.*`
+ * API (loadExtension / getAllExtensions / removeExtension). Note: reliable ad/tracker
+ * blocking is handled by the native engine (adblock-manager.js), NOT by MV3 extensions —
+ * Electron does not apply declarativeNetRequest to embedded content reliably.
  *
  * ── ARCHITECTURAL CHALLENGE ────────────────────────────────────────────────────
  * In Logica Pilot, the RENDERER owns the <webview> instances (not the main process). The library expects
@@ -43,6 +43,15 @@ let extensions = null;
 // Directory where installed/unpacked extensions live.
 let extensionsPath = null;
 let _session = null;
+
+/**
+ * Electron 35+ moved extension APIs to `session.extensions.*`
+ * (getAllExtensions/loadExtension/removeExtension). Older Electron exposed them on
+ * the session directly. This returns whichever surface is available.
+ */
+function extApi(ses) {
+  return (ses && ses.extensions) || ses;
+}
 
 // Tab creation bridge: requestId → { resolve, reject, timer }.
 const pendingTabCreates = new Map();
@@ -107,6 +116,20 @@ async function init(ses, userDataDir) {
     return null;
   }
 
+  // REQUIRED for <browser-action-list> toolbar icons (ece 4.9): the element loads each
+  // icon via crx://extension-icon/<id>/32/2?partition=persist:logica-pilot. Without the
+  // crx:// handler the Image() load errors → the element gets class 'no-icon' → no icon.
+  // The shell (index.html) runs in defaultSession, so the crx:// request is dispatched
+  // THERE; the handler reads ?partition and routes to this extensions instance. Register
+  // on both. Use the STATIC form (the instance form is deprecated).
+  try {
+    const { session: electronSession } = require('electron');
+    ElectronChromeExtensions.handleCRXProtocol(ses);
+    if (electronSession.defaultSession !== ses) {
+      ElectronChromeExtensions.handleCRXProtocol(electronSession.defaultSession);
+    }
+  } catch (e) { console.error('[ext] handleCRXProtocol failed:', e && e.message); }
+
   // Enables the Web Store in the same session + loads already-installed
   // and unpacked extensions. loadExtensions=true (default) loads what is in
   // extensionsPath; allowUnpackedExtensions=true permits unpacked ones.
@@ -159,7 +182,7 @@ async function loadUnpackedExtensions(ses) {
   let entries = [];
   try { entries = await fs.promises.readdir(extensionsPath, { withFileTypes: true }); } catch { return; }
   const already = new Set();
-  try { for (const e of ses.getAllExtensions()) already.add(e.id); } catch {}
+  try { for (const e of extApi(ses).getAllExtensions()) already.add(e.id); } catch {}
 
   for (const ent of entries) {
     if (!ent.isDirectory()) continue;
@@ -179,7 +202,7 @@ async function loadUnpackedExtensions(ses) {
     }
     if (!target) continue;
     try {
-      const ext = await ses.loadExtension(target, { allowFileAccess: true });
+      const ext = await extApi(ses).loadExtension(target, { allowFileAccess: true });
       if (ext) console.log('[ext] loaded:', ext.name, ext.version);
     } catch (e) {
       // already loaded (duplicate id) or invalid — ignore silently
@@ -311,7 +334,9 @@ async function installById(id, opts = {}) {
     throw new Error('Web Store support unavailable.');
   }
   if (!/^[a-p]{32}$/.test(String(id || ''))) throw new Error('Invalid extension ID.');
-  return webStore.installExtension(id, { session: _session || undefined, ...opts });
+  // Pass extensionsPath so installById lands in the SAME lowercase dir as the store
+  // install (otherwise it uses the library default 'Extensions' → uninstall mismatch).
+  return webStore.installExtension(id, { session: _session || undefined, extensionsPath, ...opts });
 }
 
 // IPC handler: installs from the Web Store by ID (registered here to avoid touching main.js).
@@ -338,13 +363,145 @@ ipcMain.handle('ext:install-id', async (evt, { id } = {}) => {
   }
 });
 
+// ── Management menu (list / pin / options / uninstall) ──────────────────────
+
+const settingsStore = require('./settings');
+
+/** Reads an extension icon from disk → data: URL (works across sessions, unlike
+ *  chrome-extension:// which is scoped to the webviews' partition). Best-effort. */
+function iconDataUrl(ext) {
+  try {
+    const m = ext.manifest || {};
+    const sets = [m.icons, m.action && m.action.default_icon, m.browser_action && m.browser_action.default_icon]
+      .filter((x) => x && typeof x === 'object');
+    let best = null, bestSize = -1;
+    for (const set of sets) {
+      for (const [sz, rel] of Object.entries(set)) {
+        const n = parseInt(sz, 10) || 0;
+        // prefer something around 32–48px for a crisp menu icon
+        const score = n === 0 ? 24 : (n >= 32 && n <= 64 ? 100 - Math.abs(48 - n) : 50 - Math.abs(48 - n) / 4);
+        if (score > bestSize) { bestSize = score; best = rel; }
+      }
+    }
+    if (!best) return null;
+    const file = path.join(ext.path, best.replace(/^\/+/, ''));
+    if (!fs.existsSync(file)) return null;
+    const buf = fs.readFileSync(file);
+    const ext2 = path.extname(file).toLowerCase();
+    const mime = ext2 === '.svg' ? 'image/svg+xml' : ext2 === '.jpg' || ext2 === '.jpeg' ? 'image/jpeg' : 'image/png';
+    return `data:${mime};base64,${buf.toString('base64')}`;
+  } catch { return null; }
+}
+
+/** Lists installed extensions with metadata for the 🧩 management menu. */
+function listExtensions() {
+  if (!_session) return [];
+  let all = [];
+  try { all = extApi(_session).getAllExtensions() || []; } catch { return []; }
+  let pins = {};
+  try { pins = settingsStore.get().extPins || {}; } catch {}
+  return all
+    .filter((e) => e && e.id && e.name !== 'Chrome Web Store')
+    .map((e) => {
+      const m = e.manifest || {};
+      const opt = (m.options_ui && m.options_ui.page) || m.options_page || null;
+      const hasAction = !!(m.action || m.browser_action);
+      return {
+        id: e.id,
+        name: e.name || e.id,
+        version: e.version || '',
+        icon: iconDataUrl(e),
+        optionsPage: opt ? `chrome-extension://${e.id}/${String(opt).replace(/^\/+/, '')}` : null,
+        homepage: (m.homepage_url) || null,
+        hasAction,
+        pinned: pins[e.id] !== false, // default: pinned
+      };
+    });
+}
+
+/** Persists the pinned flag for an extension icon (toolbar visibility). */
+function setPinned(id, pinned) {
+  if (!/^[a-p]{32}$/.test(String(id || ''))) return false;
+  try {
+    const pins = { ...(settingsStore.get().extPins || {}) };
+    pins[id] = !!pinned;
+    settingsStore.set({ extPins: pins });
+    return true;
+  } catch { return false; }
+}
+
+/** Uninstalls an extension (from the Web Store store or an unpacked load). */
+async function uninstall(id) {
+  if (!/^[a-p]{32}$/.test(String(id || ''))) throw new Error('Invalid extension ID.');
+  let removed = false;
+  if (webStore && typeof webStore.uninstallExtension === 'function') {
+    // MUST pass extensionsPath: the library defaults to <userData>/Extensions (capital E,
+    // getDefaultExtensionsPath), but we install into <userData>/extensions (lowercase).
+    // Without this the disk copy survives → the extension reloads on the next launch.
+    try { await webStore.uninstallExtension(id, { session: _session, extensionsPath }); removed = true; }
+    catch (e) { console.error('[ext] webStore.uninstallExtension failed:', e && e.message); }
+  }
+  // Always unload from the live session (icon disappears immediately via extension-unloaded).
+  try { extApi(_session).removeExtension(id); removed = true; }
+  catch (e) { if (!removed) throw new Error('Could not remove extension: ' + (e && e.message)); }
+  // Belt-and-suspenders: delete the on-disk copy from BOTH possible layouts (lowercase
+  // 'extensions' we configure + capital 'Extensions' library default), so extensions
+  // installed via the store OR via installById are both gone for good.
+  const parent = extensionsPath ? path.dirname(extensionsPath) : null;
+  const dirs = [extensionsPath, parent && path.join(parent, 'Extensions')].filter(Boolean);
+  for (const base of dirs) { try { await fs.promises.rm(path.join(base, id), { recursive: true, force: true }); } catch {} }
+  return true;
+}
+
+/** Notifies every window's renderer that the extension set/pins changed. The 🧩
+ *  menu is a CHILD popup window, so `evt.sender` is the popup — NOT the shell that
+ *  hosts <browser-action-list>/applyExtPins. Broadcasting reaches the shell. */
+function broadcastExtChanged() {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) { try { w.webContents.send('ext:changed'); } catch {} }
+  }
+}
+
+// IPC: management surface for the 🧩 menu.
+ipcMain.handle('ext:list', () => listExtensions());
+ipcMain.handle('ext:set-pinned', (evt, { id, pinned } = {}) => {
+  const ok = setPinned(id, pinned);
+  broadcastExtChanged();
+  return { ok };
+});
+ipcMain.handle('ext:set-enabled', async (evt, { id, enabled } = {}) => {
+  // Electron has no stable enable/disable; disabling = uninstall (reinstall to re-enable).
+  // Normalized to always return a Promise<{ok,…}> and only take the destructive path
+  // on an explicit disable.
+  if (enabled === false) {
+    try { await uninstall(id); broadcastExtChanged(); return { ok: true, removed: true }; }
+    catch (e) { return { ok: false, error: e.message }; }
+  }
+  return { ok: true };
+});
+ipcMain.handle('ext:uninstall', async (evt, { id } = {}) => {
+  try {
+    await uninstall(id);
+    broadcastExtChanged();
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('ext:activate', (evt, { id } = {}) => {
+  // "Activate" from the menu = open the extension's options page (if any) in a new tab.
+  const list = listExtensions();
+  const ext = list.find((e) => e.id === id);
+  const url = ext && (ext.optionsPage || ext.homepage);
+  if (url) { try { evt.sender.send('ext:open-url', { url }); } catch {} return { ok: true, url }; }
+  return { ok: false };
+});
+
 /** Loads an unpacked extension from a folder chosen by the user. */
 async function loadUnpacked(dir) {
   if (!_session) throw new Error('Extensions system not initialized.');
   if (!fs.existsSync(path.join(dir, 'manifest.json'))) {
     throw new Error('Folder does not contain manifest.json — not an unpacked extension.');
   }
-  return _session.loadExtension(dir, { allowFileAccess: true });
+  return extApi(_session).loadExtension(dir, { allowFileAccess: true });
 }
 
 module.exports = {
@@ -356,4 +513,7 @@ module.exports = {
   resolveTabCreate,
   getBrowserActionPreloadPath,
   loadUnpacked,
+  listExtensions,
+  setPinned,
+  uninstall,
 };

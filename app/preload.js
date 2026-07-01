@@ -85,6 +85,14 @@ contextBridge.exposeInMainWorld('pilot', {
   extInstallUnpacked: () => ipcRenderer.invoke('ext:install-unpacked'),
   // installs from the Chrome Web Store by ID (bypasses the "not Chrome" block)
   extInstallById: (payload) => ipcRenderer.invoke('ext:install-id', payload),
+  // management menu: list installed + pin/unpin + enable/disable + uninstall
+  extList: () => ipcRenderer.invoke('ext:list'),
+  extSetEnabled: (payload) => ipcRenderer.invoke('ext:set-enabled', payload),
+  extSetPinned: (payload) => ipcRenderer.invoke('ext:set-pinned', payload),
+  extUninstall: (payload) => ipcRenderer.invoke('ext:uninstall', payload),
+  extActivate: (payload) => ipcRenderer.invoke('ext:activate', payload),
+  onExtChanged: (cb) => ipcRenderer.on('ext:changed', () => cb()),
+  onExtOpenUrl: (cb) => ipcRenderer.on('ext:open-url', (_e, d) => cb(d)),
 
   // ── History ────────────────────────────────────────────────────────────
   // pass-through: the renderer sends the payload object from the spec; main destructures it.
@@ -120,6 +128,13 @@ contextBridge.exposeInMainWorld('pilot', {
   settingsGet: () => ipcRenderer.invoke('settings:get'),
   settingsSet: (patch) => ipcRenderer.invoke('settings:set', patch),
   onSettingsChanged: (cb) => ipcRenderer.on('settings:changed', (_e, d) => cb(d)),
+
+  // ── Ad-block (native engine: EasyList + EasyPrivacy) ──────────────────────
+  adblockGet: () => ipcRenderer.invoke('adblock:get'),
+  adblockToggle: () => ipcRenderer.invoke('adblock:toggle'),
+  adblockPanel: (payload) => ipcRenderer.invoke('adblock:panel', payload),
+  onAdblockCount: (cb) => ipcRenderer.on('adblock:count', (_e, d) => cb(d)),
+  onAdblockState: (cb) => ipcRenderer.on('adblock:state', (_e, d) => cb(d)),
   appInfo: () => ipcRenderer.invoke('app:info'),
   newWindow: (opts) => ipcRenderer.invoke('win:new', opts || {}),
   clearData: (opts) => ipcRenderer.invoke('data:clear', opts || {}),

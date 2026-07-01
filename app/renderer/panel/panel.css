@@ -98,6 +98,18 @@ select:focus, input[type="text"]:focus {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* Toggle switch (ad blocker, etc.) */
+.switch { position: relative; display: inline-block; width: 42px; height: 24px; flex: none; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch .slider { position: absolute; inset: 0; border-radius: 999px; background: var(--field-bd); transition: background .15s ease; }
+.switch .slider::before {
+  content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s ease;
+}
+.switch input:checked + .slider { background: var(--accent); }
+.switch input:checked + .slider::before { transform: translateX(18px); }
+.switch input:focus-visible + .slider { box-shadow: 0 0 0 3px var(--accent-soft); }
+
 .btn {
   -webkit-app-region: no-drag;
   height: 34px;
