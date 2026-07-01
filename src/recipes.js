@@ -1,62 +1,62 @@
 'use strict';
 
 /**
- * recipes.js — As "features matadoras" = search + fanout + síntese afinada.
- * Reusam o motor (0-dep). Cada uma é chamável por CLI e MCP.
+ * recipes.js — The "killer features" = search + fanout + tuned synthesis.
+ * Reuse the engine (0-dep). Each one is callable via CLI and MCP.
  */
 
 const { search } = require('./search');
 const { fanout } = require('./fanout');
 
-/** Deep Research — pesquisa a pergunta, lê as fontes em paralelo, sintetiza com citações. */
+/** Deep Research — searches the question, reads sources in parallel, synthesizes with citations. */
 async function research(query, o = {}) {
   const hits = await search(query, { limit: o.limit || 6 });
-  if (!hits.length) throw new Error('busca não retornou resultados (forneça urls ou defina BRAVE_SEARCH_API_KEY)');
+  if (!hits.length) throw new Error('search returned no results (provide urls or set BRAVE_SEARCH_API_KEY)');
   const r = await fanout({
     urls: hits.map((h) => h.url),
-    task: 'Extraia fatos, dados e pontos relevantes para responder: ' + query,
+    task: 'Extract facts, data, and relevant points to answer: ' + query,
     mode: 'extract',
-    synthesize: 'Responda de forma completa e objetiva à pergunta "' + query + '", citando as fontes como [n].',
+    synthesize: 'Respond comprehensively and concisely to the question "' + query + '", citing sources as [n].',
     concurrency: o.concurrency || 4, model: o.model, onEvent: o.onEvent,
   });
   return { query, sources: hits, ...r };
 }
 
-/** Compare Anything — extrai de cada URL/item e monta tabela comparativa + recomendação. */
+/** Compare Anything — extracts from each URL/item and builds a comparison table + recommendation. */
 async function compare(urls, o = {}) {
-  if (!Array.isArray(urls) || !urls.length) throw new Error('compare: forneça urls[]');
+  if (!Array.isArray(urls) || !urls.length) throw new Error('compare: provide urls[]');
   return fanout({
     urls,
-    task: o.task || 'Extraia nome, principais specs/atributos, preço e nota/avaliação como JSON.',
+    task: o.task || 'Extract name, main specs/attributes, price, and rating/score as JSON.',
     mode: 'extract',
-    synthesize: 'Monte uma tabela comparativa clara dos itens e recomende o melhor, justificando e citando [n].',
+    synthesize: 'Build a clear comparison table of the items and recommend the best, justifying and citing [n].',
     concurrency: o.concurrency || 4, model: o.model, onEvent: o.onEvent,
   });
 }
 
-/** Best Deal — busca lojas do produto, extrai preço/frete e rankeia por valor real. */
+/** Best Deal — searches stores for the product, extracts price/shipping and ranks by real value. */
 async function deal(product, o = {}) {
-  const hits = await search(product + ' preço comprar', { limit: o.limit || 8 });
-  if (!hits.length) throw new Error('busca não retornou lojas');
+  const hits = await search(product + ' price buy', { limit: o.limit || 8 });
+  if (!hits.length) throw new Error('search returned no stores');
   const r = await fanout({
     urls: hits.map((h) => h.url),
-    task: 'Extraia: nome do produto, preço, frete, disponibilidade e loja, como JSON.',
+    task: 'Extract: product name, price, shipping, availability, and store, as JSON.',
     mode: 'extract',
-    synthesize: 'Rankeie por VALOR REAL (preço + frete) e aponte o melhor negócio para "' + product + '", citando [n].',
+    synthesize: 'Rank by REAL VALUE (price + shipping) and point out the best deal for "' + product + '", citing [n].',
     concurrency: o.concurrency || 5, model: o.model, onEvent: o.onEvent,
   });
   return { product, sources: hits, ...r };
 }
 
-/** Fact-Check — busca fontes independentes sobre a afirmação e dá veredito com citações. */
+/** Fact-Check — searches independent sources about the claim and delivers a verdict with citations. */
 async function factcheck(claim, o = {}) {
   const hits = await search(claim, { limit: o.limit || 6 });
-  if (!hits.length) throw new Error('busca não retornou fontes');
+  if (!hits.length) throw new Error('search returned no sources');
   const r = await fanout({
     urls: hits.map((h) => h.url),
-    task: 'O que esta fonte afirma sobre: "' + claim + '"? Extraia evidências e a posição da fonte.',
+    task: 'What does this source claim about: "' + claim + '"? Extract evidence and the source\'s position.',
     mode: 'extract',
-    synthesize: 'Dê um VEREDITO (verdadeiro / falso / enganoso / inconclusivo) sobre "' + claim + '", com base nas fontes e citando [n].',
+    synthesize: 'Give a VERDICT (true / false / misleading / inconclusive) about "' + claim + '", based on the sources and citing [n].',
     concurrency: o.concurrency || 4, model: o.model, onEvent: o.onEvent,
   });
   return { claim, sources: hits, ...r };

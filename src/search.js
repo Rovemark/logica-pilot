@@ -1,17 +1,17 @@
 'use strict';
 
 /**
- * search.js — Busca web (0-dep) pra alimentar o fanout (research/compare/deal).
+ * search.js — Web search (0-dep) to feed the fanout (research/compare/deal).
  *
- * Ordem: se houver BRAVE_SEARCH_API_KEY, usa a Brave Search API (confiável).
- * Senão, faz scraping best-effort do Bing (tolerante a bot; decodifica o
- * redirect u=a1<base64>). O DuckDuckGo HTML foi descartado (challenge de bot).
+ * Order: if BRAVE_SEARCH_API_KEY is available, uses Brave Search API (reliable).
+ * Otherwise, performs best-effort scraping of Bing (tolerant to bots; decodes the
+ * redirect u=a1<base64>). The DuckDuckGo HTML was discarded (bot challenge).
  */
 
 const { Browser } = require('./browser');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Decodifica o link de resultado do Bing (bing.com/ck/a?...&u=a1<base64>). */
+/** Decodes the search result link from Bing (bing.com/ck/a?...&u=a1<base64>). */
 function decodeBing(href) {
   try {
     const u = new URL(href, 'https://www.bing.com');

@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * browser.js — Sobe o Chromium (Chrome/Edge/Brave/Chromium) via pipe CDP
- * e expõe páginas controláveis. Não usa Playwright nem Puppeteer.
+ * browser.js — Launches the browser engine (Chrome/Edge/Brave/Chromium) via CDP pipe
+ * and exposes controllable pages. Does not use Playwright or Puppeteer.
  */
 
 const { spawn } = require('child_process');
@@ -14,7 +14,7 @@ const { CDPConnection } = require('./cdp-pipe');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ─────────────────────────────────────────────────────────────
-// Descoberta do binário do browser (cross-platform)
+// Browser binary discovery (cross-platform)
 // ─────────────────────────────────────────────────────────────
 function walkFind(root, names, maxDepth = 5) {
   const found = [];
@@ -82,7 +82,7 @@ function resolveBrowserBinary() {
     } catch {}
   }
 
-  // Fallback: reusar o binário já baixado pelo Playwright (só o binário, não a lib)
+  // Fallback: reuse binary already downloaded by Playwright (binary only, not the library)
   const pwRoots = {
     darwin: path.join(os.homedir(), 'Library/Caches/ms-playwright'),
     win32: path.join(os.homedir(), 'AppData/Local/ms-playwright'),
@@ -98,7 +98,7 @@ function resolveBrowserBinary() {
       return false;
     }
   });
-  // prefere chromium "full" (headful-capable) sobre headless-shell
+  // prefer full browser (headful-capable) over headless-shell
   hits.sort((a, b) => (a.includes('headless') ? 1 : 0) - (b.includes('headless') ? 1 : 0));
   if (hits[0]) return hits[0];
 
@@ -106,7 +106,7 @@ function resolveBrowserBinary() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Page — uma aba controlável (sessão flat do CDP)
+// Page — a controllable tab (flat CDP session)
 // ─────────────────────────────────────────────────────────────
 class Page {
   constructor(conn, sessionId, targetId, viewport) {
@@ -129,7 +129,7 @@ class Page {
     });
     if (res.exceptionDetails) {
       const d = res.exceptionDetails;
-      throw new Error('eval: ' + (d.exception?.description || d.text || 'erro de avaliação'));
+      throw new Error('eval: ' + (d.exception?.description || d.text || 'evaluation error'));
     }
     return res.result?.value;
   }
@@ -138,7 +138,7 @@ class Page {
     return new Promise((resolve, reject) => {
       const to = setTimeout(() => {
         this._c.off(method, handler);
-        reject(new Error('timeout aguardando ' + method));
+        reject(new Error('timeout waiting for ' + method));
       }, timeout);
       const handler = (params, sid) => {
         if (sid === this.sessionId) {
@@ -171,7 +171,7 @@ class Page {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Browser — processo + conexão CDP
+// Browser — process + CDP connection
 // ─────────────────────────────────────────────────────────────
 class Browser {
   constructor(child, conn, userDataDir, opts) {
@@ -190,7 +190,7 @@ class Browser {
     const binary = opts.binary || resolveBrowserBinary();
     if (!binary) {
       throw new Error(
-        'Nenhum browser Chromium encontrado. Instale Chrome/Edge ou defina LOGICA_PILOT_BROWSER=/caminho/do/binário',
+        'No Chromium-based browser found. Install Chrome/Edge or set LOGICA_PILOT_BROWSER=/path/to/binary',
       );
     }
 
@@ -220,7 +220,7 @@ class Browser {
     if (Array.isArray(opts.extraArgs)) args.push(...opts.extraArgs);
     args.push('about:blank');
 
-    // stdio: 0 ignore, 1 ignore, 2 stderr(pipe p/ debug), 3 write→chrome, 4 read←chrome
+    // stdio: 0 ignore, 1 ignore, 2 stderr (pipe for debug), 3 write→browser, 4 read←browser
     const child = spawn(binary, args, {
       stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'],
       env: process.env,
@@ -230,7 +230,7 @@ class Browser {
     if (child.stderr) {
       child.stderr.on('data', (d) => {
         stderrTail = (stderrTail + d.toString()).slice(-2000);
-        if (process.env.LOGICA_PILOT_DEBUG) process.stderr.write('[chrome] ' + d);
+        if (process.env.LOGICA_PILOT_DEBUG) process.stderr.write('[browser] ' + d);
       });
     }
 
@@ -238,23 +238,23 @@ class Browser {
     const readable = child.stdio[4];
     if (!writable || !readable) {
       try { child.kill('SIGKILL'); } catch {}
-      throw new Error('Falha ao abrir os pipes CDP (fd 3/4).');
+      throw new Error('Failed to open CDP pipes (fd 3/4).');
     }
 
     const conn = new CDPConnection(writable, readable);
 
-    // Corrida: ou o browser responde, ou o processo morre, ou estoura timeout
+    // Race: either the browser responds, or the process dies, or timeout is exceeded
     const ready = (async () => {
       await conn.send('Target.setDiscoverTargets', { discover: true });
     })();
 
     const earlyExit = new Promise((_, reject) => {
       child.once('exit', (code) =>
-        reject(new Error(`Browser saiu antes de conectar (code ${code}). stderr: ${stderrTail.slice(-400)}`)),
+        reject(new Error(`Browser exited before connecting (code ${code}). stderr: ${stderrTail.slice(-400)}`)),
       );
     });
     const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout conectando ao CDP (15s)')), 15000),
+      setTimeout(() => reject(new Error('Timeout connecting to CDP (15s)')), 15000),
     );
 
     try {

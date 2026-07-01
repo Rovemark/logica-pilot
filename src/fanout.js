@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * fanout.js — Orquestrador MULTI-AGENT do Logica Pilot.
+ * fanout.js — Multi-agent orchestrator for Logica Pilot.
  *
- * Roda a MESMA tarefa em N URLs EM PARALELO (cada uma numa página headless
- * própria via CDP), colhe resultados compactos e, opcionalmente, sintetiza tudo
- * numa resposta única com citações. É o coração das "receitas": Deep Research,
- * Compare, Best Deal, Fact-Check — todas = fanout + um prompt de síntese.
+ * Runs the SAME task on N URLs IN PARALLEL (each in its own headless page
+ * via CDP), collects compact results and, optionally, synthesizes everything
+ * into a single response with citations. This is the heart of "recipes": Deep Research,
+ * Compare, Best Deal, Fact-Check — all of them = fanout + a synthesis prompt.
  *
- * Token-first: cada worker manda pro modelo só a percepção COMPACTA da página
- * (mapa indexado + texto legível), nunca o HTML cru.
+ * Token-first: each worker sends to the model only the COMPACT perception of the page
+ * (indexed map + readable text), never raw HTML.
  */
 
 const { Browser } = require('./browser');
@@ -20,27 +20,27 @@ const actions = require('./actions');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Extrai dados estruturados (JSON) do texto compacto de uma página, via LLM. */
+/** Extracts structured data (JSON) from a page's compact text, via LLM. */
 async function extractStructured({ text, instruction, schema, model }) {
-  const system = 'Você extrai dados de uma página web e responde SÓ com JSON válido (sem markdown, sem comentários).';
+  const system = 'You extract data from a web page and respond ONLY with valid JSON (no markdown, no comments).';
   const user =
-    `Instrução: ${instruction || 'extraia os dados principais da página'}\n` +
-    (schema ? `Formato JSON esperado: ${JSON.stringify(schema)}\n` : '') +
-    `\nConteúdo da página (compacto):\n${String(text || '').slice(0, 6000)}\n\nResponda só o JSON.`;
+    `Instruction: ${instruction || 'extract the main data from the page'}\n` +
+    (schema ? `Expected JSON format: ${JSON.stringify(schema)}\n` : '') +
+    `\nPage content (compact):\n${String(text || '').slice(0, 6000)}\n\nRespond with JSON only.`;
   const resp = await llm.callClaude({ system, messages: [{ role: 'user', content: user }], maxTokens: 1200, model });
   const out = llm.textOf(resp).replace(/```json/gi, '').replace(/```/g, '').trim();
   try { return JSON.parse(out); } catch { return { _raw: out }; }
 }
 
-/** Sintetiza os resultados de todas as fontes numa resposta única com citações [n]. */
+/** Synthesizes results from all sources into a single response with citations [n]. */
 async function synthesizeResults({ results, instruction, model }) {
   const compact = results
     .filter(Boolean)
     .map((r, i) => `[${i}] ${r.url}\n${JSON.stringify(r.data || r.result || { text: r.text, error: r.error }).slice(0, 1500)}`)
     .join('\n\n');
   const resp = await llm.callClaude({
-    system: 'Você sintetiza resultados de várias fontes numa resposta única, objetiva, citando as fontes como [n].',
-    messages: [{ role: 'user', content: `Tarefa: ${instruction}\n\nResultados por fonte:\n${compact}\n\nSintetize com citações [n].` }],
+    system: 'You synthesize results from multiple sources into a single, objective response, citing sources as [n].',
+    messages: [{ role: 'user', content: `Task: ${instruction}\n\nResults by source:\n${compact}\n\nSynthesize with citations [n].` }],
     maxTokens: 1600, model,
   });
   return llm.textOf(resp);
@@ -48,13 +48,13 @@ async function synthesizeResults({ results, instruction, model }) {
 
 /**
  * @param {object} o
- * @param {string[]} o.urls                 URLs a processar em paralelo
- * @param {string}   [o.task]               instrução (extração) ou objetivo (mode:'run')
- * @param {object}   [o.schema]             schema JSON esperado (mode:'extract')
+ * @param {string[]} o.urls                 URLs to process in parallel
+ * @param {string}   [o.task]               instruction (extraction) or objective (mode:'run')
+ * @param {object}   [o.schema]             expected JSON schema (mode:'extract')
  * @param {'extract'|'read'|'run'} [o.mode='extract']
- * @param {string}   [o.synthesize]         se setado, sintetiza tudo nessa instrução
- * @param {number}   [o.concurrency=4]      páginas simultâneas (cap 8)
- * @param {number}   [o.maxSteps=8]         passos por página no mode:'run'
+ * @param {string}   [o.synthesize]         if set, synthesizes everything in this instruction
+ * @param {number}   [o.concurrency=4]      simultaneous pages (cap 8)
+ * @param {number}   [o.maxSteps=8]         steps per page in mode:'run'
  * @param {string}   [o.model]
  * @param {boolean}  [o.headless=true]
  * @param {(ev)=>void} [o.onEvent]
@@ -62,7 +62,7 @@ async function synthesizeResults({ results, instruction, model }) {
  */
 async function fanout(o = {}) {
   const urls = Array.isArray(o.urls) ? o.urls.filter(Boolean) : [];
-  if (!urls.length) throw new Error('fanout: forneça urls[] (não vazio)');
+  if (!urls.length) throw new Error('fanout: provide urls[] (non-empty)');
   const mode = o.mode || 'extract';
   const conc = Math.max(1, Math.min(Number(o.concurrency) || 4, 8));
   const onEvent = typeof o.onEvent === 'function' ? o.onEvent : () => {};
@@ -100,7 +100,7 @@ async function fanout(o = {}) {
       } catch (e) {
         rec.error = (e && e.message) || String(e);
       } finally {
-        // fecha o target (libera memória) — browser.close() no fim limpa o resto
+        // closes the target (frees memory) — browser.close() at the end cleans up the rest
         try { if (page) await page._c.send('Target.closeTarget', { targetId: page.targetId }); } catch {}
       }
       results[my] = rec;

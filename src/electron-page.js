@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * electron-page.js — Adaptador que faz um `webContents` do Electron parecer
- * uma `page` do Logica Pilot (mesmo contrato: send/eval/goto).
+ * electron-page.js — Adapter that makes an Electron `webContents` look like
+ * a Logica Pilot `page` (same contract: send/eval/goto).
  *
- * O `webContents.debugger` do Electron É o Chrome DevTools Protocol falando com
- * o Chromium embarcado. Então perception.js / actions.js / agent.js rodam aqui
- * SEM NENHUMA mudança — é o mesmo motor do modo headless, agora dentro da janela.
+ * The Electron `webContents.debugger` IS the Chrome DevTools Protocol talking to
+ * the embedded browser engine. So perception.js / actions.js / agent.js run here
+ * WITHOUT ANY changes — it's the same engine as headless mode, now inside the window.
  */
 
 class ElectronPage {
@@ -18,22 +18,22 @@ class ElectronPage {
       try {
         this._dbg.attach('1.3');
       } catch (e) {
-        // já anexado por outro consumidor — segue
+        // already attached by another consumer — continue
       }
     }
   }
 
-  /** Comando CDP → mesma assinatura do motor headless. */
+  /** CDP command → same signature as headless engine. */
   async send(method, params = {}) {
     return this._dbg.sendCommand(method, params);
   }
 
-  /** Runtime.evaluate com returnByValue. */
+  /** Runtime.evaluate with returnByValue. */
   async eval(expression) {
     return this.wc.executeJavaScript(expression, true);
   }
 
-  /** Navegação com espera de carregamento. */
+  /** Navigation with load completion wait. */
   async goto(url, { timeout = 30000 } = {}) {
     if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) url = 'https://' + url;
     await this.wc.loadURL(url);

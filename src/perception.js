@@ -1,21 +1,21 @@
 'use strict';
 
 /**
- * perception.js — A camada que faz o Logica Pilot "enxergar" a página.
+ * perception.js — The layer that makes Logica Pilot "see" the page.
  *
- * Em vez de clicar em coordenadas x,y de um screenshot (o jeito BURRO do
- * Playwright legado), a gente injeta JS que indexa todos os elementos
- * interativos e devolve um MAPA SEMÂNTICO. A IA age por intenção:
- * "clica no [12] botão Comprar" — não por pixel.
+ * Instead of clicking on x,y coordinates from a screenshot (the DUMB way of
+ * legacy Playwright), we inject JS that indexes all interactive elements
+ * and returns a SEMANTIC MAP. The AI acts by intention:
+ * "click on [12] Buy button" — not by pixel.
  *
- * Híbrido: o mesmo índice serve pro modo texto (a11y/DOM) e pro modo
- * visão (badges numerados desenhados na própria página antes do screenshot).
+ * Hybrid: the same index serves both text mode (a11y/DOM) and vision mode
+ * (numbered badges drawn on the page itself before the screenshot).
  *
- * Agnóstico de transporte: só usa page.eval() e page.send() — funciona tanto
- * no motor headless (pipe) quanto no browser Electron (webContents.debugger).
+ * Transport-agnostic: uses only page.eval() and page.send() — works both
+ * in headless mode (pipe) and in the browser engine (webContents.debugger).
  */
 
-// ── Funções executadas DENTRO da página (injetadas via .toString()) ──────────
+// ── Functions executed INSIDE the page (injected via .toString()) ──────────
 
 /* eslint-disable */
 function __lp_collect(maxEls) {
@@ -130,7 +130,7 @@ function __lp_unmark() {
 }
 /* eslint-enable */
 
-// ── API (lado Node) ──────────────────────────────────────────────────────────
+// ── API (Node-side) ──────────────────────────────────────────────────────────
 
 async function snapshot(page, { maxEls = 120 } = {}) {
   const expr = `(${__lp_collect.toString()})(${maxEls})`;
@@ -154,23 +154,23 @@ async function unmark(page) {
   }
 }
 
-/** Transforma o snapshot num texto compacto pra IA ler. */
+/** Transforms the snapshot into compact text for the AI to read. */
 function format(snap) {
   const lines = [];
-  lines.push(`URL: ${snap.url || '(sem url)'}`);
-  lines.push(`TÍTULO: ${snap.title || '(sem título)'}`);
+  lines.push(`URL: ${snap.url || '(no URL)'}`);
+  lines.push(`TITLE: ${snap.title || '(no title)'}`);
 
   if (snap.scrollH && snap.viewportH) {
     const bottom = snap.scrollY + snap.viewportH;
     const more = bottom < snap.scrollH - 4;
     const pct = Math.min(100, Math.round((bottom / snap.scrollH) * 100));
-    lines.push(`ROLAGEM: ${pct}% da página${more ? ' — HÁ MAIS CONTEÚDO ABAIXO (use scroll)' : ' (fim da página)'}`);
+    lines.push(`SCROLL: ${pct}% of page${more ? ' — MORE CONTENT BELOW (use scroll)' : ' (end of page)'}`);
   }
 
   lines.push('');
-  lines.push(`ELEMENTOS INTERATIVOS (${snap.elements.length}) — use o índice [n]:`);
+  lines.push(`INTERACTIVE ELEMENTS (${snap.elements.length}) — use index [n]:`);
   if (snap.elements.length === 0) {
-    lines.push('  (nenhum elemento interativo detectado — tente scroll ou modo visão)');
+    lines.push('  (no interactive elements detected — try scroll or vision mode)');
   } else {
     for (const el of snap.elements) {
       const kind = el.role || (el.tag === 'input' ? `input[${el.type || 'text'}]` : el.tag);
@@ -179,14 +179,14 @@ function format(snap) {
       const extra = [];
       if (el.placeholder && el.placeholder !== desc) extra.push(`ph="${el.placeholder}"`);
       if (el.value && el.tag === 'input') extra.push(`val="${el.value}"`);
-      if (!el.inView) extra.push('fora-da-tela');
+      if (!el.inView) extra.push('off-screen');
       lines.push(`  [${el.id}] ${kind} "${desc}"${extra.length ? ' ' + extra.join(' ') : ''}`);
     }
   }
 
   lines.push('');
-  lines.push('TEXTO VISÍVEL DA PÁGINA:');
-  lines.push((snap.text || '').trim() || '(vazio)');
+  lines.push('VISIBLE PAGE TEXT:');
+  lines.push((snap.text || '').trim() || '(empty)');
 
   return lines.join('\n');
 }

@@ -1,58 +1,58 @@
 'use strict';
 
 /**
- * agent.js — O loop autônomo do Logica Pilot.
+ * agent.js — The autonomous loop of Logica Pilot.
  *
- * Dado um OBJETIVO em linguagem natural, o agente:
- *   1. percebe a página (mapa indexado + visão opcional)
- *   2. pede ao Claude a PRÓXIMA ação (function calling)
- *   3. executa a ação
- *   4. repete até `done` ou esgotar os passos
+ * Given an OBJECTIVE in natural language, the agent:
+ *   1. perceives the page (indexed map + optional vision)
+ *   2. asks Claude for the NEXT action (function calling)
+ *   3. executes the action
+ *   4. repeats until `done` or step limit is reached
  *
- * Agnóstico de transporte: recebe uma `page` (pipe ou Electron). O mesmo loop
- * roda no motor headless e dentro do browser Electron.
+ * Transport-agnostic: receives a `page` (pipe or Electron). The same loop
+ * runs in the headless engine and inside the Electron browser.
  */
 
 const perception = require('./perception');
 const actions = require('./actions');
 const llm = require('./llm');
 
-const SYSTEM_PROMPT = `Você é o Logica Pilot — um agente autônomo que controla um browser real de verdade.
+const SYSTEM_PROMPT = `You are Logica Pilot — an autonomous agent that controls a real browser engine.
 
-Você recebe, a cada passo, o estado da página: uma lista de ELEMENTOS INTERATIVOS indexados ([0], [1], ...) e o texto visível. Quando útil, também recebe um SCREENSHOT com os mesmos índices desenhados como etiquetas coloridas.
+You receive, at each step, the state of the page: a list of INTERACTIVE ELEMENTS indexed ([0], [1], ...) and visible text. When useful, you also receive a SCREENSHOT with the same indices drawn as colored labels.
 
-Seu trabalho: cumprir o OBJETIVO do usuário agindo UMA ação por vez, usando as ferramentas.
+Your job: fulfill the user's OBJECTIVE by taking ONE action at a time, using the tools.
 
-REGRAS:
-- Aja por intenção usando o ÍNDICE do elemento — nunca invente índices que não estão na lista.
-- Se o alvo não está visível, use "scroll" para procurá-lo antes de desistir.
-- Para buscar/pesquisar: use "type" no campo certo com submit=true (manda Enter).
-- Depois de navegar/clicar, a próxima leitura da página já reflete o resultado — observe antes de agir de novo.
-- Não repita a mesma ação que claramente não funcionou; tente outra abordagem.
-- Quando o OBJETIVO estiver cumprido, chame "done" com success=true e um "result" claro e completo (a resposta final pro usuário, em PT-BR).
-- Se ficar genuinamente travado (paywall, login obrigatório, captcha, loop), chame "done" com success=false explicando o porquê.
-- Seja eficiente: o mínimo de passos para o resultado.`;
+RULES:
+- Act by intent using the ELEMENT'S INDEX — never invent indices that aren't on the list.
+- If the target is not visible, use "scroll" to search for it before giving up.
+- To search/find: use "type" in the right field with submit=true (sends Enter).
+- After navigating/clicking, the next page read already reflects the result — observe before acting again.
+- Do not repeat the same action if it clearly didn't work; try a different approach.
+- When the OBJECTIVE is fulfilled, call "done" with success=true and a clear, complete "result" (the final answer for the user, in PT-BR).
+- If genuinely stuck (paywall, mandatory login, captcha, loop), call "done" with success=false explaining why.
+- Be efficient: the minimum number of steps to the result.`;
 
 const TOOLS = [
   {
     name: 'navigate',
-    description: 'Navega o browser para uma URL.',
+    description: 'Navigate the browser to a URL.',
     input_schema: {
       type: 'object',
       properties: {
-        url: { type: 'string', description: 'URL completa (https://...)' },
-        reason: { type: 'string', description: 'Por que (curto).' },
+        url: { type: 'string', description: 'Full URL (https://...)' },
+        reason: { type: 'string', description: 'Why (brief).' },
       },
       required: ['url'],
     },
   },
   {
     name: 'click',
-    description: 'Clica no elemento interativo pelo índice [n].',
+    description: 'Click an interactive element by index [n].',
     input_schema: {
       type: 'object',
       properties: {
-        index: { type: 'integer', description: 'Índice do elemento na lista.' },
+        index: { type: 'integer', description: 'Element index in the list.' },
         reason: { type: 'string' },
       },
       required: ['index'],
@@ -60,13 +60,13 @@ const TOOLS = [
   },
   {
     name: 'type',
-    description: 'Digita texto num campo pelo índice [n]. submit=true envia (Enter).',
+    description: 'Type text in a field by index [n]. submit=true sends (Enter).',
     input_schema: {
       type: 'object',
       properties: {
         index: { type: 'integer' },
         text: { type: 'string' },
-        submit: { type: 'boolean', description: 'Apertar Enter depois.' },
+        submit: { type: 'boolean', description: 'Press Enter afterward.' },
         reason: { type: 'string' },
       },
       required: ['index', 'text'],
@@ -74,7 +74,7 @@ const TOOLS = [
   },
   {
     name: 'press',
-    description: 'Pressiona uma tecla (Enter, Tab, Escape, ArrowDown, PageDown, ...).',
+    description: 'Press a key (Enter, Tab, Escape, ArrowDown, PageDown, ...).',
     input_schema: {
       type: 'object',
       properties: { key: { type: 'string' }, reason: { type: 'string' } },
@@ -83,7 +83,7 @@ const TOOLS = [
   },
   {
     name: 'scroll',
-    description: 'Rola a página.',
+    description: 'Scroll the page.',
     input_schema: {
       type: 'object',
       properties: {
@@ -96,7 +96,7 @@ const TOOLS = [
   },
   {
     name: 'extract',
-    description: 'Extrai texto/dados da página (opcional: um seletor CSS).',
+    description: 'Extract text/data from the page (optional: a CSS selector).',
     input_schema: {
       type: 'object',
       properties: { query: { type: 'string' }, reason: { type: 'string' } },
@@ -104,7 +104,7 @@ const TOOLS = [
   },
   {
     name: 'wait',
-    description: 'Espera alguns milissegundos (para conteúdo carregar).',
+    description: 'Wait a few milliseconds (for content to load).',
     input_schema: {
       type: 'object',
       properties: { ms: { type: 'integer' }, reason: { type: 'string' } },
@@ -112,19 +112,19 @@ const TOOLS = [
   },
   {
     name: 'done',
-    description: 'Encerra: objetivo cumprido (ou impossível). Retorne o resultado final.',
+    description: 'Finish: objective accomplished (or impossible). Return the final result.',
     input_schema: {
       type: 'object',
       properties: {
         success: { type: 'boolean' },
-        result: { type: 'string', description: 'Resposta/resultado final em PT-BR.' },
+        result: { type: 'string', description: 'Response/final result in PT-BR.' },
       },
       required: ['success', 'result'],
     },
   },
 ];
 
-/** Remove imagens de todas as mensagens de usuário menos a última (economia de tokens). */
+/** Remove images from all user messages except the last one (token economy). */
 function trimImages(history) {
   let lastUser = -1;
   for (let i = history.length - 1; i >= 0; i--) {
@@ -135,7 +135,7 @@ function trimImages(history) {
       return {
         role: 'user',
         content: m.content.map((b) =>
-          b.type === 'image' ? { type: 'text', text: '[screenshot anterior omitido]' } : b,
+          b.type === 'image' ? { type: 'text', text: '[previous screenshot omitted]' } : b,
         ),
       };
     }
@@ -152,13 +152,13 @@ async function execAction(page, name, input) {
     case 'scroll': return actions.scroll(page, input.direction, input.amount || 600);
     case 'extract': return actions.extract(page, input.query);
     case 'wait': return actions.wait(page, input.ms || 1000);
-    default: return `ação desconhecida: ${name}`;
+    default: return `unknown action: ${name}`;
   }
 }
 
 /**
- * Roda o loop autônomo.
- * @param {object} page  página agnóstica de transporte
+ * Run the autonomous loop.
+ * @param {object} page  transport-agnostic page
  * @param {string} objective
  * @param {object} opts  { maxSteps, vision, model, startUrl, onStep }
  * @returns {Promise<{success:boolean, result:string, steps:number, trace:Array}>}
@@ -179,7 +179,7 @@ async function run(page, objective, opts = {}) {
 
   for (let step = 1; step <= maxSteps; step++) {
     if (typeof opts.shouldStop === 'function' && opts.shouldStop()) {
-      return { success: false, result: 'Interrompido pelo usuário.', steps: step - 1, trace };
+      return { success: false, result: 'Stopped by user.', steps: step - 1, trace };
     }
     const snap = await perception.snapshot(page);
     const useVision = visionMode || snap.elements.length === 0;
@@ -189,8 +189,8 @@ async function run(page, objective, opts = {}) {
 
     const header =
       step === 1
-        ? `OBJETIVO: ${objective}\n\n--- PASSO 1/${maxSteps} ---\n`
-        : `--- PASSO ${step}/${maxSteps} ---\n`;
+        ? `OBJECTIVE: ${objective}\n\n--- STEP 1/${maxSteps} ---\n`
+        : `--- STEP ${step}/${maxSteps} ---\n`;
     content.push({ type: 'text', text: header + perception.format(snap) });
 
     if (useVision) {
@@ -219,15 +219,15 @@ async function run(page, objective, opts = {}) {
       });
     } catch (e) {
       onStep({ step, action: 'error', input: {}, result: e.message });
-      return { success: false, result: `Erro do cérebro: ${e.message}`, steps: step, trace };
+      return { success: false, result: `Brain error: ${e.message}`, steps: step, trace };
     }
 
     history.push({ role: 'assistant', content: resp.content });
     const tool = llm.firstToolUse(resp);
 
     if (!tool) {
-      // sem ação → trata o texto como resposta final
-      const txt = llm.textOf(resp) || '(sem resposta)';
+      // No action → treat text as final response
+      const txt = llm.textOf(resp) || '(no response)';
       onStep({ step, action: 'done', input: { success: true }, result: txt });
       return { success: true, result: txt, steps: step, trace };
     }
@@ -247,7 +247,7 @@ async function run(page, objective, opts = {}) {
     try {
       result = await execAction(page, tool.name, tool.input);
     } catch (e) {
-      result = `ERRO: ${e.message}`;
+      result = `ERROR: ${e.message}`;
     }
 
     onStep({ step, action: tool.name, input: tool.input, result });
@@ -262,7 +262,7 @@ async function run(page, objective, opts = {}) {
 
   return {
     success: false,
-    result: `Limite de ${maxSteps} passos atingido sem concluir o objetivo.`,
+    result: `Step limit of ${maxSteps} reached without completing the objective.`,
     steps: maxSteps,
     trace,
   };

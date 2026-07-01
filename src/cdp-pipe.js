@@ -1,23 +1,23 @@
 'use strict';
 
 /**
- * cdp-pipe.js — Cliente do Chrome DevTools Protocol (CDP) sobre PIPE.
+ * cdp-pipe.js — Chrome DevTools Protocol (CDP) client over PIPE.
  *
- * Por que pipe e não WebSocket?
- *  - Node 20 não tem WebSocket nativo e a gente NÃO quer depender de `ws`
- *    nem de Playwright/Puppeteer. O transporte `--remote-debugging-pipe`
- *    fala direto com o browser por dois file descriptors (fd 3 = escrita,
- *    fd 4 = leitura), com mensagens JSON terminadas por \0. Zero dependência.
+ * Why pipe and not WebSocket?
+ *  - Node 20 has no native WebSocket and we do NOT want to depend on `ws`
+ *    or Playwright/Puppeteer. The `--remote-debugging-pipe` transport
+ *    talks directly to the browser via two file descriptors (fd 3 = write,
+ *    fd 4 = read), with JSON messages terminated by \0. Zero dependencies.
  *
- * Esta é a fundação do Logica Pilot: controlamos o engine, não uma lib de terceiro.
+ * This is the foundation of Logica Pilot: we control the engine, not a third-party lib.
  */
 
 const { EventEmitter } = require('events');
 
 class CDPConnection extends EventEmitter {
   /**
-   * @param {import('stream').Writable} writable  pipe que o browser LÊ (fd 3)
-   * @param {import('stream').Readable} readable  pipe que o browser ESCREVE (fd 4)
+   * @param {import('stream').Writable} writable  pipe that the browser READS from (fd 3)
+   * @param {import('stream').Readable} readable  pipe that the browser WRITES to (fd 4)
    */
   constructor(writable, readable) {
     super();
@@ -30,8 +30,8 @@ class CDPConnection extends EventEmitter {
     this._closed = false;
 
     this._r.on('data', (chunk) => this._onData(chunk));
-    this._r.on('end', () => this._fail(new Error('CDP pipe encerrado (end)')));
-    this._r.on('close', () => this._fail(new Error('CDP pipe fechado')));
+    this._r.on('end', () => this._fail(new Error('CDP pipe closed (end)')));
+    this._r.on('close', () => this._fail(new Error('CDP pipe closed')));
     this._r.on('error', (e) => this._fail(e));
     this._w.on('error', (e) => this._fail(e));
   }
@@ -47,14 +47,14 @@ class CDPConnection extends EventEmitter {
       try {
         msg = JSON.parse(raw.toString('utf8'));
       } catch {
-        continue; // mensagem corrompida — ignora
+        continue; // corrupted message — ignore
       }
       this._dispatch(msg);
     }
   }
 
   _dispatch(msg) {
-    // Resposta a um comando
+    // Response to a command
     if (msg.id !== undefined && this._pending.has(msg.id)) {
       const cb = this._pending.get(msg.id);
       this._pending.delete(msg.id);
@@ -65,7 +65,7 @@ class CDPConnection extends EventEmitter {
       }
       return;
     }
-    // Evento (com ou sem sessionId — modelo flat)
+    // Event (with or without sessionId — flat model)
     if (msg.method) {
       this.emit('event', msg);
       this.emit(msg.method, msg.params || {}, msg.sessionId);
@@ -73,13 +73,13 @@ class CDPConnection extends EventEmitter {
   }
 
   /**
-   * Envia um comando CDP. Retorna Promise com o `result`.
-   * @param {string} method  ex: "Page.navigate"
+   * Sends a CDP command. Returns Promise with the `result`.
+   * @param {string} method  e.g. "Page.navigate"
    * @param {object} params
-   * @param {string} [sessionId]  alvo (página) no modelo flat
+   * @param {string} [sessionId]  target (page) in flat model
    */
   send(method, params = {}, sessionId) {
-    if (this._closed) return Promise.reject(new Error('CDP conexão fechada'));
+    if (this._closed) return Promise.reject(new Error('CDP connection closed'));
     const id = ++this._id;
     const payload = { id, method, params };
     if (sessionId) payload.sessionId = sessionId;
@@ -104,7 +104,7 @@ class CDPConnection extends EventEmitter {
   }
 
   close() {
-    this._fail(new Error('CDP fechado pelo cliente'));
+    this._fail(new Error('CDP closed by client'));
   }
 
   get closed() {

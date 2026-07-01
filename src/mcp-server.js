@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * mcp-server.js — Servidor MCP (stdio · JSON-RPC 2.0) do Logica Pilot.
+ * mcp-server.js — Logica Pilot MCP server (stdio · JSON-RPC 2.0).
  *
- * Expõe o motor CDP como tools TOKEN-FIRST pra qualquer agente (Claude Desktop,
- * Cursor, Cline…). O diferencial vs Playwright+LLM: em vez de mandar HTML cru ou
- * screenshot inteiro pro modelo, entrega PERCEPÇÃO COMPACTA (mapa indexado
- * `[0] button "Comprar"`) e age POR ÍNDICE — 10–100× menos tokens. Multi-agent
- * embutido (browser_fanout). Zero dependência: protocolo implementado à mão.
+ * Exposes the browser engine as TOKEN-FIRST tools for any agent (Claude Desktop,
+ * Cursor, Cline…). The advantage over Playwright+LLM: instead of sending raw HTML or
+ * full screenshots to the model, it delivers COMPACT PERCEPTION (indexed map
+ * `[0] button "Buy"`), and acts BY INDEX — 10–100× fewer tokens. Multi-agent
+ * built-in (browser_fanout). Zero dependency: protocol implemented by hand.
  *
- * Rodar:  node bin/logica-pilot.js mcp
+ * Run:  node bin/logica-pilot.js mcp
  * Config (Claude Desktop / Cursor):
  *   { "mcpServers": { "logica-pilot": { "command": "logica-pilot", "args": ["mcp"] } } }
  */
@@ -26,7 +26,7 @@ const NAME = 'logica-pilot';
 let VERSION = '0.1.0';
 try { VERSION = require('../package.json').version; } catch {}
 
-// ── browser único (headless por padrão), criado sob demanda ──
+// ── single browser instance (headless by default), created on demand ──
 let pilot = null;
 async function P() {
   if (!pilot) {
@@ -35,106 +35,106 @@ async function P() {
   return pilot;
 }
 const watchLast = new Map(); // url → { hash, at }
-let pending = 0; // tool calls em andamento (p/ não sair no meio)
+let pending = 0; // tool calls in progress (to not exit mid-call)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function hash(s) { let h = 5381; s = String(s || ''); for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return h >>> 0; }
 
-// ── definição das tools (schemas expostos no tools/list) ──────────────────────
+// ── tool definitions (schemas exposed in tools/list) ──────────────────────
 const TOOLS = [
   {
     name: 'browser_navigate',
-    description: 'Navega para uma URL e retorna o MAPA INDEXADO da página (elementos interativos + texto legível). Barato em tokens: use isto no lugar de baixar o HTML.',
-    inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'URL de destino' } }, required: ['url'] },
+    description: 'Navigate to a URL and return the INDEXED MAP of the page (interactive elements + readable text). Cheap in tokens: use this instead of downloading HTML.',
+    inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Target URL' } }, required: ['url'] },
   },
   {
     name: 'browser_observe',
-    description: 'Retorna o MAPA INDEXADO da página atual (elementos interativos `[n] tipo "rótulo"` + texto). É a percepção compacta que substitui HTML/screenshot.',
-    inputSchema: { type: 'object', properties: { maxElements: { type: 'number', description: 'máx. de elementos (default 120)' } } },
+    description: 'Return the INDEXED MAP of the current page (interactive elements `[n] type "label"` + text). This is the compact perception that replaces HTML/screenshot.',
+    inputSchema: { type: 'object', properties: { maxElements: { type: 'number', description: 'max elements (default 120)' } } },
   },
   {
     name: 'browser_act',
-    description: 'Age na página por ÍNDICE (do browser_observe), sem seletor frágil. action: click | type | press | scroll.',
+    description: 'Act on the page BY INDEX (from browser_observe), without fragile selectors. action: click | type | press | scroll.',
     inputSchema: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['click', 'type', 'press', 'scroll'] },
-        index: { type: 'number', description: 'índice [n] do elemento (click/type)' },
-        text: { type: 'string', description: 'texto a digitar (type)' },
-        submit: { type: 'boolean', description: 'dar Enter após digitar (type)' },
-        key: { type: 'string', description: 'tecla (press): Enter, Tab, Escape, ArrowDown…' },
-        direction: { type: 'string', enum: ['up', 'down'], description: 'sentido (scroll)' },
-        amount: { type: 'number', description: 'px a rolar (scroll)' },
+        index: { type: 'number', description: 'index [n] of element (click/type)' },
+        text: { type: 'string', description: 'text to type (type)' },
+        submit: { type: 'boolean', description: 'press Enter after typing (type)' },
+        key: { type: 'string', description: 'key (press): Enter, Tab, Escape, ArrowDown…' },
+        direction: { type: 'string', enum: ['up', 'down'], description: 'direction (scroll)' },
+        amount: { type: 'number', description: 'pixels to scroll (scroll)' },
       },
       required: ['action'],
     },
   },
   {
     name: 'browser_extract',
-    description: 'Extrai dados da página. Com `schema`/`instruction` retorna JSON estruturado (via IA, compacto); com `query` (seletor CSS) retorna o texto dos matches.',
+    description: 'Extract data from the page. With `schema`/`instruction` returns structured JSON (via AI, compact); with `query` (CSS selector) returns text of matches.',
     inputSchema: {
       type: 'object',
       properties: {
-        instruction: { type: 'string', description: 'o que extrair (linguagem natural)' },
-        schema: { type: 'object', description: 'formato JSON esperado' },
-        query: { type: 'string', description: 'seletor CSS (alternativa determinística)' },
+        instruction: { type: 'string', description: 'what to extract (natural language)' },
+        schema: { type: 'object', description: 'expected JSON format' },
+        query: { type: 'string', description: 'CSS selector (deterministic alternative)' },
       },
     },
   },
   {
     name: 'browser_read',
-    description: 'Retorna o conteúdo LEGÍVEL da página (texto limpo, sem nav/ads). Com summarize:true, resume via IA. Leitura barata.',
+    description: 'Return the READABLE content of the page (clean text, without nav/ads). With summarize:true, summarize via AI. Cheap read.',
     inputSchema: { type: 'object', properties: { summarize: { type: 'boolean' } } },
   },
   {
     name: 'browser_run',
-    description: 'Executa um OBJETIVO multi-passo de forma autônoma na página atual (o agente observa→age em loop). Use pra tarefas inteiras ("busque X e me diga Y").',
+    description: 'Execute a multi-step OBJECTIVE autonomously on the current page (agent observes→acts in a loop). Use for complete tasks ("search X and tell me Y").',
     inputSchema: { type: 'object', properties: { goal: { type: 'string' }, maxSteps: { type: 'number' } }, required: ['goal'] },
   },
   {
     name: 'browser_fanout',
-    description: 'MULTI-AGENT: roda a mesma tarefa em VÁRIAS URLs em paralelo (páginas headless próprias) e opcionalmente SINTETIZA tudo. Base de Deep Research / Compare / Best Deal.',
+    description: 'MULTI-AGENT: run the same task on MULTIPLE URLs in parallel (separate headless pages) and optionally SYNTHESIZE everything. Base for Deep Research / Compare / Best Deal.',
     inputSchema: {
       type: 'object',
       properties: {
-        urls: { type: 'array', items: { type: 'string' }, description: 'URLs a processar em paralelo' },
-        task: { type: 'string', description: 'o que fazer/extrair em cada uma' },
+        urls: { type: 'array', items: { type: 'string' }, description: 'URLs to process in parallel' },
+        task: { type: 'string', description: 'what to do/extract from each' },
         mode: { type: 'string', enum: ['extract', 'read', 'run'], description: 'default extract' },
-        schema: { type: 'object', description: 'formato JSON esperado (mode extract)' },
-        synthesize: { type: 'string', description: 'se setado, sintetiza tudo nessa instrução' },
-        concurrency: { type: 'number', description: 'páginas simultâneas (default 4, máx 8)' },
+        schema: { type: 'object', description: 'expected JSON format (mode extract)' },
+        synthesize: { type: 'string', description: 'if set, synthesize everything in this instruction' },
+        concurrency: { type: 'number', description: 'simultaneous pages (default 4, max 8)' },
       },
       required: ['urls', 'task'],
     },
   },
   {
     name: 'browser_search',
-    description: 'Busca na web e retorna URLs de resultado (título + url). Use pra achar fontes antes do fanout/research.',
+    description: 'Search the web and return result URLs (title + url). Use to find sources before fanout/research.',
     inputSchema: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] },
   },
   {
     name: 'browser_research',
-    description: '🧠 Deep Research: pesquisa a pergunta, lê as fontes EM PARALELO (multi-agent) e sintetiza uma resposta com citações [n].',
+    description: '🧠 Deep Research: research the question, read sources IN PARALLEL (multi-agent) and synthesize an answer with citations [n].',
     inputSchema: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] },
   },
   {
     name: 'browser_deal',
-    description: '🧠 Best Deal: acha lojas do produto, extrai preço + frete em paralelo e rankeia por VALOR REAL.',
+    description: '🧠 Best Deal: find product stores, extract price + shipping in parallel and rank by REAL VALUE.',
     inputSchema: { type: 'object', properties: { product: { type: 'string' }, limit: { type: 'number' } }, required: ['product'] },
   },
   {
     name: 'browser_factcheck',
-    description: '🧠 Fact-Check: busca fontes independentes sobre a afirmação e dá um VEREDITO com citações.',
+    description: '🧠 Fact-Check: search independent sources about the claim and give a VERDICT with citations.',
     inputSchema: { type: 'object', properties: { claim: { type: 'string' }, limit: { type: 'number' } }, required: ['claim'] },
   },
   {
     name: 'browser_watch',
-    description: 'Checa uma URL e diz se MUDOU desde a última checagem (diff de conteúdo). Base de monitores (preço/estoque/vaga).',
+    description: 'Check a URL and say if it CHANGED since last check (content diff). Base for monitors (price/stock/opening).',
     inputSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
   },
   {
     name: 'browser_session',
-    description: 'Gerencia sessões de login (cookies). action: save | load | list. Loga UMA vez, reusa depois.',
+    description: 'Manage login sessions (cookies). action: save | load | list. Log in ONCE, reuse after.',
     inputSchema: {
       type: 'object',
       properties: { action: { type: 'string', enum: ['save', 'load', 'list'] }, name: { type: 'string' } },
@@ -143,12 +143,12 @@ const TOOLS = [
   },
   {
     name: 'browser_screenshot',
-    description: 'Captura a tela (fallback visual quando a a11y não basta). Com marks:true desenha os índices na página antes. Retorna imagem.',
+    description: 'Capture the screen (fallback visual when accessibility alone is not enough). With marks:true draw the indices on the page first. Returns image.',
     inputSchema: { type: 'object', properties: { fullPage: { type: 'boolean' }, marks: { type: 'boolean' } } },
   },
 ];
 
-// ── implementação das tools ───────────────────────────────────────────────────
+// ── tool implementations ───────────────────────────────────────────────────
 async function callTool(name, a = {}) {
   if (name === 'browser_navigate') {
     const p = await P();
@@ -172,7 +172,7 @@ async function callTool(name, a = {}) {
       case 'type': res = await actions.type(page, a.index, a.text || '', !!a.submit); break;
       case 'press': res = await actions.pressKey(page, a.key || 'Enter'); break;
       case 'scroll': res = await actions.scroll(page, a.direction || 'down', a.amount || 600); break;
-      default: throw new Error('action inválida: ' + a.action);
+      default: throw new Error('Invalid action: ' + a.action);
     }
     await sleep(250);
     const snap = await p.snapshot({ maxEls: 80 });
@@ -197,12 +197,12 @@ async function callTool(name, a = {}) {
     let text = String(snap.text || '').trim();
     if (a.summarize && text) {
       const resp = await llm.callClaude({
-        system: 'Você resume o conteúdo de uma página web de forma objetiva.',
-        messages: [{ role: 'user', content: 'Resuma:\n\n' + text.slice(0, 8000) }], maxTokens: 700,
+        system: 'You summarize web page content objectively.',
+        messages: [{ role: 'user', content: 'Summarize:\n\n' + text.slice(0, 8000) }], maxTokens: 700,
       });
       text = llm.textOf(resp);
     }
-    return { text: text || '(sem texto)' };
+    return { text: text || '(no text)' };
   }
 
   if (name === 'browser_run') {
@@ -233,7 +233,7 @@ async function callTool(name, a = {}) {
     const p = await P();
     if (act === 'save') return { json: await session.save(p.page, a.name) };
     if (act === 'load') return { json: await session.load(p.page, a.name) };
-    throw new Error('session action inválida: ' + act);
+    throw new Error('Invalid session action: ' + act);
   }
 
   if (name === 'browser_screenshot') {
@@ -264,10 +264,10 @@ async function callTool(name, a = {}) {
     return { text: r.synthesis || JSON.stringify(r.results, null, 2) };
   }
 
-  throw new Error('tool desconhecida: ' + name);
+  throw new Error('Unknown tool: ' + name);
 }
 
-// ── transporte: JSON-RPC 2.0 sobre stdio (mensagens 1 por linha) ──────────────
+// ── transport: JSON-RPC 2.0 over stdio (one message per line) ──────────────
 function send(msg) { process.stdout.write(JSON.stringify(msg) + '\n'); }
 function log(...m) { process.stderr.write('[mcp] ' + m.join(' ') + '\n'); }
 
@@ -294,8 +294,8 @@ async function handle(msg) {
       const out = await callTool(nm, args);
       return send({ jsonrpc: '2.0', id, result: resultContent(out) });
     } catch (e) {
-      log('tool', nm, 'erro:', (e && e.message) || e);
-      return send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: 'ERRO: ' + ((e && e.message) || e) }], isError: true } });
+      log('tool', nm, 'error:', (e && e.message) || e);
+      return send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: 'ERROR: ' + ((e && e.message) || e) }], isError: true } });
     } finally {
       pending--;
     }
@@ -315,11 +315,11 @@ function start() {
       if (!line) continue;
       let msg;
       try { msg = JSON.parse(line); } catch { continue; }
-      Promise.resolve(handle(msg)).catch((e) => log('handle erro:', (e && e.message) || e));
+      Promise.resolve(handle(msg)).catch((e) => log('handle error:', (e && e.message) || e));
     }
   });
   process.stdin.on('end', () => {
-    // drena as tool calls em andamento antes de fechar (não corta no meio)
+    // drain in-progress tool calls before exit (no mid-call cutoff)
     const tryExit = async () => {
       if (pending > 0) { setTimeout(tryExit, 200); return; }
       try { if (pilot) await pilot.close(); } catch {}
@@ -328,7 +328,7 @@ function start() {
     tryExit();
   });
   process.on('SIGINT', async () => { try { if (pilot) await pilot.close(); } catch {} process.exit(0); });
-  log(`${NAME} v${VERSION} — MCP server pronto (10 tools). stdin/stdout.`);
+  log(`${NAME} v${VERSION} — MCP server ready (10 tools). stdin/stdout.`);
 }
 
 module.exports = { start, TOOLS, callTool };

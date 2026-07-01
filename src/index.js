@@ -1,11 +1,11 @@
 'use strict';
 
 /**
- * index.js — API pública do Logica Pilot (modo headless / programático).
+ * index.js — Public API of Logica Pilot (headless / programmatic mode).
  *
  *   const { LogicaPilot } = require('logica-pilot');
  *   const pilot = await new LogicaPilot({ headless: true }).launch();
- *   const res = await pilot.run('busque o preço do iPhone 15 no Google');
+ *   const res = await pilot.run('search for the price of iPhone 15 on Google');
  *   console.log(res.result);
  *   await pilot.close();
  */
@@ -48,12 +48,12 @@ class LogicaPilot {
     return perception.format(snap);
   }
 
-  /** Roda o loop autônomo no objetivo dado. */
+  /** Runs the autonomous loop on the given objective. */
   run(objective, o = {}) {
     return agent.run(this.page, objective, { ...this.opts, ...o });
   }
 
-  /** Ações cruas (sem IA), úteis pra scripts determinísticos. */
+  /** Raw actions (without AI), useful for deterministic scripts. */
   get actions() {
     const p = this.page;
     return {

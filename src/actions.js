@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * actions.js — Ações de alto nível, por INTENÇÃO/índice (não por pixel).
+ * actions.js — High-level actions, by INTENT/index (not by pixel).
  *
- * Todas operam sobre uma `page` agnóstica de transporte que expõe:
- *   - page.send(method, params)  → comando CDP
+ * All operate on a transport-agnostic `page` that exposes:
+ *   - page.send(method, params)  → CDP command
  *   - page.eval(expression)      → Runtime.evaluate (returnByValue)
- *   - page.goto(url)             → navegação (opcional; fallback p/ Page.navigate)
+ *   - page.goto(url)             → navigation (optional; fallback to Page.navigate)
  */
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -26,7 +26,7 @@ const KEYMAP = {
 };
 
 function q(id) {
-  // seletor seguro pra data-lpilot-id
+  // Safe selector for data-lpilot-id
   return `[data-lpilot-id="${String(id).replace(/"/g, '')}"]`;
 }
 
@@ -38,7 +38,7 @@ async function navigate(page, url) {
     await page.send('Page.navigate', { url });
     await sleep(1200);
   }
-  return `navegou para ${url}`;
+  return `navigated to ${url}`;
 }
 
 async function click(page, id) {
@@ -48,9 +48,9 @@ async function click(page, id) {
       `var r=el.getBoundingClientRect();` +
       `return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2),tag:el.tagName.toLowerCase()};})()`,
   );
-  if (!pt) return `índice [${id}] não encontrado na página`;
+  if (!pt) return `index [${id}] not found on page`;
 
-  // clique "de verdade": mouse move + press + release nas coordenadas reais
+  // "real" click: mouse move + press + release at actual coordinates
   await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pt.x, y: pt.y, buttons: 0 });
   await page.send('Input.dispatchMouseEvent', {
     type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', buttons: 1, clickCount: 1,
@@ -59,7 +59,7 @@ async function click(page, id) {
     type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', buttons: 0, clickCount: 1,
   });
   await sleep(180);
-  return `cliquei em [${id}] (${pt.tag}) @ ${pt.x},${pt.y}`;
+  return `clicked on [${id}] (${pt.tag}) @ ${pt.x},${pt.y}`;
 }
 
 async function type(page, id, text, submit = false) {
@@ -69,14 +69,14 @@ async function type(page, id, text, submit = false) {
       `if('value' in el){el.value='';el.dispatchEvent(new Event('input',{bubbles:true}));}` +
       `return true;})()`,
   );
-  if (!ok) return `índice [${id}] não encontrado para digitar`;
+  if (!ok) return `index [${id}] not found for typing`;
 
   await page.send('Input.insertText', { text: String(text) });
-  // dispara input/change pra frameworks reativos
+  // fire input/change for reactive frameworks
   await page.eval(
     `(function(){var el=document.querySelector('${q(id)}');if(el){el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}return true;})()`,
   );
-  let msg = `digitei em [${id}]: "${text}"`;
+  let msg = `typed in [${id}]: "${text}"`;
   if (submit) {
     await pressKey(page, 'Enter');
     msg += ' + Enter';
@@ -86,7 +86,7 @@ async function type(page, id, text, submit = false) {
 
 async function pressKey(page, key) {
   const k = KEYMAP[key];
-  if (!k) return `tecla desconhecida: ${key}`;
+  if (!k) return `unknown key: ${key}`;
   await page.send('Input.dispatchKeyEvent', {
     type: 'keyDown', windowsVirtualKeyCode: k.keyCode, code: k.code, key: k.key, text: k.text || '',
   });
@@ -94,19 +94,19 @@ async function pressKey(page, key) {
     type: 'keyUp', windowsVirtualKeyCode: k.keyCode, code: k.code, key: k.key,
   });
   await sleep(90);
-  return `pressionei ${key}`;
+  return `pressed ${key}`;
 }
 
 async function scroll(page, direction = 'down', amount = 600) {
   const dy = direction === 'up' ? -Math.abs(amount) : Math.abs(amount);
   await page.eval(`window.scrollBy({top:${dy},left:0,behavior:'instant'})`);
   await sleep(220);
-  return `rolei ${direction} ${Math.abs(amount)}px`;
+  return `scrolled ${direction} ${Math.abs(amount)}px`;
 }
 
 async function extract(page, query) {
   if (query && /[.#\[]|^[a-z]+$/i.test(query)) {
-    // parece um seletor CSS → extrai texto dos matches
+    // looks like a CSS selector → extract text from matches
     try {
       const texts = await page.eval(
         `(function(){try{return [...document.querySelectorAll(${JSON.stringify(query)})].slice(0,30).map(e=>(e.innerText||e.textContent||'').trim()).filter(Boolean);}catch(e){return null;}})()`,
@@ -114,9 +114,9 @@ async function extract(page, query) {
       if (texts && texts.length) return texts.join('\n');
     } catch {}
   }
-  // fallback: texto visível
+  // fallback: visible text
   const txt = await page.eval(`document.body?document.body.innerText.slice(0,4000):''`);
-  return txt || '(sem texto)';
+  return txt || '(no text)';
 }
 
 async function screenshot(page, { format = 'jpeg', quality = 70, fullPage = false } = {}) {
@@ -129,7 +129,7 @@ async function screenshot(page, { format = 'jpeg', quality = 70, fullPage = fals
 
 async function wait(page, ms = 1000) {
   await sleep(Math.min(ms, 10000));
-  return `aguardei ${ms}ms`;
+  return `waited ${ms}ms`;
 }
 
 module.exports = { navigate, click, type, pressKey, scroll, extract, screenshot, wait, KEYMAP };

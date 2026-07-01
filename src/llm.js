@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * llm.js — O cérebro do Logica Pilot (API Messages, compatível Anthropic).
+ * llm.js — The brain of Logica Pilot (Messages API, Anthropic-compatible).
  *
- * Resolução de destino (out-of-the-box para quem instala sem o LogicaOS):
- *   1. URL explícita (env/config) — sempre ganha.
- *   2. Chave Anthropic do usuário (sk-ant-…, vinda das Configurações) → bate
- *      DIRETO na api.anthropic.com.
- *   3. Senão → LogicaProxy local (:8317) com a chave interna (modo dev/LogicaOS).
- * Se o primário for o LogicaProxy e ele estiver morto, e houver chave do usuário,
- * faz FALLBACK automático para a Anthropic. Sem nada disponível, erro com dica.
+ * Target resolution (out-of-the-box for those installing without LogicaOS):
+ *   1. Explicit URL (env/config) — always wins.
+ *   2. User's Anthropic key (sk-ant-…, from Settings) → hits
+ *      DIRECTLY on api.anthropic.com.
+ *   3. Otherwise → local LogicaProxy (:8317) with internal key (dev/LogicaOS mode).
+ * If primary is LogicaProxy and it's down, and user has a key,
+ * automatically FALLBACK to Anthropic. With nothing available, error with hint.
  *
  * Envs: LOGICA_PILOT_LLM_URL · LOGICA_PILOT_MODEL · ANTHROPIC_API_KEY · LOGICA_PILOT_KEY
  */
@@ -25,7 +25,7 @@ const DEFAULT_KEY =
   'logicaos-internal';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
-// Config injetada em runtime pelo processo principal (lê das settings do usuário).
+// Config injected at runtime by main process (reads from user settings).
 const runtime = { key: null, url: null, model: null };
 function configure(opts = {}) {
   if ('apiKey' in opts) runtime.key = (opts.apiKey || '').trim() || null;
@@ -37,7 +37,7 @@ function userKey() {
   return /^sk-ant-/.test(k) ? k : null;
 }
 
-/** Destino primário (URL + chave) conforme as regras acima. */
+/** Primary target (URL + key) according to rules above. */
 function resolveTarget() {
   if (runtime.url) return { url: runtime.url, key: runtime.key || DEFAULT_KEY, anthropic: false };
   const uk = userKey();
@@ -45,7 +45,7 @@ function resolveTarget() {
   return { url: DEFAULT_URL, key: DEFAULT_KEY, anthropic: false };
 }
 
-/** True se há QUALQUER forma de chamar o modelo (proxy provável OU chave do usuário). */
+/** True if there is ANY way to call the model (proxy likely OR user key). */
 function isConfigured() {
   return !!(userKey() || runtime.url || DEFAULT_URL);
 }
@@ -64,7 +64,7 @@ async function callClaude({ system, messages, tools, model, maxTokens = 1024, te
   }
 
   const primary = resolveTarget();
-  // Fallback: primário = LogicaProxy local morto + usuário tem chave → Anthropic.
+  // Fallback: primary = local LogicaProxy down + user has key → Anthropic.
   const uk = userKey();
   const fallback = (!primary.anthropic && uk) ? { url: ANTHROPIC_URL, key: uk, anthropic: true } : null;
 
@@ -90,9 +90,9 @@ async function callClaude({ system, messages, tools, model, maxTokens = 1024, te
 
   if (!res) {
     const hint = (!primary.anthropic && !uk)
-      ? ' Sem LogicaProxy local: cole sua chave da Anthropic (sk-ant-…) em Configurações → Pilot pra usar a IA.'
+      ? ' Without local LogicaProxy: paste your Anthropic key (sk-ant-…) in Settings → Pilot to use AI.'
       : '';
-    throw new Error(`Falha ao contatar o cérebro (${primary.url}): ${lastErr && lastErr.message}.${hint}`);
+    throw new Error(`Failed to contact the brain (${primary.url}): ${lastErr && lastErr.message}.${hint}`);
   }
   if (!res.ok) {
     const t = await res.text().catch(() => '');
@@ -101,13 +101,13 @@ async function callClaude({ system, messages, tools, model, maxTokens = 1024, te
   return res.json();
 }
 
-/** Extrai o primeiro bloco tool_use de uma resposta. */
+/** Extracts first tool_use block from a response. */
 function firstToolUse(resp) {
   if (!resp || !Array.isArray(resp.content)) return null;
   return resp.content.find((b) => b.type === 'tool_use') || null;
 }
 
-/** Concatena os blocos de texto de uma resposta. */
+/** Concatenates text blocks from a response. */
 function textOf(resp) {
   if (!resp || !Array.isArray(resp.content)) return '';
   return resp.content
