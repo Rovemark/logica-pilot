@@ -9,7 +9,8 @@ A real browser with an embedded autonomous AI copilot. The AI **perceives** page
 [![GPL-3.0 License](https://img.shields.io/badge/license-GPL--3.0--or--later-green)](LICENSE)
 [![MCP Server](https://img.shields.io/badge/MCP-Server-informational)](https://spec.modelcontextprotocol.io)
 [![25 Tools](https://img.shields.io/badge/tools-25-blue)](src/tools.js)
-[![Zero Dependencies](https://img.shields.io/badge/dependencies-0-success)](package.json)
+[![Zero-dependency core](https://img.shields.io/badge/core%20engine-0%20deps-success)](src/)
+[![Electron](https://img.shields.io/badge/desktop-Electron%2037-informational)](app/)
 
 </div>
 
