@@ -100,13 +100,16 @@ function equipWebview(wv, url) {
 
   wv.addEventListener('did-navigate', (e) => {
     const t = tabOf(); if (!t) return;
+    const isErr = /^pilot:\/\/error\//.test(e.url);
+    // On the error page, show the ORIGINAL failed URL in the address bar.
+    const shownUrl = isErr ? (new URLSearchParams(new URL(e.url).search).get('url') || e.url) : e.url;
     strip.setUrl(t.id, e.url);
-    if (t.id === strip.activeId) { omnibox.setUrl(e.url); syncNav(); bookmarks.onActiveUrl(e.url); }
+    if (t.id === strip.activeId) { omnibox.setUrl(shownUrl); syncNav(); bookmarks.onActiveUrl(shownUrl); }
     // persistent history: creates the entry WITHOUT a title (t.title is still from the
     // previous page). The subsequent page-title-updated fills the real title via
     // historyUpdateTitle (dedup by URL, doesn't inflate visitCount).
-    // In incognito mode we do NOT save history.
-    if (!IS_INCOGNITO) { try { window.pilot.historyAdd && window.pilot.historyAdd({ url: e.url, title: '', ts: Date.now() }); } catch {} }
+    // In incognito mode (or on the internal error page) we do NOT save history.
+    if (!IS_INCOGNITO && !isErr) { try { window.pilot.historyAdd && window.pilot.historyAdd({ url: e.url, title: '', ts: Date.now() }); } catch {} }
   });
   wv.addEventListener('did-navigate-in-page', (e) => {
     if (!e.isMainFrame) return;
@@ -115,9 +118,18 @@ function equipWebview(wv, url) {
     if (t.id === strip.activeId) { omnibox.setUrl(e.url); bookmarks.onActiveUrl(e.url); }
   });
   wv.addEventListener('did-fail-load', (e) => {
-    if (e.isMainFrame && e.errorCode !== -3) { // -3 = ERR_ABORTED (navigation cancelled)
-      const t = tabOf(); if (t && t.id === strip.activeId) omnibox.setSecurity(t.url, true);
-    }
+    // -3 = ERR_ABORTED (navigation cancelled), -300 = ERR_INVALID_URL → ignore.
+    if (!e.isMainFrame || e.errorCode === -3 || e.errorCode === -300) return;
+    const t = tabOf(); if (!t) return;
+    const failed = e.validatedURL || t.url || '';
+    // Do not loop on our own error page.
+    if (/^pilot:\/\/error\//.test(failed)) return;
+    const errUrl = 'pilot://error/?url=' + encodeURIComponent(failed) +
+      '&code=' + encodeURIComponent(e.errorCode) +
+      '&desc=' + encodeURIComponent(e.errorDescription || '');
+    try { wv.loadURL(errUrl); } catch {}
+    // Keep the address bar showing the ORIGINAL attempted URL, not pilot://error.
+    if (t.id === strip.activeId) { omnibox.setUrl(failed); omnibox.setSecurity(failed, true); }
   });
   wv.addEventListener('zoom-changed', (e) => {
     const t = tabOf(); if (!t) return;
@@ -461,8 +473,10 @@ function translatePage() {
     showResult({ success: false, result: 'Translate: open a web page first.' });
     return;
   }
+  // target language follows the UI language (falls back to English)
+  const tl = ((window.i18n && window.i18n.lang) || 'en').split('-')[0];
   const target =
-    'https://translate.google.com/translate?sl=auto&tl=pt&u=' + encodeURIComponent(cur);
+    'https://translate.google.com/translate?sl=auto&tl=' + encodeURIComponent(tl) + '&u=' + encodeURIComponent(cur);
   navigateActive(target);
 }
 

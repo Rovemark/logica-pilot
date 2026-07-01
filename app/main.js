@@ -104,6 +104,7 @@ const PILOT_HOSTS = {
   newtab: { dir: NEWTAB_DIR, index: 'newtab.html' },
   history: { dir: path.join(RENDERER_DIR, 'history'), index: 'history.html' },
   downloads: { dir: path.join(RENDERER_DIR, 'downloads'), index: 'downloads.html' },
+  error: { dir: path.join(RENDERER_DIR, 'error'), index: 'error.html' },
 };
 
 // Multi-window: replaces singleton 'win' with a Set.
@@ -502,6 +503,15 @@ function resolveUiLang(setting) {
   return hit || (codes.includes('en') ? 'en' : (codes[0] || 'en'));
 }
 
+// Resolved locale string-map for the current UI language — for native popup
+// windows (find bar, permission prompt) that must localize without their own
+// i18n bundle. They receive the strings they need inside their data payload.
+function uiLocaleMap() {
+  const all = loadLocales();
+  const lang = resolveUiLang(settingsStore.get().language);
+  return all[lang] || all.en || all['pt-BR'] || {};
+}
+
 async function handlePilotApi(host, pathname, method, request) {
   const q = (new URL(request.url)).searchParams;
 
@@ -803,8 +813,16 @@ function showNextPermPrompt() {
   permPopupWin.loadFile(path.join(__dirname, 'renderer', 'perm', 'perm.html'));
   permPopupWin.webContents.once('did-finish-load', () => {
     try {
+      const m = uiLocaleMap();
       permPopupWin.webContents.send('perm:data', {
         origin: req.origin, permission: req.permission, dark: req.dark,
+        labels: {
+          site: m['perm.site'], allow: m['perm.allow'], deny: m['perm.deny'], text: m['perm.text'],
+          what: {
+            media: m['perm.media'], geolocation: m['perm.geolocation'],
+            notifications: m['perm.notifications'], generic: m['perm.generic'],
+          },
+        },
       });
       permPopupWin.show();
     } catch {}
@@ -849,9 +867,15 @@ ipcMain.handle('find:open', (evt, { dark, query } = {}) => {
   if (!parent) return false;
   findPopupParent = parent;
 
+  const fm = uiLocaleMap();
+  const findLabels = {
+    placeholder: fm['find.placeholder'], prev: fm['find.prev'],
+    next: fm['find.next'], close: fm['find.close'],
+  };
+
   // already open: just refocus (Cmd+F repeated). Update query if a selection came.
   if (findPopupWin && !findPopupWin.isDestroyed()) {
-    try { findPopupWin.webContents.send('find:data', { dark, query }); findPopupWin.focus(); } catch {}
+    try { findPopupWin.webContents.send('find:data', { dark, query, labels: findLabels }); findPopupWin.focus(); } catch {}
     return true;
   }
 
@@ -876,7 +900,7 @@ ipcMain.handle('find:open', (evt, { dark, query } = {}) => {
   findPopupWin.loadFile(path.join(__dirname, 'renderer', 'find', 'find.html'));
   findPopupWin.webContents.once('did-finish-load', () => {
     try {
-      findPopupWin.webContents.send('find:data', { dark, query });
+      findPopupWin.webContents.send('find:data', { dark, query, labels: findLabels });
       findPopupWin.show();
     } catch {}
   });
@@ -1463,6 +1487,8 @@ app.whenReady().then(() => {
       userDataDir: userData,
       initialAllowlist: settingsStore.get().adBlockAllowlist || [],
       saveAllowlist: (arr) => { try { settingsStore.set({ adBlockAllowlist: arr }); } catch {} },
+      updatedAt: settingsStore.get().adBlockUpdatedAt || 0,
+      saveUpdatedAt: (ts) => { try { settingsStore.set({ adBlockUpdatedAt: ts }); } catch {} },
     })
     .then((b) => { if (b) console.log('[adblock] ready · enabled=', adblockManager.isEnabled()); })
     .catch((e) => console.error('[adblock] init failed:', e && e.message));

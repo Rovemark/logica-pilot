@@ -1,8 +1,8 @@
 'use strict';
 
-// find.js — UI da barra "Localizar na página" flutuante. Manda a query ao main
-// (que chama findInPage na <webview> ativa) e mostra o contador n/N. Sem HTML
-// inline com handlers (CSP).
+// find.js — UI for the floating "Find in page" bar. Sends the query to main
+// (which calls findInPage on the active <webview>) and shows the n/N counter.
+// No inline HTML handlers (CSP).
 
 const input = document.getElementById('find-input');
 const countEl = document.getElementById('find-count');
@@ -28,8 +28,14 @@ prevBtn.addEventListener('click', () => search(false, true));
 nextBtn.addEventListener('click', () => search(true, true));
 closeBtn.addEventListener('click', () => window.findPopup.close());
 
-window.findPopup.onData(({ dark, query } = {}) => {
+window.findPopup.onData(({ dark, query, labels } = {}) => {
   document.body.classList.toggle('light', !dark);
+  if (labels) {
+    if (labels.placeholder) input.placeholder = labels.placeholder;
+    if (labels.prev) prevBtn.title = labels.prev;
+    if (labels.next) nextBtn.title = labels.next;
+    if (labels.close) closeBtn.title = labels.close;
+  }
   if (query) { input.value = query; }
   input.focus();
   input.select();

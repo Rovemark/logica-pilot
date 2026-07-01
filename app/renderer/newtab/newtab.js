@@ -15,6 +15,9 @@
     document.querySelectorAll('[data-i18n-ph]').forEach(function (e) {
       var v = LP_I18N[e.getAttribute('data-i18n-ph')]; if (v != null) e.setAttribute('placeholder', v);
     });
+    document.querySelectorAll('[data-i18n-aria]').forEach(function (e) {
+      var v = LP_I18N[e.getAttribute('data-i18n-aria')]; if (v != null) e.setAttribute('aria-label', v);
+    });
   }
 
   // ── URL detection vs search term ──────────────────────────
@@ -439,7 +442,7 @@
     .then(function (d) {
       if (!d || !d.ok || !d.map) return;
       LP_I18N = d.map;
-      try { document.documentElement.lang = d.lang || 'pt-BR'; } catch (e) {}
+      try { document.documentElement.lang = d.lang || 'en'; } catch (e) {}
       applyI18n();
       if (newsTabsEl) buildNewsTabs(); // re-render category tabs with translations
     })

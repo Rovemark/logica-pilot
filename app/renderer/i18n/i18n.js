@@ -15,7 +15,7 @@
  */
 (function () {
   const LOCALES = window.LP_LOCALES || {};
-  const FALLBACK = 'pt-BR';
+  const FALLBACK = 'en';
 
   function pick(lang) {
     // 'auto'/empty → system language (Electron sets navigator.language from OS)

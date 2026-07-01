@@ -15,17 +15,25 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') window.permPopup.respond(false);
 });
 
-window.permPopup.onData(({ origin, permission, dark }) => {
+window.permPopup.onData(({ origin, permission, dark, labels } = {}) => {
   document.body.classList.toggle('light', !dark);
-  const labels = {
-    media: 'use camera/microphone',
-    geolocation: 'access your location',
-    notifications: 'send notifications',
-  };
-  const what = labels[permission] || ('use: ' + permission);
+  const L = labels || {};
+  if (L.allow) allowBtn.textContent = L.allow;
+  if (L.deny) denyBtn.textContent = L.deny;
+  const wl = L.what || {};
+  const genericTpl = wl.generic || 'use: {what}';
+  const what = wl[permission] || genericTpl.replace('{what}', permission);
+  const who = origin || L.site || 'The website';
+  const tpl = L.text || '{origin} wants {what}.';
+
+  // Render the sentence with the origin bolded: split the template on {origin}.
   textEl.innerHTML = '';
-  const who = document.createElement('b');
-  who.textContent = origin || 'The website';
-  textEl.appendChild(who);
-  textEl.appendChild(document.createTextNode(' wants ' + what + '.'));
+  const [before = '', after = ''] = tpl.split('{origin}');
+  const pre = before.replace('{what}', what);
+  if (pre) textEl.appendChild(document.createTextNode(pre));
+  const whoEl = document.createElement('b');
+  whoEl.textContent = who;
+  textEl.appendChild(whoEl);
+  const post = after.replace('{what}', what);
+  if (post) textEl.appendChild(document.createTextNode(post));
 });

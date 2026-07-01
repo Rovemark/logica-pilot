@@ -39,10 +39,27 @@ const perTab = new Map();          // tabId (webContents id) → blocked count t
 let _saveAllowlist = () => {};     // (arr) => void — persists the allowlist to settings
 const listeners = new Set();       // (count) => void — UI badge updates
 
+let _cachePath = null;             // serialized-engine cache on disk
+let _refreshTimer = null;          // periodic filter-list refresh
+let _updatedAt = 0;                // epoch ms of the last successful list refresh
+let _saveUpdatedAt = () => {};     // (ts) => void — persists the refresh timestamp
+
 const LISTS = ['EasyList', 'EasyPrivacy'];
+const REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12h
 
 function _norm(h) { return String(h || '').replace(/^www\./i, '').toLowerCase().trim(); }
 function _allowFilter(h) { return '@@||' + _norm(h) + '^$document,elemhide'; }
+
+/** Wires the blocked-request counter onto an engine instance (used on init + refresh). */
+function wireBlockedListener(b) {
+  try {
+    b.on('request-blocked', (req) => {
+      blockedCount++;
+      try { const t = req && req.tabId; if (t != null) perTab.set(t, (perTab.get(t) || 0) + 1); } catch {}
+      notify();
+    });
+  } catch {}
+}
 
 /**
  * Builds the engine (cached) and applies blocking to the session if enabled.
@@ -53,15 +70,17 @@ function _allowFilter(h) { return '@@||' + _norm(h) + '^$document,elemhide'; }
  * @param {string[]} opts.initialAllowlist hostnames to pre-allow (from settings)
  * @param {Function} opts.saveAllowlist    (arr) => void — persist the allowlist
  */
-async function init(ses, { enabled = true, userDataDir, initialAllowlist, saveAllowlist } = {}) {
+async function init(ses, { enabled = true, userDataDir, initialAllowlist, saveAllowlist, updatedAt, saveUpdatedAt } = {}) {
   if (!ElectronBlocker || !ses) return null;
   _session = ses;
   if (typeof saveAllowlist === 'function') _saveAllowlist = saveAllowlist;
+  if (typeof saveUpdatedAt === 'function') _saveUpdatedAt = saveUpdatedAt;
+  if (typeof updatedAt === 'number') _updatedAt = updatedAt;
 
   if (!blocker) {
-    const cachePath = userDataDir ? path.join(userDataDir, 'adblock-engine.bin') : null;
-    const caching = cachePath
-      ? { path: cachePath, read: fs.promises.readFile, write: fs.promises.writeFile }
+    _cachePath = userDataDir ? path.join(userDataDir, 'adblock-engine.bin') : null;
+    const caching = _cachePath
+      ? { path: _cachePath, read: fs.promises.readFile, write: fs.promises.writeFile }
       : undefined;
     try {
       blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch, caching);
@@ -74,13 +93,7 @@ async function init(ses, { enabled = true, userDataDir, initialAllowlist, saveAl
         return null;
       }
     }
-    try {
-      blocker.on('request-blocked', (req) => {
-        blockedCount++;
-        try { const t = req && req.tabId; if (t != null) perTab.set(t, (perTab.get(t) || 0) + 1); } catch {}
-        notify();
-      });
-    } catch {}
+    wireBlockedListener(blocker);
     console.log('[adblock] engine ready');
   }
 
@@ -96,7 +109,47 @@ async function init(ses, { enabled = true, userDataDir, initialAllowlist, saveAl
   }
 
   setEnabled(enabled);
+
+  // Filter lists would otherwise stay frozen at the first-launch snapshot (the cache's
+  // fromCached only re-fetches when the .bin is missing/corrupt). Refresh shortly after
+  // boot, then every 12h. Best-effort — a failed refresh never disables blocking.
+  if (!_refreshTimer) {
+    const boot = setTimeout(() => { refresh(); }, 30_000);
+    if (boot.unref) boot.unref();
+    _refreshTimer = setInterval(() => { refresh(); }, REFRESH_INTERVAL_MS);
+    if (_refreshTimer.unref) _refreshTimer.unref();
+  }
+
   return blocker;
+}
+
+/**
+ * Rebuilds the engine from the remote lists, re-serializes the cache, hot-swaps it
+ * into the session, and replays the allowlist. Silent no-op when offline.
+ */
+async function refresh() {
+  if (!ElectronBlocker || !_session) return;
+  let fresh;
+  try {
+    fresh = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch);
+  } catch {
+    return; // offline / fetch failed — keep the current engine
+  }
+  try {
+    if (_cachePath) { try { await fs.promises.writeFile(_cachePath, Buffer.from(fresh.serialize())); } catch {} }
+    wireBlockedListener(fresh);
+    for (const h of allowlist) { try { fresh.updateFromDiff({ added: [_allowFilter(h)] }); } catch {} }
+    if (_enabled) {
+      try { blocker.disableBlockingInSession(_session); } catch {}
+      try { fresh.enableBlockingInSession(_session); } catch {}
+    }
+    blocker = fresh;
+    _updatedAt = Date.now();
+    try { _saveUpdatedAt(_updatedAt); } catch {}
+    console.log('[adblock] filter lists refreshed');
+  } catch (e) {
+    console.error('[adblock] refresh failed:', e && e.message);
+  }
 }
 
 /** Turns blocking on/off for the wired session. Returns the effective state. */
@@ -152,6 +205,7 @@ function getStats(host, tabId) {
     host: host || null,
     allowed: host ? isAllowlisted(host) : false,
     lists: LISTS,
+    updatedAt: _updatedAt || null,
   };
 }
 
@@ -165,6 +219,7 @@ function notify() { for (const cb of listeners) { try { cb(blockedCount); } catc
 
 module.exports = {
   init,
+  refresh,
   setEnabled,
   isEnabled,
   isAvailable,

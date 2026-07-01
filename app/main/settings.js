@@ -22,6 +22,7 @@ const DEFAULTS = Object.freeze({
   aiApiKey: '', // user's Anthropic key (sk-ant-…) for Pilot without LogicaProxy
   adBlock: true, // native ad & tracker blocking (EasyList + EasyPrivacy) on by default
   adBlockAllowlist: [], // hostnames where ad-block is disabled (per-site allow)
+  adBlockUpdatedAt: 0, // epoch ms of the last successful filter-list refresh
   extPins: {}, // extension id → pinned(bool). Absent = pinned (icon shown in toolbar).
 });
 
@@ -65,6 +66,7 @@ function sanitize(s) {
   if (Array.isArray(s.adBlockAllowlist)) {
     out.adBlockAllowlist = s.adBlockAllowlist.filter((h) => typeof h === 'string' && h).slice(0, 5000);
   }
+  if (typeof s.adBlockUpdatedAt === 'number' && s.adBlockUpdatedAt >= 0) out.adBlockUpdatedAt = s.adBlockUpdatedAt;
   if (s.extPins && typeof s.extPins === 'object' && !Array.isArray(s.extPins)) {
     const pins = {};
     for (const [k, v] of Object.entries(s.extPins)) if (typeof v === 'boolean') pins[k] = v;
