@@ -298,28 +298,51 @@ async function runCapture(win) {
   try { fs.mkdirSync(dir, { recursive: true }); } catch {}
   const wc = win.webContents;
   const js = (code) => wc.executeJavaScript(code, true).catch(() => {});
-  const shot = async (name, ms) => {
-    await new Promise((r) => setTimeout(r, ms));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const shotOf = async (target, name, ms) => {
+    if (ms) await sleep(ms);
     try {
-      const img = await wc.capturePage();
+      const img = await target.webContents.capturePage();
       fs.writeFileSync(path.join(dir, name), img.toPNG());
       console.log('[capture] wrote', name);
     } catch (e) { console.error('[capture] shot failed', name, e && e.message); }
   };
+  const shot = (name, ms) => shotOf(win, name, ms);
   try {
     try { win.show(); win.focus(); } catch {}
-    // Force English everywhere: the shell i18n AND the newtab webview's own runtime
-    // i18n (which fetches pilot://newtab/_data/i18n based on settings.language).
+    // Force English everywhere: shell i18n + the newtab webview's own runtime i18n.
     try { settingsStore.set({ language: 'en' }); } catch {}
     await js(`window.i18n && window.i18n.setLang('en')`);
-    await js(`window.dispatchMenu && window.dispatchMenu('reload')`); // newtab re-fetches i18n in EN
-    await new Promise((r) => setTimeout(r, 1200));
-    await shot('home.png', 3000);                                 // new-tab (branded + feed)
-    await js(`window.dispatchMenu && window.dispatchMenu('open-url','https://news.ycombinator.com')`);
-    await shot('browsing.png', 5500);                             // real page rendered in a tab
+    await js(`window.dispatchMenu && window.dispatchMenu('reload')`);
+    await sleep(1200);
+    await shot('home.png', 2600);                                  // new-tab (branded)
+
+    // ── THE money shot: the Pilot AUTONOMOUSLY executing a real task ──
+    // Navigate a real page, open the panel, give a goal, click Run — the LogicaProxy
+    // drives the observe→decide→act loop and the timeline fills with real steps.
+    await js(`window.dispatchMenu && window.dispatchMenu('open-url','https://en.wikipedia.org/wiki/Coffee')`);
+    await sleep(4500);
     await js(`window.dispatchMenu && window.dispatchMenu('toggle-pilot');` +
-      `var g=document.getElementById('goal'); if(g){g.value='find the top Show HN post and tell me its score'; g.dispatchEvent(new Event('input')); g.focus();}`);
-    await shot('pilot.png', 1800);                                // Pilot copilot panel open
+      `var g=document.getElementById('goal');` +
+      `if(g){g.value='Scroll the page and tell me which country is the largest coffee producer.'; g.dispatchEvent(new Event('input'));}` +
+      `var r=document.getElementById('run'); if(r) r.click();`);
+    await shot('pilot-running.png', 30000);                        // let the loop produce steps
+
+    // ── Ad-block panel (separate popup window) ──
+    await js(`var b=document.getElementById('adblock-btn'); if(b) b.click();`);
+    await sleep(1400);
+    if (typeof adblockPanelWin !== 'undefined' && adblockPanelWin && !adblockPanelWin.isDestroyed()) {
+      await shotOf(adblockPanelWin, 'adblock-panel.png', 400);
+    }
+    await js(`document.body.click();`);
+    await sleep(400);
+
+    // ── Extensions menu (separate popup window) ──
+    await js(`var e=document.getElementById('ext-btn'); if(e) e.click();`);
+    await sleep(1600);
+    if (typeof menuPopupWin !== 'undefined' && menuPopupWin && !menuPopupWin.isDestroyed()) {
+      await shotOf(menuPopupWin, 'ext-menu.png', 400);
+    }
   } catch (e) { console.error('[capture] error', e && e.message); }
   app.exit(0);
 }
@@ -656,10 +679,18 @@ ipcMain.handle('pilot:run', async (evt, { guestId, objective, vision, model }) =
   runs.set(guestId, token);
 
   try {
+    // The AI answers in the browser's UI language (not a hardcoded one).
+    const uiLang = resolveUiLang(settingsStore.get().language);
+    const langName = {
+      'pt-BR': 'Brazilian Portuguese', en: 'English', es: 'Spanish', fr: 'French',
+      de: 'German', it: 'Italian', nl: 'Dutch', pl: 'Polish', ru: 'Russian',
+      ja: 'Japanese', ko: 'Korean', 'zh-CN': 'Chinese',
+    }[uiLang] || 'English';
     const res = await agent.run(page, objective, {
       vision: !!vision,
       model: model || undefined,
       maxSteps: 30,
+      language: langName,
       onStep: (s) => {
         try { evt.sender.send('pilot:step', s); } catch {}
       },

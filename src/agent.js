@@ -29,7 +29,7 @@ RULES:
 - To search/find: use "type" in the right field with submit=true (sends Enter).
 - After navigating/clicking, the next page read already reflects the result — observe before acting again.
 - Do not repeat the same action if it clearly didn't work; try a different approach.
-- When the OBJECTIVE is fulfilled, call "done" with success=true and a clear, complete "result" (the final answer for the user, in PT-BR).
+- When the OBJECTIVE is fulfilled, call "done" with success=true and a clear, complete "result" (the final answer for the user, written in the SAME LANGUAGE the user wrote the OBJECTIVE in).
 - If genuinely stuck (paywall, mandatory login, captcha, loop), call "done" with success=false explaining why.
 - Be efficient: the minimum number of steps to the result.`;
 
@@ -117,7 +117,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         success: { type: 'boolean' },
-        result: { type: 'string', description: 'Response/final result in PT-BR.' },
+        result: { type: 'string', description: 'The final result, in the SAME LANGUAGE as the objective.' },
       },
       required: ['success', 'result'],
     },
@@ -168,6 +168,11 @@ async function run(page, objective, opts = {}) {
   const visionMode = !!opts.vision;
   const model = opts.model;
   const onStep = typeof opts.onStep === 'function' ? opts.onStep : () => {};
+  // Respond in the caller's language (the browser UI language) when provided;
+  // otherwise the prompt already tells the model to mirror the objective's language.
+  const system = opts.language
+    ? `${SYSTEM_PROMPT}\n\nIMPORTANT: write the final "result" in ${opts.language}.`
+    : SYSTEM_PROMPT;
 
   if (opts.startUrl) {
     await actions.navigate(page, opts.startUrl);
@@ -211,7 +216,7 @@ async function run(page, objective, opts = {}) {
     let resp;
     try {
       resp = await llm.callClaude({
-        system: SYSTEM_PROMPT,
+        system,
         messages: trimImages(history),
         tools: TOOLS,
         model,

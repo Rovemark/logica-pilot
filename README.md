@@ -12,8 +12,12 @@ goal is met. Pure CDP engine · zero-dependency core · headless agent mode **an
 browser · **CLI and MCP** with the same 26 tools.
 
 <p align="center">
-  <img src="docs/media/demo.gif" alt="Logica Pilot in action — real browser, real page, autonomous Pilot copilot" width="100%">
-  <br><em>The real desktop browser: a live page in a tab and the autonomous <strong>Pilot</strong> copilot on the right.</em>
+  <img src="docs/media/demo.gif" alt="Logica Pilot in action — new tab, autonomous Pilot executing a task, native ad-block" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/media/screenshot-pilot.png" alt="The Pilot autonomously executes a real goal on Wikipedia and answers with a formatted result" width="100%">
+  <br><em>A real run: given a goal, the Pilot <strong>scrolls, reads and answers</strong> — in the browser's language, formatted (steps on the right, ad-block counter in the toolbar).</em>
 </p>
 
 ---
@@ -397,7 +401,9 @@ All recipes are **MCP tools** too — call them directly from Claude or any agen
 ## Desktop Browser Features
 
 <p align="center">
-  <img src="docs/media/screenshot-browsing.png" alt="Logica Pilot browsing a live page with the autonomous Pilot copilot panel" width="92%">
+  <img src="docs/media/screenshot-home.png" alt="Logica Pilot new-tab page" width="65%">
+  &nbsp;
+  <img src="docs/media/screenshot-adblock.png" alt="Native ad-block panel — blocked count and per-site allow" width="30%">
 </p>
 
 The Logica Pilot browser window (real browser engine) includes:

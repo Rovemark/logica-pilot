@@ -724,7 +724,7 @@ function addStep({ step, action, input, result }) {
     '<div class="body">' +
     `<div class="head"><span class="act">${action}</span><span class="n">#${step}</span></div>` +
     `<div class="detail">${escapeHtml(actionDetail(action, input))}</div>` +
-    (result && action !== 'done' ? `<div class="res">${escapeHtml(String(result).slice(0, 120))}</div>` : '') +
+    (result && action !== 'done' ? `<div class="res">${mdInline(String(result).slice(0, 120))}</div>` : '') +
     '</div>';
   timeline.appendChild(el);
   timeline.scrollTop = timeline.scrollHeight;
@@ -735,7 +735,7 @@ function showResult(res) {
   resultBox.className = 'result ' + (res.success ? 'ok' : 'fail');
   resultBox.innerHTML =
     `<h4>${res.success ? 'Result' : 'Not completed'} · ${res.steps || 0} steps</h4>` +
-    `<p>${escapeHtml(res.result || '')}</p>`;
+    `<p>${mdInline(res.result || '')}</p>`;
   resultBox.scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -800,6 +800,17 @@ if (window.pilot && window.pilot.onPermissionRequest) {
 // ── util ─────────────────────────────────────────────────────
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Safe inline markdown for AI results: escape first, then render **bold**, *italic*,
+// `code` and line breaks. Never injects raw HTML from the model.
+function mdInline(s) {
+  let h = escapeHtml(s);
+  h = h.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  h = h.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  h = h.replace(/\r?\n/g, '<br>');
+  return h;
 }
 
 // ── boot ──────────────────────────────────────────────────────
