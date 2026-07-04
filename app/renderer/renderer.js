@@ -695,10 +695,10 @@ let running = false;
 
 // Force the active <webview> guest to resync its size to its (CSS-resized) element.
 // A native webview doesn't reliably follow a CSS-only container resize — collapsing
-// the Pilot panel emits no window 'resize' to poke Chromium, so without this nudge
-// the page content stays at the old (narrower) width until a tab switch or window
-// resize forces it. A 1px perturbation restored on the next frame triggers the
-// guest resize; it's imperceptible.
+// the Pilot panel (or toggling the bookmarks bar) changes .views's size without a
+// window 'resize' event to poke Chromium, so the page content can stay at the old
+// width with a blank strip until something forces it. A 1px perturbation restored
+// on the next frame triggers the guest resize; it's imperceptible.
 function syncWebviewSize() {
   const wv = document.querySelector('.views webview.active');
   if (!wv) return;
@@ -706,14 +706,20 @@ function syncWebviewSize() {
   requestAnimationFrame(() => { wv.style.width = ''; });
 }
 
+// Belt-and-suspenders: resync on ANY change to the content area's size, whatever
+// caused it (panel, bookmarks bar, devtools dock, window). Trailing-debounced so it
+// fires once after the resize/animation settles — never mid-flex-animation.
+(() => {
+  const viewsEl = $('#views');
+  if (!viewsEl || !window.ResizeObserver) return;
+  let t = 0;
+  new ResizeObserver(() => { clearTimeout(t); t = setTimeout(syncWebviewSize, 60); }).observe(viewsEl);
+})();
+
 function togglePilot(force) {
   const collapsed = force === undefined ? !pilotPanel.classList.contains('collapsed') : !force;
   pilotPanel.classList.toggle('collapsed', collapsed);
   $('#pilot-toggle').classList.toggle('active', !collapsed);
-  // Reflow the page content once the panel finishes sliding (with a fallback in
-  // case transitionend doesn't fire — e.g. prefers-reduced-motion, no width delta).
-  pilotPanel.addEventListener('transitionend', syncWebviewSize, { once: true });
-  setTimeout(syncWebviewSize, 260); // transition is .2s; settle just after
 }
 $('#pilot-toggle').addEventListener('click', () => togglePilot());
 
