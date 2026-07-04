@@ -693,10 +693,27 @@ const resultBox = $('#result');
 const statusDot = $('#status-dot');
 let running = false;
 
+// Force the active <webview> guest to resync its size to its (CSS-resized) element.
+// A native webview doesn't reliably follow a CSS-only container resize — collapsing
+// the Pilot panel emits no window 'resize' to poke Chromium, so without this nudge
+// the page content stays at the old (narrower) width until a tab switch or window
+// resize forces it. A 1px perturbation restored on the next frame triggers the
+// guest resize; it's imperceptible.
+function syncWebviewSize() {
+  const wv = document.querySelector('.views webview.active');
+  if (!wv) return;
+  wv.style.width = 'calc(100% - 1px)';
+  requestAnimationFrame(() => { wv.style.width = ''; });
+}
+
 function togglePilot(force) {
   const collapsed = force === undefined ? !pilotPanel.classList.contains('collapsed') : !force;
   pilotPanel.classList.toggle('collapsed', collapsed);
   $('#pilot-toggle').classList.toggle('active', !collapsed);
+  // Reflow the page content once the panel finishes sliding (with a fallback in
+  // case transitionend doesn't fire — e.g. prefers-reduced-motion, no width delta).
+  pilotPanel.addEventListener('transitionend', syncWebviewSize, { once: true });
+  setTimeout(syncWebviewSize, 260); // transition is .2s; settle just after
 }
 $('#pilot-toggle').addEventListener('click', () => togglePilot());
 
