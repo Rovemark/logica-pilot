@@ -50,55 +50,88 @@ function isConfigured() {
   return !!(userKey() || runtime.url || DEFAULT_URL);
 }
 
-async function callClaude({ system, messages, tools, model, maxTokens = 1024, temperature = 0 }) {
+const RETRY_STATUS = new Set([429, 500, 502, 503, 529]);
+const REQUEST_TIMEOUT_MS = 120000;
+const MAX_ATTEMPTS = 3;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const backoff = (attempt) => Math.min(15000, 750 * 2 ** (attempt - 1)); // 750ms, 1.5s, …
+
+async function callClaude({ system, messages, tools, model, maxTokens = 1024, temperature } = {}) {
   const body = {
     model: model || runtime.model || DEFAULT_MODEL,
     max_tokens: maxTokens,
-    temperature,
     system,
     messages,
   };
+  // Omit `temperature` unless explicitly requested: the newer model families
+  // (Fable 5 / Opus 4.8 / Sonnet 5 …) reject any sampling param with a 400, and
+  // it changes nothing for a forced tool-choice loop. Default = don't send it.
+  if (temperature !== undefined && temperature !== null) body.temperature = temperature;
   if (tools && tools.length) {
     body.tools = tools;
     body.tool_choice = { type: 'auto' };
   }
+  const payload = JSON.stringify(body);
 
   const primary = resolveTarget();
-  // Fallback: primary = local LogicaProxy down + user has key → Anthropic.
+  // Fallback: primary = local LogicaProxy unreachable/5xx + user has key → Anthropic.
   const uk = userKey();
   const fallback = (!primary.anthropic && uk) ? { url: ANTHROPIC_URL, key: uk, anthropic: true } : null;
+  const targets = fallback ? [primary, fallback] : [primary];
 
-  const hit = (target) =>
-    fetch(target.url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'x-api-key': target.key,
-      },
-      body: JSON.stringify(body),
-    });
+  const hit = async (target) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS); // a hung proxy must not block the run forever
+    try {
+      return await fetch(target.url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'anthropic-version': '2023-06-01',
+          'x-api-key': target.key,
+        },
+        body: payload,
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
 
-  let res = null;
   let lastErr = null;
-  try {
-    res = await hit(primary);
-  } catch (e) {
-    lastErr = e;
-    if (fallback) { try { res = await hit(fallback); } catch (e2) { lastErr = e2; } }
+  let lastBad = null; // { status, text } from the most recent retryable HTTP failure
+  for (const target of targets) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      let res;
+      try {
+        res = await hit(target);
+      } catch (e) {
+        lastErr = e; lastBad = null; // network error / timeout → retry, then next target
+        if (attempt < MAX_ATTEMPTS) { await sleep(backoff(attempt)); continue; }
+        break;
+      }
+      if (res.ok) return res.json();
+
+      const status = res.status;
+      const text = await res.text().catch(() => '');
+      // 4xx (bad request / auth): our fault, not the endpoint's — don't retry, don't fall back.
+      if (!RETRY_STATUS.has(status)) throw new Error(`LLM ${status}: ${text.slice(0, 400)}`);
+
+      lastBad = { status, text }; lastErr = null;
+      if (attempt < MAX_ATTEMPTS) {
+        const ra = parseInt(res.headers.get('retry-after') || '', 10);
+        await sleep(Number.isFinite(ra) ? Math.min(ra * 1000, 15000) : backoff(attempt));
+        continue;
+      }
+      break; // retryable but exhausted on this target → try the fallback target
+    }
   }
 
-  if (!res) {
-    const hint = (!primary.anthropic && !uk)
-      ? ' Without local LogicaProxy: paste your Anthropic key (sk-ant-…) in Settings → Pilot to use AI.'
-      : '';
-    throw new Error(`Failed to contact the brain (${primary.url}): ${lastErr && lastErr.message}.${hint}`);
-  }
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`LLM ${res.status}: ${t.slice(0, 400)}`);
-  }
-  return res.json();
+  if (lastBad) throw new Error(`LLM ${lastBad.status}: ${lastBad.text.slice(0, 400)}`);
+  const hint = (!primary.anthropic && !uk)
+    ? ' Without local LogicaProxy: paste your Anthropic key (sk-ant-…) in Settings → Pilot to use AI.'
+    : '';
+  throw new Error(`Failed to contact the brain (${primary.url}): ${lastErr && lastErr.message}.${hint}`);
 }
 
 /** Extracts first tool_use block from a response. */

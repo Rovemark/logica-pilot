@@ -51,7 +51,9 @@ function log(...m) { process.stderr.write('[mcp] ' + m.join(' ') + '\n'); }
 
 function resultContent(out) {
   if (out && out.image) return { content: [{ type: 'image', data: out.image, mimeType: out.mimeType || 'image/jpeg' }] };
-  if (out && out.json !== undefined) return { content: [{ type: 'text', text: JSON.stringify(out.json, null, 2) }] };
+  // Compact JSON: the consumer is another model/agent, not a human — pretty-printing
+  // burns ~17% of every payload on indentation whitespace for zero information.
+  if (out && out.json !== undefined) return { content: [{ type: 'text', text: JSON.stringify(out.json) }] };
   const text = out && typeof out === 'object' && 'text' in out ? out.text : (typeof out === 'string' ? out : JSON.stringify(out));
   return { content: [{ type: 'text', text: String(text) }] };
 }

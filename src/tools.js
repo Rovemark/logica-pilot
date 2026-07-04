@@ -322,10 +322,19 @@ const TOOLS = [
         urls: { type: 'array', items: { type: 'string' } }, task: { type: 'string' },
         mode: { type: 'string', enum: ['extract', 'read', 'run'] }, schema: { type: 'object' },
         synthesize: { type: 'string' }, concurrency: { type: 'number' },
+        includeResults: { type: 'boolean', description: 'Return the full per-URL results[] even when synthesizing (default: only synthesis + sources).' },
       }, required: ['urls', 'task'],
     },
     run: async (a, ctx) => {
       const r = await fanout({ urls: a.urls, task: a.task, mode: a.mode || 'extract', schema: a.schema, synthesize: a.synthesize, concurrency: a.concurrency, model: ctx.model, onEvent: ctx.onEvent });
+      // When synthesis was requested, the caller wants the answer — not N raw pages.
+      // Drop results[] (often ~20KB) for a slim sources[] list; citations [n] in the
+      // synthesis stay resolvable. `includeResults:true` is the escape hatch.
+      if (a.synthesize && !a.includeResults) {
+        const out = { count: r.count, ok: r.ok, sources: r.results.map((x) => ({ url: x.url, title: x.title, ok: x.ok, ...(x.error && { error: x.error }) })) };
+        if (r.synthesis != null) out.synthesis = r.synthesis;
+        return { json: out };
+      }
       return { json: { count: r.count, ok: r.ok, synthesis: r.synthesis, results: r.results } };
     },
   },

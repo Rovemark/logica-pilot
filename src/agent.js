@@ -23,6 +23,8 @@ You receive, at each step, the state of the page: a list of INTERACTIVE ELEMENTS
 
 Your job: fulfill the user's OBJECTIVE by taking ONE action at a time, using the tools.
 
+In the element list, "[n]" is the index you act on; a "~" right after it means the element is below the fold; a final "citation refs:" line just lists footnote-style anchors ([1], [2], …) you can usually ignore.
+
 RULES:
 - Act by intent using the ELEMENT'S INDEX — never invent indices that aren't on the list.
 - If the target is not visible, use "scroll" to search for it before giving up.
@@ -124,23 +126,100 @@ const TOOLS = [
   },
 ];
 
-/** Remove images from all user messages except the last one (token economy). */
-function trimImages(history) {
+const CACHE = { type: 'ephemeral' };
+
+/**
+ * Permanently drop screenshots from every user turn except the newest one.
+ *
+ * Mutates `history` IN PLACE so the conversation stays append-only: once a turn
+ * stops being the newest, its bytes never change again. That stability is what
+ * lets prompt caching read the whole prior prefix at ~0.1× instead of re-paying
+ * full price for it every step. (Recomputing a stripped copy each call, the old
+ * approach, produced a different object graph each step and defeated the cache.)
+ */
+function retireOldImages(history) {
   let lastUser = -1;
   for (let i = history.length - 1; i >= 0; i--) {
     if (history[i].role === 'user') { lastUser = i; break; }
   }
+  for (let i = 0; i < history.length; i++) {
+    const m = history[i];
+    if (m.role !== 'user' || i === lastUser || !Array.isArray(m.content)) continue;
+    let changed = false;
+    m.content = m.content.map((b) => {
+      if (b.type === 'image') { changed = true; return { type: 'text', text: '[previous screenshot omitted]' }; }
+      return b;
+    });
+    void changed;
+  }
+  return history;
+}
+
+/**
+ * Stub perception maps older than the last `keepLast` user turns.
+ *
+ * The agent re-sends the whole conversation each step, so without this the input
+ * grows QUADRATICALLY: step k pays for k full page maps (~1.8K tokens each), even
+ * though a map for a page we already left is dead weight — its element indices
+ * are reassigned from 0 on every snapshot (perception.js), so acting on a stale
+ * map would be a bug, and the system prompt already says the newest read wins.
+ *
+ * Non-mutating and DETERMINISTIC: a given old turn stubs to the exact same bytes
+ * every step, so the cached prefix stays valid. Only the single map that leaves
+ * the keep window each step changes — the one mutation point per step, which the
+ * moving breakpoint sits after. The OBJECTIVE (and step header) are preserved.
+ *
+ * keepLast=1 (only the newest map full) measured cheapest live: keeping 2 forces
+ * re-writing two full maps each step, and the cache-write premium (1.25×) makes
+ * that dearer than the reads it saves. The prior action trace (assistant tool_use
+ * + tool_result blocks) is kept intact, so loop-detection memory survives; the
+ * older element lists are stale anyway (indices are reassigned every snapshot).
+ */
+function trimPerception(history, keepLast = 1) {
+  const userIdx = [];
+  for (let i = 0; i < history.length; i++) if (history[i].role === 'user') userIdx.push(i);
+  const keep = new Set(userIdx.slice(-keepLast));
   return history.map((m, i) => {
-    if (m.role === 'user' && Array.isArray(m.content) && i !== lastUser) {
-      return {
-        role: 'user',
-        content: m.content.map((b) =>
-          b.type === 'image' ? { type: 'text', text: '[previous screenshot omitted]' } : b,
-        ),
-      };
-    }
-    return m;
+    if (m.role !== 'user' || keep.has(i) || !Array.isArray(m.content)) return m;
+    return {
+      role: 'user',
+      content: m.content.map((b) => {
+        if (b.type !== 'text' || !b.text.includes('ELEMENTS (')) return b;
+        const lines = b.text.split('\n');
+        const stepIdx = lines.findIndex((l) => l.startsWith('--- STEP '));
+        const urlLine = lines.find((l) => l.startsWith('URL:')) || '';
+        const head = stepIdx >= 0 ? lines.slice(0, stepIdx + 1).join('\n') : (lines[0] || '');
+        return { type: 'text', text: `${head}\n${urlLine}\n[page state superseded — see latest observation]` };
+      }),
+    };
   });
+}
+
+/**
+ * Build the request `messages` with a single MOVING cache breakpoint on the last
+ * content block of the last turn. Combined with the static breakpoint on
+ * system+tools, this makes each step read the entire prior conversation from
+ * cache and write only the newest turn. The marker is added on a shallow copy so
+ * it never persists into `history` (stale markers would blow the 4-breakpoint
+ * limit and shift bytes, breaking the very cache we want).
+ */
+function withMovingBreakpoint(history) {
+  if (!history.length) return history;
+  const last = history[history.length - 1];
+  if (!Array.isArray(last.content) || !last.content.length) return history;
+  const blocks = last.content.slice();
+  blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: CACHE };
+  return [...history.slice(0, -1), { ...last, content: blocks }];
+}
+
+/** Fold one response's usage into the running totals (for measuring savings). */
+function addUsage(acc, u) {
+  if (!u) return acc;
+  acc.input += u.input_tokens || 0;
+  acc.output += u.output_tokens || 0;
+  acc.cacheRead += u.cache_read_input_tokens || 0;
+  acc.cacheWrite += u.cache_creation_input_tokens || 0;
+  return acc;
 }
 
 async function execAction(page, name, input) {
@@ -170,9 +249,14 @@ async function run(page, objective, opts = {}) {
   const onStep = typeof opts.onStep === 'function' ? opts.onStep : () => {};
   // Respond in the caller's language (the browser UI language) when provided;
   // otherwise the prompt already tells the model to mirror the objective's language.
-  const system = opts.language
+  const systemText = opts.language
     ? `${SYSTEM_PROMPT}\n\nIMPORTANT: write the final "result" in ${opts.language}.`
     : SYSTEM_PROMPT;
+  // System as a cached block: the breakpoint sits after `tools` in render order
+  // (tools → system → messages), so ONE marker here caches the whole static
+  // prefix (tools + system) and every step after the first reads it at ~0.1×.
+  const system = [{ type: 'text', text: systemText, cache_control: CACHE }];
+  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
   if (opts.startUrl) {
     await actions.navigate(page, opts.startUrl);
@@ -184,7 +268,7 @@ async function run(page, objective, opts = {}) {
 
   for (let step = 1; step <= maxSteps; step++) {
     if (typeof opts.shouldStop === 'function' && opts.shouldStop()) {
-      return { success: false, result: 'Stopped by user.', steps: step - 1, trace };
+      return { success: false, result: 'Stopped by user.', steps: step - 1, trace, usage };
     }
     const snap = await perception.snapshot(page);
     const useVision = visionMode || snap.elements.length === 0;
@@ -212,21 +296,24 @@ async function run(page, objective, opts = {}) {
     }
 
     history.push({ role: 'user', content });
+    retireOldImages(history);
 
     let resp;
     try {
       resp = await llm.callClaude({
         system,
-        messages: trimImages(history),
+        messages: withMovingBreakpoint(trimPerception(history)),
         tools: TOOLS,
         model,
         maxTokens: 1024,
       });
     } catch (e) {
       onStep({ step, action: 'error', input: {}, result: e.message });
-      return { success: false, result: `Brain error: ${e.message}`, steps: step, trace };
+      return { success: false, result: `Brain error: ${e.message}`, steps: step, trace, usage };
     }
 
+    addUsage(usage, resp.usage);
+    if (process.env.LOGICA_PILOT_USAGE) console.error(`[usage] step ${step}`, JSON.stringify(resp.usage));
     history.push({ role: 'assistant', content: resp.content });
     const tool = llm.firstToolUse(resp);
 
@@ -234,7 +321,7 @@ async function run(page, objective, opts = {}) {
       // No action → treat text as final response
       const txt = llm.textOf(resp) || '(no response)';
       onStep({ step, action: 'done', input: { success: true }, result: txt });
-      return { success: true, result: txt, steps: step, trace };
+      return { success: true, result: txt, steps: step, trace, usage };
     }
 
     if (tool.name === 'done') {
@@ -245,6 +332,7 @@ async function run(page, objective, opts = {}) {
         result: tool.input.result || '',
         steps: step,
         trace,
+        usage,
       };
     }
 
@@ -255,7 +343,7 @@ async function run(page, objective, opts = {}) {
       result = `ERROR: ${e.message}`;
     }
 
-    onStep({ step, action: tool.name, input: tool.input, result });
+    onStep({ step, action: tool.name, input: tool.input, result, usage: resp.usage });
     trace.push({ step, action: tool.name, input: tool.input, result });
 
     pendingToolResult = {
@@ -270,6 +358,7 @@ async function run(page, objective, opts = {}) {
     result: `Step limit of ${maxSteps} reached without completing the objective.`,
     steps: maxSteps,
     trace,
+    usage,
   };
 }
 

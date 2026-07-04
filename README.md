@@ -148,6 +148,33 @@ scores, so the model answers "what are the top stories?" from ~1.8 K tokens inst
  122 points · reconnecting    ·  17 comments
 ```
 
+### The autonomous loop is token-efficient too
+
+The benchmark above measures a *single* observation. An autonomous run makes 10–25 of them,
+and a naïve agent re-sends its whole history every step — so input cost grows **quadratically**.
+Logica Pilot's loop is built so it grows roughly **linearly**:
+
+- **Prompt caching** — the static system + tools prefix and the whole prior conversation are
+  marked with `cache_control`, so every step after the first *reads* them at ~0.1× instead of
+  re-paying full price. (Verified end-to-end: `usage.cache_read_input_tokens` climbs step over step.)
+- **Stale-map pruning** — once you leave a page its element map is dead weight (indices are
+  reassigned on every snapshot), so old maps are stubbed to a one-line pointer while the action
+  trace is kept intact. This keeps the request small *and* — measured — cheaper than caching alone.
+- **Slimmer perception** — shorter element lines (truncated hrefs, a `~` below-fold marker,
+  collapsed citation refs, no indentation): **~26% fewer characters per map** with no loss of
+  what the model acts on.
+
+**Measured live** on a 10-step Hacker-News run (identical transcript, old loop vs new, token
+accounting read back from the model's own `usage`, Sonnet input at $3/M):
+
+| | Full-price input tok | Effective input cost / run |
+|---|---:|---:|
+| **Old loop** (no cache, full history every step) | ~161,000 | **$0.49** |
+| **New loop** (cache + prune + slim) | ~30 | **$0.11** |
+
+**≈77% lower input cost per run** — and the longer the task, the wider the gap (the old loop is
+quadratic, the new one linear). This stacks on top of the per-observation savings above.
+
 ## The Token-Efficiency Advantage
 
 Instead of sending thousands of tokens of raw HTML or a full screenshot to the LLM:

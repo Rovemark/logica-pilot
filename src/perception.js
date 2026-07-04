@@ -69,7 +69,7 @@ function __lp_collect(maxEls) {
       name: labelOf(el).slice(0, 140),
       value: (el.value != null ? String(el.value) : '').slice(0, 80),
       placeholder: el.getAttribute('placeholder') || '',
-      href: (el.getAttribute('href') || '').slice(0, 200),
+      href: (el.getAttribute('href') || '').slice(0, 80),
       cx: Math.round(r.left + r.width / 2),
       cy: Math.round(r.top + r.height / 2),
       inView: (r.top >= 0 && r.top < innerHeight)
@@ -154,6 +154,16 @@ async function unmark(page) {
   }
 }
 
+/** href as a short, descriptive label (the model acts by index, not by URL). */
+function shortHref(h) {
+  if (!h) return '';
+  const s = h.replace(/^https?:\/\/[^/]+/, ''); // drop origin if absolute
+  const q = s.indexOf('?');
+  const base = q >= 0 ? s.slice(0, q) : s;
+  const capped = base.length > 22 ? base.slice(0, 22) + '…' : base;
+  return q >= 0 ? `${capped}?…` : capped;
+}
+
 /** Transforms the snapshot into compact text for the AI to read. */
 function format(snap) {
   const lines = [];
@@ -164,24 +174,29 @@ function format(snap) {
     const bottom = snap.scrollY + snap.viewportH;
     const more = bottom < snap.scrollH - 4;
     const pct = Math.min(100, Math.round((bottom / snap.scrollH) * 100));
-    lines.push(`SCROLL: ${pct}% of page${more ? ' — MORE CONTENT BELOW (use scroll)' : ' (end of page)'}`);
+    lines.push(`SCROLL: ${pct}%${more ? ' (more below)' : ' (end)'}`);
   }
 
   lines.push('');
-  lines.push(`INTERACTIVE ELEMENTS (${snap.elements.length}) — use index [n]:`);
-  if (snap.elements.length === 0) {
-    lines.push('  (no interactive elements detected — try scroll or vision mode)');
+  lines.push(`ELEMENTS (${snap.elements.length}) — [n]=index, ~=below fold:`);
+
+  const citeRefs = []; // anchors whose only label is "[n]" — collapse them (also avoids colliding with the [index] convention)
+  const elLines = [];
+  for (const el of snap.elements) {
+    let desc = (el.name || el.placeholder || el.value || shortHref(el.href) || '').replace(/\s+/g, ' ').trim();
+    if (el.tag === 'a' && /^\[\d+\]$/.test(desc)) { citeRefs.push(`[${el.id}]`); continue; }
+    const kind = el.role || (el.tag === 'input' ? `input[${el.type || 'text'}]` : el.tag);
+    const extra = [];
+    if (el.placeholder && el.placeholder !== desc) extra.push(`ph="${el.placeholder}"`);
+    if (el.value && el.tag === 'input') extra.push(`val="${el.value}"`);
+    elLines.push(`[${el.id}]${el.inView ? '' : '~'} ${kind} "${desc}"${extra.length ? ' ' + extra.join(' ') : ''}`);
+  }
+
+  if (elLines.length === 0 && citeRefs.length === 0) {
+    lines.push('(no interactive elements — try scroll or vision mode)');
   } else {
-    for (const el of snap.elements) {
-      const kind = el.role || (el.tag === 'input' ? `input[${el.type || 'text'}]` : el.tag);
-      let desc = el.name || el.placeholder || el.value || el.href || '';
-      desc = desc.replace(/\s+/g, ' ').trim();
-      const extra = [];
-      if (el.placeholder && el.placeholder !== desc) extra.push(`ph="${el.placeholder}"`);
-      if (el.value && el.tag === 'input') extra.push(`val="${el.value}"`);
-      if (!el.inView) extra.push('off-screen');
-      lines.push(`  [${el.id}] ${kind} "${desc}"${extra.length ? ' ' + extra.join(' ') : ''}`);
-    }
+    for (const l of elLines) lines.push(l);
+    if (citeRefs.length) lines.push(`citation refs: ${citeRefs.join(',')}`);
   }
 
   lines.push('');

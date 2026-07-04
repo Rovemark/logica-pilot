@@ -72,9 +72,12 @@ async function cmdTool(tool, args) {
 
 function printOut(out, asJson) {
   if (out && out.image) { console.log(`${C.dim}[image ${out.mimeType || ''} · base64 ${String(out.image).length} chars]${C.reset}`); return; }
-  if (out && out.json !== undefined) { console.log(JSON.stringify(out.json, null, 2)); return; }
+  // Pretty-print only for a human at a TTY; piped/Bash-consumed output goes compact
+  // (a downstream agent reading via `| ...` doesn't need the indentation whitespace).
+  const ind = process.stdout.isTTY ? 2 : 0;
+  if (out && out.json !== undefined) { console.log(JSON.stringify(out.json, null, ind)); return; }
   const text = out && typeof out === 'object' && 'text' in out ? out.text : out;
-  console.log(typeof text === 'string' ? text : JSON.stringify(text, null, 2));
+  console.log(typeof text === 'string' ? text : JSON.stringify(text, null, ind));
 }
 
 function buildHelp() {
