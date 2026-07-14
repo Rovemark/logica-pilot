@@ -126,7 +126,7 @@ async function map(url, o = {}) {
   // Sitemap missing/thin → collect same-domain links from the page itself.
   if (seen.size < 5 && !o.sitemapOnly) {
     source = seen.size ? 'sitemap+links' : 'links';
-    const browser = await Browser.launch({ headless: true });
+    const browser = await Browser.launch({ headless: true, proxy: o.proxy, location: o.location });
     try {
       const page = await browser.newPage();
       await page.goto(base.href, { timeout: 20000 }).catch(() => {});
@@ -186,7 +186,7 @@ async function crawl(o = {}) {
   const pages = [];
   let scraped = 0;
 
-  const browser = await Browser.launch({ headless: true });
+  const browser = await Browser.launch({ headless: true, proxy: o.proxy, location: o.location });
   let active = 0; // in-flight pages: the frontier can still grow while they run,
   //                so idle workers must WAIT, not exit (else BFS turns sequential).
   async function worker() {

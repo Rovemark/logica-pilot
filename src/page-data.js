@@ -107,10 +107,46 @@ function __lp_product() {
   }
   return { found: false, reason: 'page declares no Product (JSON-LD / microdata / og:price)' };
 }
+function __lp_media(max) {
+  var out = { videos: [], audios: [], embeds: [], files: [] };
+  var seen = {};
+  function add(list, item) { if (item.url && !seen[item.url] && list.length < max) { seen[item.url] = 1; list.push(item); } }
+  var vids = document.querySelectorAll('video');
+  for (var i = 0; i < vids.length; i++) {
+    var v = vids[i];
+    var src = v.currentSrc || v.src || '';
+    if (!src) { var s = v.querySelector('source[src]'); if (s) src = s.src; }
+    add(out.videos, { url: src, poster: v.poster || undefined, duration: isFinite(v.duration) ? Math.round(v.duration) : undefined });
+  }
+  var auds = document.querySelectorAll('audio');
+  for (var j = 0; j < auds.length; j++) {
+    var au = auds[j];
+    var asrc = au.currentSrc || au.src || '';
+    if (!asrc) { var as = au.querySelector('source[src]'); if (as) asrc = as.src; }
+    add(out.audios, { url: asrc });
+  }
+  var ogv = document.querySelector('meta[property="og:video"], meta[property="og:video:url"]');
+  if (ogv && ogv.content) add(out.videos, { url: ogv.content, source: 'og:video' });
+  // Direct media file links + streaming manifests in the DOM.
+  var links = document.querySelectorAll('a[href]');
+  for (var k = 0; k < links.length; k++) {
+    var h = links[k].href || '';
+    if (/\.(mp4|webm|mov|mp3|m4a|wav|ogg|flac|m3u8|mpd)(\?|$)/i.test(h)) add(out.files, { url: h, text: (links[k].innerText || '').trim().slice(0, 80) });
+  }
+  // Known embed providers (reported, not downloadable without their tooling).
+  var frames = document.querySelectorAll('iframe[src]');
+  for (var f = 0; f < frames.length; f++) {
+    var fu = frames[f].src;
+    var m = fu.match(/(youtube\.com|youtu\.be|vimeo\.com|dailymotion\.com|twitch\.tv|spotify\.com|soundcloud\.com)/i);
+    if (m) add(out.embeds, { provider: m[1].replace(/\.com|\.tv|\.be/i, ''), url: fu.slice(0, 300) });
+  }
+  return out;
+}
 /* eslint-enable */
 
 async function meta(page) { return page.eval(`(${__lp_meta.toString()})()`); }
 async function images(page, { max = 40 } = {}) { return page.eval(`(${__lp_images.toString()})(${Math.max(1, Math.min(Number(max) || 40, 100))})`); }
 async function product(page) { return page.eval(`(${__lp_product.toString()})()`); }
+async function media(page, { max = 30 } = {}) { return page.eval(`(${__lp_media.toString()})(${Math.max(1, Math.min(Number(max) || 30, 100))})`); }
 
-module.exports = { meta, images, product };
+module.exports = { meta, images, product, media };

@@ -9,7 +9,7 @@
 A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic
 intent — not pixel coordinates — then **clicks, types, scrolls and reads** on its own until the
 goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
-browser · **CLI and MCP** with the same 34 tools.
+browser · **CLI and MCP** with the same 36 tools.
 
 <p align="center">
   <img src="docs/media/pilot-run.gif" alt="The Pilot autonomously scrolls, extracts and answers a goal on a live page" width="100%">
@@ -294,7 +294,7 @@ await pilot.close();
 
 ## MCP Server (Claude Desktop, Cursor, Cline, etc.)
 
-Logica Pilot exposes **34 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
+Logica Pilot exposes **36 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
 
 ### Configuration
 
@@ -316,7 +316,7 @@ Then set your AI credentials (one time):
 - Export `ANTHROPIC_API_KEY=sk-ant-…`, *or*
 - Run a local LogicaProxy (`:8317`)
 
-### The 34 Tools (Grouped by Function)
+### The 36 Tools (Grouped by Function)
 
 #### Navigation (5 tools)
 | Tool | Purpose |
@@ -327,7 +327,7 @@ Then set your AI credentials (one time):
 | **reload** | Reload the page and return the map |
 | **wait** | Wait for text/selector/condition (semantic, no brittle sleeps) |
 
-#### Perception (8 tools)
+#### Perception (9 tools)
 | Tool | Purpose |
 |------|---------|
 | **observe** | Get the indexed map of the current page (semantic elements + readable text) |
@@ -336,6 +336,7 @@ Then set your AI credentials (one time):
 | **meta** | Page metadata, **deterministic** (no AI): title/description/canonical/favicon, OpenGraph/Twitter, JSON-LD types |
 | **images** | All meaningful images (url + alt + size), og:image first, icons skipped — deterministic |
 | **product** | **Deterministic product data** from the page's own JSON-LD/microdata/og:price: name, brand, price, availability, rating — fails closed, never guesses |
+| **media** | Discover video/audio/direct files/embeds on the page; `download:true` saves direct files to disk (size-capped) |
 | **links** | Return all links (text + url), deduped, compact |
 | **screenshot** | Capture page; `marks:true` draws indices as visual fallback |
 
@@ -369,11 +370,12 @@ Then set your AI credentials (one time):
 | **batch** | **Async jobs**: start a fanout/crawl in the background (detached, survives the call), then `status`/`get` the results later |
 | **llmstxt** | **Generate an llms.txt** for any site: map → read key pages in parallel → standard llms.txt with curated links |
 
-#### Multi-Agent Recipes (7 tools)
+#### Multi-Agent Recipes (8 tools)
 | Tool | Purpose |
 |------|---------|
 | **fanout** | Run the same task on N URLs in **parallel** (separate headless pages) + optional synthesis |
 | **search** | Search the web; `content:true` also **reads the top results in parallel** and attaches their text. Bing default; Brave if `BRAVE_SEARCH_API_KEY` |
+| **gather** | **Schema in, JSON out**: finds sources (or takes your urls), extracts from each in parallel and **merges into one validated JSON** + sources list |
 | **ask** | Ask a question: with `url`, answers **grounded in that page** (quotes the passage); without, searches + reads sources + answers with citations `[n]` |
 | **research** | Deep Research: search + read sources in parallel + synthesize with citations `[n]` |
 | **compare** | Compare: extract from N URLs in parallel + synthesize comparison table + recommendation |
@@ -519,6 +521,32 @@ The Logica Pilot browser window (real browser engine) includes:
 | `LOGICA_PILOT_DEBUG` | — | Set to enable CDP debug logs |
 | `LOGICA_PILOT_HEADFUL` | — | Set to `1` to keep MCP browser headful (window visible) |
 | `LOGICA_PILOT_SMOKE` | — | Run self-test (browser + CDP) and exit |
+| `LOGICA_PILOT_PROXY` | — | Bring-your-own proxy for every headless page (falls back to `HTTPS_PROXY`/`HTTP_PROXY`) |
+| `LOGICA_PILOT_LOCATION` | — | Country code (`BR`, `US`, …) — emulates timezone, locale and `Accept-Language` |
+
+### Bring your own proxy & location
+
+Every headless surface (`crawl`, `fanout`, `gather`, recipes) accepts a proxy — via env or the
+per-call `proxy` parameter. Credentials are answered through CDP (`Fetch.authRequired`), so the
+standard `user:pass@host:port` format of every major provider just works:
+
+```bash
+# Webshare
+export LOGICA_PILOT_PROXY="http://user-rotate:pass@p.webshare.io:80"
+# Bright Data / Oxylabs / Smartproxy / IPRoyal — same shape
+export LOGICA_PILOT_PROXY="http://customer-USER:PASS@brd.superproxy.io:22225"
+
+# Location emulation (timezone + locale + Accept-Language), no proxy needed:
+export LOGICA_PILOT_LOCATION=BR
+# or per call: logica-pilot crawl site.com --location '{"country":"US","languages":["en-US"]}'
+```
+
+> Proven live: the 407 auth challenge is answered via CDP and pages load through the tunnel;
+> with `location: BR` the page sees `America/Sao_Paulo` and `pt-BR`.
+
+**PII redaction** (deterministic, local, free): `read --redactPII` / `crawl --redactPII` masks
+emails, phones, CPF/CNPJ, credit cards (Luhn-validated) and IPs **before** the text reaches any
+model — `[email]`, `[phone]`, `[cpf]`, `[card]`, `[ip]`.
 
 ### AI Brain Options
 
@@ -556,7 +584,7 @@ src/
   llm.js                Brain (Messages API via LogicaProxy or Anthropic)
   agent.js              Autonomous loop (perceive → decide → act)
   electron-page.js      Adapter: webContents.debugger → page contract
-  mcp-server.js         MCP server (stdio, 34 tools)
+  mcp-server.js         MCP server (stdio, 36 tools)
   tools.js              SINGLE REGISTRY (CLI + MCP share this)
   fanout.js             Parallel multi-agent orchestration
   search.js             Web search (Bing default, Brave if key set)

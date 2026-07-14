@@ -14,6 +14,64 @@ const { CDPConnection } = require('./cdp-pipe');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ─────────────────────────────────────────────────────────────
+// Proxy & location (BYO-proxy: Webshare/Bright/etc. — local-first)
+// ─────────────────────────────────────────────────────────────
+
+/** "user:pass@host:port" | "scheme://user:pass@host:port" | "host:port" →
+ *  { server, username, password }. Chromium's --proxy-server takes no creds,
+ *  so credentials are answered via CDP Fetch.authRequired per page. */
+function parseProxy(raw) {
+  if (!raw || !String(raw).trim()) return null;
+  let s = String(raw).trim();
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'http://' + s;
+  try {
+    const u = new URL(s);
+    return {
+      server: `${u.protocol}//${u.hostname}${u.port ? ':' + u.port : ''}`,
+      username: decodeURIComponent(u.username || ''),
+      password: decodeURIComponent(u.password || ''),
+    };
+  } catch { return null; }
+}
+
+// Reasonable defaults per country (Firecrawl-style location emulation).
+const COUNTRY_DEFAULTS = {
+  US: { timezone: 'America/New_York', locale: 'en-US' },
+  BR: { timezone: 'America/Sao_Paulo', locale: 'pt-BR' },
+  GB: { timezone: 'Europe/London', locale: 'en-GB' },
+  DE: { timezone: 'Europe/Berlin', locale: 'de-DE' },
+  FR: { timezone: 'Europe/Paris', locale: 'fr-FR' },
+  ES: { timezone: 'Europe/Madrid', locale: 'es-ES' },
+  PT: { timezone: 'Europe/Lisbon', locale: 'pt-PT' },
+  IT: { timezone: 'Europe/Rome', locale: 'it-IT' },
+  NL: { timezone: 'Europe/Amsterdam', locale: 'nl-NL' },
+  JP: { timezone: 'Asia/Tokyo', locale: 'ja-JP' },
+  IN: { timezone: 'Asia/Kolkata', locale: 'en-IN' },
+  AU: { timezone: 'Australia/Sydney', locale: 'en-AU' },
+  CA: { timezone: 'America/Toronto', locale: 'en-CA' },
+  MX: { timezone: 'America/Mexico_City', locale: 'es-MX' },
+  AR: { timezone: 'America/Buenos_Aires', locale: 'es-AR' },
+};
+
+/** { country?, languages?, timezone? } → { timezone, locale, acceptLanguage } */
+function resolveLocation(loc) {
+  if (!loc) return null;
+  const norm = typeof loc === 'string' ? { country: loc } : loc;
+  const cc = String(norm.country || '').toUpperCase();
+  const base = COUNTRY_DEFAULTS[cc] || {};
+  const languages = Array.isArray(norm.languages) && norm.languages.length
+    ? norm.languages
+    : (base.locale ? [base.locale] : []);
+  return {
+    timezone: norm.timezone || base.timezone || null,
+    locale: languages[0] || base.locale || null,
+    acceptLanguage: languages.length
+      ? languages.map((l, i) => (i ? `${l};q=${Math.max(0.1, 1 - i * 0.2).toFixed(1)}` : l)).join(', ')
+      : null,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Browser binary discovery (cross-platform)
 // ─────────────────────────────────────────────────────────────
 function walkFind(root, names, maxDepth = 5) {
@@ -196,6 +254,12 @@ class Browser {
 
     const userDataDir = opts.userDataDir || fs.mkdtempSync(path.join(os.tmpdir(), 'logica-pilot-'));
 
+    // BYO proxy (Webshare, Bright Data, Oxylabs, Smartproxy, …): per-call `proxy`
+    // wins, then LOGICA_PILOT_PROXY, then the standard HTTPS_PROXY/HTTP_PROXY.
+    const proxy = parseProxy(
+      opts.proxy || process.env.LOGICA_PILOT_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY,
+    );
+
     const args = [
       `--user-data-dir=${userDataDir}`,
       '--remote-debugging-pipe',
@@ -217,6 +281,7 @@ class Browser {
       `--window-size=${width},${height}`,
     ];
     if (headless) args.push('--headless=new', '--hide-scrollbars', '--mute-audio');
+    if (proxy) args.push(`--proxy-server=${proxy.server}`);
     if (Array.isArray(opts.extraArgs)) args.push(...opts.extraArgs);
     args.push('about:blank');
 
@@ -272,6 +337,8 @@ class Browser {
       height,
       binary,
     });
+    browser._proxyAuth = proxy && proxy.username ? { username: proxy.username, password: proxy.password } : null;
+    browser._location = resolveLocation(opts.location || process.env.LOGICA_PILOT_LOCATION || null);
     return browser;
   }
 
@@ -296,6 +363,37 @@ class Browser {
         mobile: false,
       })
       .catch(() => {});
+
+    // Proxy auth: --proxy-server carries no credentials, so answer the 407
+    // challenge via CDP. Fetch.enable(handleAuthRequests) pauses requests —
+    // continue them all, and provide credentials on authRequired.
+    if (this._proxyAuth) {
+      const auth = this._proxyAuth;
+      this._conn.on('Fetch.requestPaused', (p, sid) => {
+        if (sid !== page.sessionId) return;
+        page.send('Fetch.continueRequest', { requestId: p.requestId }).catch(() => {});
+      });
+      this._conn.on('Fetch.authRequired', (p, sid) => {
+        if (sid !== page.sessionId) return;
+        page.send('Fetch.continueWithAuth', {
+          requestId: p.requestId,
+          authChallengeResponse: { response: 'ProvideCredentials', username: auth.username, password: auth.password },
+        }).catch(() => {});
+      });
+      await page.send('Fetch.enable', { handleAuthRequests: true }).catch(() => {});
+    }
+
+    // Location emulation (Firecrawl-style): timezone + locale + Accept-Language.
+    if (this._location) {
+      const L = this._location;
+      if (L.timezone) await page.send('Emulation.setTimezoneOverride', { timezoneId: L.timezone }).catch(() => {});
+      if (L.locale) await page.send('Emulation.setLocaleOverride', { locale: L.locale }).catch(() => {});
+      if (L.acceptLanguage) {
+        await page.send('Network.enable').catch(() => {});
+        await page.send('Network.setExtraHTTPHeaders', { headers: { 'Accept-Language': L.acceptLanguage } }).catch(() => {});
+      }
+    }
+
     this.pages.push(page);
     return page;
   }
@@ -321,4 +419,4 @@ function cleanupDir(dir) {
   } catch {}
 }
 
-module.exports = { Browser, Page, resolveBrowserBinary };
+module.exports = { Browser, Page, resolveBrowserBinary, parseProxy, resolveLocation };

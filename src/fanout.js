@@ -67,7 +67,7 @@ async function fanout(o = {}) {
   const conc = Math.max(1, Math.min(Number(o.concurrency) || 4, 8));
   const onEvent = typeof o.onEvent === 'function' ? o.onEvent : () => {};
 
-  const browser = await Browser.launch({ headless: o.headless !== false });
+  const browser = await Browser.launch({ headless: o.headless !== false, proxy: o.proxy, location: o.location });
   const results = new Array(urls.length);
   let cursor = 0;
 

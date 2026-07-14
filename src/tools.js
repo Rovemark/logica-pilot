@@ -33,6 +33,7 @@ const { lineDiff } = require('./diff');
 const crypto = require('crypto');
 const pageData = require('./page-data');
 const jobs = require('./jobs');
+const { redactPII } = require('./redact');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -151,6 +152,7 @@ const TOOLS = [
         maxChars: { type: 'number', description: 'chars per page (default 6000, max 20000)' },
         offset: { type: 'number', description: 'start position for pagination' },
         maxAge: { type: 'number', description: 'ms: reuse a cached read this fresh (0 = always live)' },
+        redactPII: { type: 'boolean', description: 'mask emails, phones, CPF/CNPJ, cards (Luhn), IPs — deterministic, local' },
       },
     },
     run: async (a, ctx) => {
@@ -159,7 +161,7 @@ const TOOLS = [
       // Opt-in cache (Firecrawl-style maxAge): serve a fresh-enough previous read
       // of the same url+format+window without reloading the page. 0 = always live.
       const maxAge = Math.max(0, Number(a.maxAge) || 0);
-      const ck = a.url ? cacheKey(['read', a.url, a.markdown ? 'md' : 'txt', String(offset), String(maxChars)]) : null;
+      const ck = a.url ? cacheKey(['read', a.url, a.markdown ? 'md' : 'txt', String(offset), String(maxChars), a.redactPII ? 'pii' : '']) : null;
       if (ck && maxAge > 0 && !a.summarize) {
         const hit = cacheLoad(ck, maxAge);
         if (hit) return { text: hit.text };
@@ -174,14 +176,19 @@ const TOOLS = [
         total = snap.textTotal || String(snap.text || '').length;
         text = String(snap.text || '').trim().slice(offset, offset + maxChars);
       }
+      // Redact BEFORE anything leaves this process (including the summarize LLM call).
+      // Keep the PRE-redaction length: pagination (offset/total) works on raw text,
+      // and redaction shrinks the string — the marker must not claim missing content.
+      const rawShown = text.length;
+      if (a.redactPII && text) text = redactPII(text).text;
       if (a.summarize && text) {
         const resp = await llm.callClaude({ system: 'Summarize the web page objectively.', messages: [{ role: 'user', content: 'Summarize:\n\n' + text.slice(0, 8000) }], maxTokens: 700, model: ctx.model });
         return { text: llm.textOf(resp) || '(no text)' };
       }
       if (!text) return { text: '(no text)' };
       // Honest truncation: always say when there is more, and how to get it.
-      if (offset + text.length < total) {
-        text += `\n\n[showing ${offset}–${offset + text.length} of ${total} chars — pass offset=${offset + text.length} for more]`;
+      if (offset + rawShown < total) {
+        text += `\n\n[showing ${offset}–${offset + rawShown} of ${total} chars — pass offset=${offset + rawShown} for more]`;
       }
       if (ck) cacheSave(ck, { text });
       return { text };
@@ -222,6 +229,53 @@ const TOOLS = [
       let out = await pageData.product(ctx.page);
       for (let i = 0; i < 3 && !out.found; i++) { await sleep(1000); out = await pageData.product(ctx.page); }
       return { json: out };
+    },
+  },
+  {
+    name: 'media', group: 'perception', primary: 'url',
+    description: 'Discover MEDIA on the page: <video>/<audio> sources, og:video, direct file links (.mp4/.mp3/.m3u8…) and known embeds (YouTube/Vimeo/Spotify — reported, not downloadable). download:true saves DIRECT files to disk (size-capped).',
+    input: {
+      properties: {
+        url: { type: 'string' },
+        download: { type: 'boolean', description: 'download direct video/audio/file URLs' },
+        dir: { type: 'string', description: 'download folder (default ~/Downloads/logica-pilot)' },
+        maxMB: { type: 'number', description: 'per-file cap in MB (default 200)' },
+      },
+    },
+    run: async (a, ctx) => {
+      await ensureUrl(ctx.page, a);
+      const found = await pageData.media(ctx.page);
+      if (!a.download) return { json: found };
+      const dir = a.dir || path.join(os.homedir(), 'Downloads', 'logica-pilot');
+      fs.mkdirSync(dir, { recursive: true });
+      const capBytes = Math.max(1, Math.min(Number(a.maxMB) || 200, 2000)) * 1024 * 1024;
+      const direct = [...found.videos, ...found.audios, ...found.files]
+        .map((x) => x.url).filter((u) => /^https?:/.test(u) && !/\.(m3u8|mpd)(\?|$)/i.test(u)).slice(0, 5);
+      const saved = [];
+      for (const u of direct) {
+        try {
+          const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 120000);
+          const res = await fetch(u, { signal: ctrl.signal });
+          if (!res.ok || !res.body) { saved.push({ url: u, ok: false, error: 'HTTP ' + res.status }); clearTimeout(t); continue; }
+          const len = Number(res.headers.get('content-length') || 0);
+          if (len && len > capBytes) { saved.push({ url: u, ok: false, error: `larger than cap (${Math.round(len / 1e6)}MB)` }); ctrl.abort(); clearTimeout(t); continue; }
+          const name = (new URL(u).pathname.split('/').pop() || 'media').replace(/[^\w.-]/g, '_').slice(0, 80) || 'media';
+          const file = path.join(dir, Date.now().toString(36) + '-' + name);
+          const { Readable } = require('stream');
+          const ws = fs.createWriteStream(file);
+          let bytes = 0; let tooBig = false;
+          await new Promise((resolve, reject) => {
+            const rs = Readable.fromWeb(res.body);
+            rs.on('data', (c) => { bytes += c.length; if (bytes > capBytes) { tooBig = true; rs.destroy(); } });
+            rs.on('error', reject); ws.on('error', reject); ws.on('finish', resolve);
+            rs.pipe(ws);
+          }).catch((e) => { if (!tooBig) throw e; });
+          clearTimeout(t);
+          if (tooBig) { try { fs.unlinkSync(file); } catch {} saved.push({ url: u, ok: false, error: 'exceeded cap mid-download' }); }
+          else saved.push({ url: u, ok: true, file, bytes });
+        } catch (e) { saved.push({ url: u, ok: false, error: (e && e.message) || String(e) }); }
+      }
+      return { json: { ...found, downloads: saved, dir } };
     },
   },
   {
@@ -458,14 +512,18 @@ const TOOLS = [
         allowSubdomains: { type: 'boolean' },
         textChars: { type: 'number', description: 'text budget per page (default 1200; 0 = urls+titles only)' },
         concurrency: { type: 'number' },
+        proxy: { type: 'string', description: 'BYO proxy: user:pass@host:port (Webshare, Bright Data, …); default: LOGICA_PILOT_PROXY env' },
+        location: { type: 'object', description: '{country:"BR", languages:["pt-BR"]} — timezone/locale/Accept-Language emulation' },
+        redactPII: { type: 'boolean', description: 'mask PII in each page text before returning' },
       }, required: ['url'],
     },
     run: async (a, ctx) => {
       const r = await crawler.crawl({
         url: a.url, limit: a.limit, maxDepth: a.maxDepth, includePaths: a.includePaths, excludePaths: a.excludePaths,
         allowSubdomains: a.allowSubdomains, textChars: a.textChars === undefined ? 1200 : a.textChars,
-        concurrency: a.concurrency, onEvent: ctx.onEvent,
+        concurrency: a.concurrency, proxy: a.proxy, location: a.location, onEvent: ctx.onEvent,
       });
+      if (a.redactPII) for (const p of r.pages) { if (p.text) p.text = redactPII(p.text).text; }
       return { json: r };
     },
   },
@@ -571,6 +629,41 @@ const TOOLS = [
           return rec && rec.ok ? { ...x, text: String(rec.text || '').slice(0, 1200) } : x;
         }),
       };
+    },
+  },
+  {
+    name: 'gather', group: 'multi-agent', pageless: true, primary: 'instruction',
+    description: 'AGENT-style data gathering (schema in, JSON out): give an instruction + JSON schema and it finds sources (or takes your urls), extracts from each IN PARALLEL and merges everything into ONE validated JSON with a sources list. The local answer to "describe the data you need".',
+    input: {
+      properties: {
+        instruction: { type: 'string', description: 'what data to gather' },
+        schema: { type: 'object', description: 'expected JSON shape of the FINAL merged result' },
+        urls: { type: 'array', items: { type: 'string' }, description: 'source pages (skip web search)' },
+        query: { type: 'string', description: 'web search query (default: the instruction)' },
+        limit: { type: 'number', description: 'sources when searching (default 4)' },
+        proxy: { type: 'string' }, location: { type: 'object' },
+      }, required: ['instruction'],
+    },
+    run: async (a, ctx) => {
+      let sources = Array.isArray(a.urls) && a.urls.length ? a.urls : null;
+      if (!sources) {
+        const found = await search(a.query || a.instruction, { limit: Math.max(2, Math.min(Number(a.limit) || 4, 8)) });
+        sources = found.map((x) => x.url);
+      }
+      if (!sources.length) return { json: { error: 'no sources found — pass urls[] or refine query' } };
+      const r = await fanout({
+        urls: sources, task: a.instruction, mode: 'extract', schema: a.schema,
+        model: ctx.model, proxy: a.proxy, location: a.location, onEvent: ctx.onEvent,
+      });
+      const perSource = r.results.filter(Boolean).map((x, i) => `[${i}] ${x.url}\n${JSON.stringify(x.data || { error: x.error }).slice(0, 1800)}`).join('\n\n');
+      const resp = await llm.callClaude({
+        system: 'You merge per-source extraction results into ONE final JSON. Deduplicate, prefer values confirmed by multiple sources, drop nulls. Respond ONLY with valid JSON' + (a.schema ? ' conforming to the provided schema.' : '.'),
+        messages: [{ role: 'user', content: `Instruction: ${a.instruction}\n${a.schema ? `Final schema: ${JSON.stringify(a.schema)}\n` : ''}\nPer-source extractions:\n${perSource}\n\nRespond with the merged JSON only.` }],
+        maxTokens: 1600, model: ctx.model,
+      });
+      const raw = llm.textOf(resp).replace(/```json/gi, '').replace(/```/g, '').trim();
+      let data; try { data = JSON.parse(raw); } catch { data = { _raw: raw }; }
+      return { json: { data, sources: r.results.map((x) => ({ url: x.url, ok: !!x.ok })) } };
     },
   },
   {
