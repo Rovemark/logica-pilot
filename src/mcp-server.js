@@ -24,7 +24,11 @@ try { VERSION = require('../package.json').version; } catch {}
 // single browser instance (headless by default), created on demand
 let pilot = null;
 async function P() {
-  if (!pilot) pilot = await new LogicaPilot({ headless: !process.env.LOGICA_PILOT_HEADFUL }).launch();
+  if (!pilot) {
+    // LOGICA_PILOT_ATTACH=<port> drives an already-running browser (real profile).
+    const attach = process.env.LOGICA_PILOT_ATTACH;
+    pilot = await new LogicaPilot(attach ? { attach: parseInt(attach, 10) || 9222 } : { headless: !process.env.LOGICA_PILOT_HEADFUL }).launch();
+  }
   return pilot;
 }
 const watchLast = new Map();

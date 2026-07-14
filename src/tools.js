@@ -40,6 +40,8 @@ const dataset = require('./dataset');
 const flight = require('./flight');
 const adapters = require('./adapters');
 const workflow = require('./workflow');
+const knowledge = require('./knowledge');
+const handoffLib = require('./handoff');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -323,6 +325,19 @@ const TOOLS = [
         `if(!/^https?:/.test(h)||seen[h])continue;seen[h]=1;out.push({text:(a.innerText||'').trim().slice(0,80),url:h});}return out;})()`,
       );
       return { json: links || [] };
+    },
+  },
+  {
+    name: 'handoff', group: 'perception', primary: 'action',
+    description: 'HUMAN HANDOFF: detect when the page needs a human (login / captcha / Cloudflare / payment) instead of trying to bypass it (action: check|wait). `wait` polls until you resolve it in a VISIBLE window (desktop/headful/attach), then lets the agent continue with the now-authenticated session.',
+    input: { properties: { action: { type: 'string', enum: ['check', 'wait'] }, url: { type: 'string' }, timeout: { type: 'number', description: 'wait: max ms (default 180000)' } } },
+    run: async (a, ctx) => {
+      await ensureUrl(ctx.page, a);
+      if (a.action === 'wait') {
+        const bringToFront = ctx.pilot && ctx.pilot.opts && ctx.pilot.opts.attached ? null : () => ctx.page.send('Page.bringToFront').catch(() => {});
+        return { json: await handoffLib.waitForHuman(ctx.page, { timeoutMs: a.timeout || 180000, bringToFront }) };
+      }
+      return { json: await handoffLib.detect(ctx.page) };
     },
   },
   {
@@ -674,6 +689,27 @@ const TOOLS = [
       // get
       if (job.status !== 'done') return { json: { id: job.id, status: job.status, progress: job.progress, error: job.error || undefined } };
       return { json: { id: job.id, kind: job.kind, result: job.result } };
+    },
+  },
+  {
+    name: 'index', group: 'site', pageless: true, primary: 'action',
+    description: 'LOCAL SEARCH (BM25, 0 tokens, 0 network): crawl a site once into a named index, then query it forever offline (action: build|query|list|remove). Turn docs into an offline knowledge base your agents can grep semantically.',
+    input: {
+      properties: {
+        action: { type: 'string', enum: ['build', 'query', 'list', 'remove'] },
+        name: { type: 'string' }, url: { type: 'string', description: 'site to crawl for build' },
+        q: { type: 'string', description: 'query text' }, k: { type: 'number', description: 'top results (default 5)' },
+        limit: { type: 'number', description: 'pages to crawl for build (default 25)' },
+        maxDepth: { type: 'number' }, includePaths: { type: 'array', items: { type: 'string' } },
+        docs: { type: 'array', items: { type: 'object' }, description: 'index these {url,title,text} instead of crawling' },
+      }, required: ['action'],
+    },
+    run: async (a) => {
+      if (a.action === 'build') return { json: await knowledge.build(a.name, { url: a.url, docs: a.docs, limit: a.limit, maxDepth: a.maxDepth, includePaths: a.includePaths }) };
+      if (a.action === 'query') { const r = knowledge.query(a.name, a.q, { k: a.k }); return { json: r || { error: 'index not found: ' + a.name } }; }
+      if (a.action === 'list') return { json: knowledge.list() };
+      if (a.action === 'remove') return { json: knowledge.remove(a.name) };
+      return { json: { error: 'unknown action' } };
     },
   },
   {

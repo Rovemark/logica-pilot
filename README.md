@@ -9,7 +9,7 @@
 A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic
 intent — not pixel coordinates — then **clicks, types, scrolls and reads** on its own until the
 goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
-browser · **CLI and MCP** with the same 41 tools.
+browser · **CLI and MCP** with the same 43 tools.
 
 <p align="center">
   <img src="docs/media/pilot-run.gif" alt="The Pilot autonomously scrolls, extracts and answers a goal on a live page" width="100%">
@@ -77,6 +77,8 @@ $ logica-pilot memory
 | **Engine** | Puppeteer/Playwright deps | Zero-dep pure CDP over `--remote-debugging-pipe` |
 | **Vision fallback** | Screenshot alone | Screenshot with indexed marks drawn (semantic) |
 | **AI brain flexibility** | Your LLM, hardcoded | Any API (Anthropic, local proxy, custom) |
+| **Attach to YOUR browser** | New context, no real profile | `--attach <port>` drives your everyday Chrome/Edge — real logins, extensions, profile (zero-dep WebSocket CDP) |
+| **Walls (login/captcha)** | Script breaks or you script a bypass | `handoff` pauses for you to solve it, then continues with the authenticated session |
 
 ---
 
@@ -294,7 +296,7 @@ await pilot.close();
 
 ## MCP Server (Claude Desktop, Cursor, Cline, etc.)
 
-Logica Pilot exposes **41 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
+Logica Pilot exposes **43 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
 
 ### Configuration
 
@@ -316,7 +318,7 @@ Then set your AI credentials (one time):
 - Export `ANTHROPIC_API_KEY=sk-ant-…`, *or*
 - Run a local LogicaProxy (`:8317`)
 
-### The 41 Tools (Grouped by Function)
+### The 43 Tools (Grouped by Function)
 
 #### Navigation (5 tools)
 | Tool | Purpose |
@@ -327,7 +329,7 @@ Then set your AI credentials (one time):
 | **reload** | Reload the page and return the map |
 | **wait** | Wait for text/selector/condition (semantic, no brittle sleeps) |
 
-#### Perception (9 tools)
+#### Perception (10 tools)
 | Tool | Purpose |
 |------|---------|
 | **observe** | Get the indexed map of the current page (semantic elements + readable text) |
@@ -337,6 +339,7 @@ Then set your AI credentials (one time):
 | **images** | All meaningful images (url + alt + size), og:image first, icons skipped — deterministic |
 | **product** | **Deterministic product data** from the page's own JSON-LD/microdata/og:price: name, brand, price, availability, rating — fails closed, never guesses |
 | **media** | Discover video/audio/direct files/embeds on the page; `download:true` saves direct files to disk (size-capped) |
+| **handoff** | **Human handoff** — detect a login/captcha/Cloudflare/payment wall and (`wait`) pause for you to resolve it in a visible window, then continue — instead of trying to bypass it |
 | **links** | Return all links (text + url), deduped, compact |
 | **screenshot** | Capture page; `marks:true` draws indices as visual fallback |
 
@@ -366,11 +369,12 @@ Then set your AI credentials (one time):
 | **monitor** | **Scheduled monitors + alerts**: `add` a URL with a cadence + `notify` (telegram/webhook/desktop); a background daemon checks due ones and alerts only on real changes |
 | **runs** | **Flight recorder**: browse past autonomous runs — each `run` is saved with steps, token usage and screenshots as a self-contained HTML report |
 
-#### Site (5 tools)
+#### Site (6 tools)
 | Tool | Purpose |
 |------|---------|
 | **map** | **Discover a site's URLs instantly** — robots.txt sitemaps + sitemap.xml (recursive), on-page links fallback; `search` filter |
 | **crawl** | **Crawl a whole site/section** breadth-first in parallel: `includePaths`/`excludePaths` regex, `maxDepth`, page limit, robots.txt politeness — compact `{url,title,text}` per page |
+| **index** | **Local BM25 search**: crawl a site once into a named index, then query it forever **offline — 0 tokens, 0 network**. Any docs set becomes a searchable knowledge base |
 | **dataset** | **Living datasets**: scrape/gather output → named local table with dedupe, per-run diff and CSV/JSON export (a free price/stock time series with `monitor`) |
 | **batch** | **Async jobs**: start a fanout/crawl in the background (detached, survives the call), then `status`/`get` the results later |
 | **llmstxt** | **Generate an llms.txt** for any site: map → read key pages in parallel → standard llms.txt with curated links |
@@ -553,6 +557,25 @@ export LOGICA_PILOT_LOCATION=BR
 emails, phones, CPF/CNPJ, credit cards (Luhn-validated) and IPs **before** the text reaches any
 model — `[email]`, `[phone]`, `[cpf]`, `[card]`, `[ip]`.
 
+### Attach to your everyday browser
+
+Point Logica Pilot at an **already-running** Chrome/Edge/Brave (your real profile, logins and
+extensions) — no new context, nothing to log into. Start the browser with a debug port, then
+drive it with `--attach`:
+
+```bash
+# 1. launch your browser with a debug port (once)
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222
+
+# 2. drive that live window — with everything you're already logged into
+logica-pilot observe --attach 9222
+logica-pilot run "reply to my latest email" --attach 9222
+# MCP: set LOGICA_PILOT_ATTACH=9222 and every tool drives your real browser
+```
+
+`--attach` only **detaches** on close — it never kills your browser. Implemented with a
+zero-dependency WebSocket CDP client (`src/cdp-ws.js`).
+
 ### AI Brain Options
 
 **Option 1: Anthropic API (direct)**
@@ -589,7 +612,7 @@ src/
   llm.js                Brain (Messages API via LogicaProxy or Anthropic)
   agent.js              Autonomous loop (perceive → decide → act)
   electron-page.js      Adapter: webContents.debugger → page contract
-  mcp-server.js         MCP server (stdio, 41 tools)
+  mcp-server.js         MCP server (stdio, 43 tools)
   tools.js              SINGLE REGISTRY (CLI + MCP share this)
   fanout.js             Parallel multi-agent orchestration
   search.js             Web search (Bing default, Brave if key set)

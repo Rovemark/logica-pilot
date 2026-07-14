@@ -24,6 +24,14 @@ class LogicaPilot {
   }
 
   async launch() {
+    // Attach mode (#7): drive an already-running browser (real profile/logins)
+    // started with --remote-debugging-port. `attach` = port number (or true=9222).
+    if (this.opts.attach) {
+      this.browser = await Browser.attach({ port: this.opts.attach === true ? 9222 : Number(this.opts.attach), match: this.opts.attachMatch });
+      this.page = this.browser.page;
+      if (this.opts.url) await this.page.goto(this.opts.url);
+      return this;
+    }
     this.browser = await Browser.launch({
       headless: this.opts.headless !== false,
       width: this.opts.width,

@@ -342,6 +342,34 @@ class Browser {
     return browser;
   }
 
+  /**
+   * ATTACH to an already-running Chromium/Edge/Brave (or our desktop app) started
+   * with --remote-debugging-port=PORT. Drives the user's REAL browser — their
+   * profile, logins, extensions — which no cloud scraper can do. close() only
+   * detaches (never kills the user's browser).
+   */
+  static async attach({ port = 9222, host = '127.0.0.1', match } = {}) {
+    const { CDPWebSocket, httpGetJSON } = require('./cdp-ws');
+    let version;
+    try { version = await httpGetJSON(`http://${host}:${port}/json/version`); }
+    catch (e) { throw new Error(`No debuggable browser at ${host}:${port}. Start one with --remote-debugging-port=${port}. (${e.message})`); }
+    const conn = await CDPWebSocket.connect(version.webSocketDebuggerUrl);
+    await conn.send('Target.setDiscoverTargets', { discover: true });
+    const { targetInfos } = await conn.send('Target.getTargets', {});
+    const pages = (targetInfos || []).filter((t) => t.type === 'page' && !/^devtools:/.test(t.url || ''));
+    if (!pages.length) throw new Error('attached, but the browser has no open page/tab');
+    const chosen = (match && pages.find((p) => (p.url || '').includes(match))) || pages.find((p) => p.attached) || pages[0];
+    const { sessionId } = await conn.send('Target.attachToTarget', { targetId: chosen.targetId, flatten: true });
+    const page = new Page(conn, sessionId, chosen.targetId, { width: 1280, height: 900 });
+    await page.send('Page.enable').catch(() => {});
+    await page.send('Runtime.enable').catch(() => {});
+    await page.send('DOM.enable').catch(() => {});
+    const browser = new Browser(null, conn, null, { attached: true, width: 1280, height: 900 });
+    browser.page = page;
+    browser.pages = [page];
+    return browser;
+  }
+
   async newPage() {
     const { targetId } = await this._conn.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await this._conn.send('Target.attachToTarget', {
@@ -399,6 +427,8 @@ class Browser {
   }
 
   async close() {
+    // Attached mode: only detach — NEVER kill the user's own browser.
+    if (this.opts && this.opts.attached) { try { this._conn.close(); } catch {} return; }
     try {
       await this._conn.send('Browser.close').catch(() => {});
     } catch {}

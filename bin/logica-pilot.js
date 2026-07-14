@@ -62,7 +62,11 @@ async function cmdTool(tool, args) {
   const ctx = { model: args.model, watchLast: new Map(), onEvent };
   let pilot = null;
   try {
-    if (!tool.pageless) { pilot = new LogicaPilot({ headless: !args.headful }); await pilot.launch(); ctx.page = pilot.page; ctx.pilot = pilot; }
+    if (!tool.pageless) {
+      // --attach <port>: drive an already-running browser (real profile/logins).
+      const opts = args.attach ? { attach: args.attach === true ? 9222 : parseInt(args.attach, 10) } : { headless: !args.headful };
+      pilot = new LogicaPilot(opts); await pilot.launch(); ctx.page = pilot.page; ctx.pilot = pilot;
+    }
     printOut(await tool.run(a, ctx), !!args.json);
   } finally {
     if (pilot) { try { await pilot.close(); } catch {} }
