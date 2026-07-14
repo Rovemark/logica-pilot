@@ -129,7 +129,28 @@ async function dragAndDrop(page, fromIndex, toIndex) {
   await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1 });
   await sleep(100);
 
-  return { ok: true, from: { index: fromIndex, ...from }, to: { index: toIndex, ...to } };
+  // Mouse events alone do NOT trigger HTML5 native drag-and-drop (dragstart/dragover/
+  // drop). For `draggable` elements, also dispatch the native DnD sequence with a
+  // shared DataTransfer so sortable lists, file-drop zones, kanban boards, etc. work.
+  const native = await page.eval(
+    `(function(){` +
+    `var s=document.querySelector('[data-lpilot-id="${fromIndex}"]');` +
+    `var t=document.querySelector('[data-lpilot-id="${toIndex}"]');` +
+    `if(!s||!t)return {native:false,reason:'elements gone'};` +
+    `var draggable=s.draggable||s.closest('[draggable="true"]');` +
+    `if(!draggable)return {native:false,reason:'not draggable (mouse path used)'};` +
+    `var dt=new DataTransfer();` +
+    `var rs=s.getBoundingClientRect(),rt=t.getBoundingClientRect();` +
+    `function fire(el,type,x,y){var e=new DragEvent(type,{bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,dataTransfer:dt});el.dispatchEvent(e);}` +
+    `fire(s,'dragstart',rs.left+rs.width/2,rs.top+rs.height/2);` +
+    `fire(t,'dragenter',rt.left+rt.width/2,rt.top+rt.height/2);` +
+    `fire(t,'dragover',rt.left+rt.width/2,rt.top+rt.height/2);` +
+    `fire(t,'drop',rt.left+rt.width/2,rt.top+rt.height/2);` +
+    `fire(s,'dragend',rt.left+rt.width/2,rt.top+rt.height/2);` +
+    `return {native:true};})()`,
+  ).catch(() => ({ native: false, reason: 'eval failed' }));
+
+  return { ok: true, from: { index: fromIndex, ...from }, to: { index: toIndex, ...to }, native: native && native.native, mode: native && native.native ? 'html5-dnd' : 'mouse' };
 }
 
 /**

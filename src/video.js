@@ -104,17 +104,35 @@ async function analyze(page, { describe = false, model, frames = 0, index = 0 } 
     result._frameData = shots; // consumed by the caller if it wants a vision call
   }
 
-  // Optional LLM summary of the transcript.
-  if (describe && transcript && llm.isConfigured()) {
-    const resp = await llm.callClaude({
-      model,
-      maxTokens: 512,
-      system: 'Summarize this video transcript into 4-6 tight bullet points. Portuguese if the transcript is Portuguese, else match its language.',
-      messages: [{ role: 'user', content: transcript.slice(0, 12000) }],
-    }).catch(() => null);
-    if (resp) result.summary = llm.textOf(resp);
-  } else if (describe && !transcript) {
-    result.summaryHint = 'No transcript to summarize. Pass frames:N to sample keyframes for a vision model.';
+  // Optional LLM understanding: transcript summary first (cheap), else vision over
+  // the sampled keyframes (real multimodal — the frames are actually consumed, not
+  // just captured), else a hint.
+  if (describe && llm.isConfigured()) {
+    if (transcript) {
+      const resp = await llm.callClaude({
+        model,
+        maxTokens: 512,
+        system: 'Summarize this video transcript into 4-6 tight bullet points. Portuguese if the transcript is Portuguese, else match its language.',
+        messages: [{ role: 'user', content: transcript.slice(0, 12000) }],
+      }).catch(() => null);
+      if (resp) result.summary = llm.textOf(resp);
+    } else if (result._frameData && result._frameData.length) {
+      const content = result._frameData.map((f) => ({
+        type: 'image', source: { type: 'base64', media_type: 'image/png', data: f.data },
+      }));
+      content.push({
+        type: 'text',
+        text: `Estes são ${result._frameData.length} keyframes amostrados ao longo de um vídeo`
+          + (result.title ? ` intitulado "${result.title}"` : '')
+          + '. Descreva o que acontece no vídeo em 4-6 bullets curtos, em português.',
+      });
+      const resp = await llm.callClaude({ model, maxTokens: 512, messages: [{ role: 'user', content }] }).catch(() => null);
+      if (resp) { result.summary = llm.textOf(resp); result.summarySource = 'vision'; }
+    } else {
+      result.summaryHint = 'Sem transcript e sem frames. Passe frames:N pra amostrar keyframes pro modelo de visão.';
+    }
+  } else if (describe && !llm.isConfigured()) {
+    result.summaryHint = 'LLM não configurado; retornando só os dados estruturados do vídeo.';
   }
 
   return result;
