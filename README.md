@@ -9,7 +9,7 @@
 A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic
 intent — not pixel coordinates — then **clicks, types, scrolls and reads** on its own until the
 goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
-browser · **CLI and MCP** with the same 26 tools.
+browser · **CLI and MCP** with the same 29 tools.
 
 <p align="center">
   <img src="docs/media/pilot-run.gif" alt="The Pilot autonomously scrolls, extracts and answers a goal on a live page" width="100%">
@@ -294,7 +294,7 @@ await pilot.close();
 
 ## MCP Server (Claude Desktop, Cursor, Cline, etc.)
 
-Logica Pilot exposes **26 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
+Logica Pilot exposes **29 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
 
 ### Configuration
 
@@ -316,7 +316,7 @@ Then set your AI credentials (one time):
 - Export `ANTHROPIC_API_KEY=sk-ant-…`, *or*
 - Run a local LogicaProxy (`:8317`)
 
-### The 26 Tools (Grouped by Function)
+### The 29 Tools (Grouped by Function)
 
 #### Navigation (5 tools)
 | Tool | Purpose |
@@ -331,7 +331,7 @@ Then set your AI credentials (one time):
 | Tool | Purpose |
 |------|---------|
 | **observe** | Get the indexed map of the current page (semantic elements + readable text) |
-| **read** | Get readable page content (ads/nav stripped); optionally summarize via AI |
+| **read** | Readable page content — `markdown:true` for **LLM-ready Markdown** (headings/links/tables); paginate with `maxChars`/`offset`; optional AI summary |
 | **extract** | Extract structured data (JSON schema or natural language instruction) |
 | **links** | Return all links (text + url), deduped, compact |
 | **screenshot** | Capture page; `marks:true` draws indices as visual fallback |
@@ -356,13 +356,20 @@ Then set your AI credentials (one time):
 |------|---------|
 | **session** | Manage login sessions (cookies): `save` / `load` / `list` — log in once, reuse forever |
 | **memory** | Show what Logica Pilot has **learned** per site (the flywheel): visits, hot elements, recipes |
-| **watch** | Check a URL and report whether content changed (price, stock, text diffs) |
+| **watch** | **Change tracking**: `changeStatus` new/same/changed vs the last snapshot (persisted across sessions), git-style diff of what changed, `tag` for separate histories, `webhook` on change |
+
+#### Site (3 tools)
+| Tool | Purpose |
+|------|---------|
+| **map** | **Discover a site's URLs instantly** — robots.txt sitemaps + sitemap.xml (recursive), on-page links fallback; `search` filter |
+| **crawl** | **Crawl a whole site/section** breadth-first in parallel: `includePaths`/`excludePaths` regex, `maxDepth`, page limit, robots.txt politeness — compact `{url,title,text}` per page |
+| **llmstxt** | **Generate an llms.txt** for any site: map → read key pages in parallel → standard llms.txt with curated links |
 
 #### Multi-Agent Recipes (6 tools)
 | Tool | Purpose |
 |------|---------|
 | **fanout** | Run the same task on N URLs in **parallel** (separate headless pages) + optional synthesis |
-| **search** | Search the web; return URLs (title + link). Bing default; Brave if `BRAVE_SEARCH_API_KEY` |
+| **search** | Search the web; `content:true` also **reads the top results in parallel** and attaches their text. Bing default; Brave if `BRAVE_SEARCH_API_KEY` |
 | **research** | Deep Research: search + read sources in parallel + synthesize with citations `[n]` |
 | **compare** | Compare: extract from N URLs in parallel + synthesize comparison table + recommendation |
 | **deal** | Best Deal: search stores → extract price/shipping in parallel → rank by total cost |
@@ -544,7 +551,7 @@ src/
   llm.js                Brain (Messages API via LogicaProxy or Anthropic)
   agent.js              Autonomous loop (perceive → decide → act)
   electron-page.js      Adapter: webContents.debugger → page contract
-  mcp-server.js         MCP server (stdio, 26 tools)
+  mcp-server.js         MCP server (stdio, 29 tools)
   tools.js              SINGLE REGISTRY (CLI + MCP share this)
   fanout.js             Parallel multi-agent orchestration
   search.js             Web search (Bing default, Brave if key set)

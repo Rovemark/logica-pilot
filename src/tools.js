@@ -28,6 +28,23 @@ const { fanout, extractStructured } = require('./fanout');
 const recipes = require('./recipes');
 const { search } = require('./search');
 const session = require('./session-store');
+const crawler = require('./crawl');
+const { lineDiff } = require('./diff');
+const crypto = require('crypto');
+
+// ── change-tracking store (persistent snapshots per url+tag) ────────────────
+const WATCH_DIR = path.join(os.homedir(), '.logica-pilot', 'watch');
+function watchKey(url, tag) { return crypto.createHash('sha1').update(url + '|' + (tag || '')).digest('hex'); }
+function watchLoad(url, tag) {
+  try { return JSON.parse(fs.readFileSync(path.join(WATCH_DIR, watchKey(url, tag) + '.json'), 'utf8')); } catch { return null; }
+}
+function watchSave(url, tag, text) {
+  try {
+    fs.mkdirSync(WATCH_DIR, { recursive: true });
+    fs.writeFileSync(path.join(WATCH_DIR, watchKey(url, tag) + '.json'),
+      JSON.stringify({ url, tag: tag || '', ts: new Date().toISOString(), text: String(text).slice(0, 300000) }));
+  } catch {}
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const q = (id) => `[data-lpilot-id="${String(id).replace(/"/g, '')}"]`;
@@ -110,17 +127,38 @@ const TOOLS = [
   },
   {
     name: 'read', group: 'perception', primary: 'url',
-    description: 'Return the READABLE content of the page (clean text, no nav/ads). With summarize:true, summarize via AI.',
-    input: { properties: { url: { type: 'string' }, summarize: { type: 'boolean' } } },
+    description: 'READABLE page content. markdown:true = LLM-ready Markdown (headings/links/lists/tables); default = clean text. Paginate long pages with maxChars/offset. summarize:true = AI summary.',
+    input: {
+      properties: {
+        url: { type: 'string' }, summarize: { type: 'boolean' },
+        markdown: { type: 'boolean', description: 'return Markdown instead of plain text' },
+        maxChars: { type: 'number', description: 'chars per page (default 6000, max 20000)' },
+        offset: { type: 'number', description: 'start position for pagination' },
+      },
+    },
     run: async (a, ctx) => {
       await ensureUrl(ctx.page, a);
-      const snap = await perception.snapshot(ctx.page, { maxEls: 0 });
-      let text = String(snap.text || '').trim();
+      const maxChars = Math.max(200, Math.min(Number(a.maxChars) || 6000, 20000));
+      const offset = Math.max(0, Number(a.offset) || 0);
+      let text; let total;
+      if (a.markdown) {
+        const md = await perception.markdown(ctx.page, { maxChars: Math.min(offset + maxChars + 1, 60000) });
+        total = md.length; text = md.slice(offset, offset + maxChars);
+      } else {
+        const snap = await perception.snapshot(ctx.page, { maxEls: 0, maxChars: Math.min(offset + maxChars + 1, 60000) });
+        total = snap.textTotal || String(snap.text || '').length;
+        text = String(snap.text || '').trim().slice(offset, offset + maxChars);
+      }
       if (a.summarize && text) {
         const resp = await llm.callClaude({ system: 'Summarize the web page objectively.', messages: [{ role: 'user', content: 'Summarize:\n\n' + text.slice(0, 8000) }], maxTokens: 700, model: ctx.model });
-        text = llm.textOf(resp);
+        return { text: llm.textOf(resp) || '(no text)' };
       }
-      return { text: text || '(no text)' };
+      if (!text) return { text: '(no text)' };
+      // Honest truncation: always say when there is more, and how to get it.
+      if (offset + text.length < total) {
+        text += `\n\n[showing ${offset}–${offset + text.length} of ${total} chars — pass offset=${offset + text.length} for more]`;
+      }
+      return { text };
     },
   },
   {
@@ -301,15 +339,108 @@ const TOOLS = [
   },
   {
     name: 'watch', group: 'session', primary: 'url',
-    description: 'Check a URL and report whether it CHANGED since the last check (content diff). Base for monitors.',
-    input: { properties: { url: { type: 'string' } }, required: ['url'] },
+    description: 'CHANGE TRACKING: compare a URL against its last snapshot (persisted across sessions). Returns changeStatus new|same|changed + a git-style diff of what changed. `tag` keeps separate histories for the same URL (e.g. hourly vs daily); `webhook` POSTs the result when changed.',
+    input: {
+      properties: {
+        url: { type: 'string' },
+        tag: { type: 'string', description: 'separate tracking history for the same URL' },
+        diff: { type: 'boolean', description: 'include the line diff (default true)' },
+        webhook: { type: 'string', description: 'POST the result here when the page changed' },
+      }, required: ['url'],
+    },
     run: async (a, ctx) => {
       await ctx.page.goto(a.url);
-      const snap = await perception.snapshot(ctx.page, { maxEls: 0 });
-      let h = 5381; const s = String(snap.text || ''); for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; h >>>= 0;
-      const prev = ctx.watchLast && ctx.watchLast.get(a.url);
-      if (ctx.watchLast) ctx.watchLast.set(a.url, h);
-      return { json: { url: a.url, changed: prev ? prev !== h : null, firstCheck: !prev, title: snap.title, textPreview: s.slice(0, 500) } };
+      await sleep(600);
+      const snap = await perception.snapshot(ctx.page, { maxEls: 0, maxChars: 60000 });
+      const text = String(snap.text || '');
+      const prev = watchLoad(a.url, a.tag);
+      watchSave(a.url, a.tag, text);
+
+      const out = { url: a.url, title: snap.title, changeStatus: 'new', previousScrapeAt: null };
+      if (a.tag) out.tag = a.tag;
+      if (prev) {
+        out.previousScrapeAt = prev.ts;
+        if (prev.text === text) out.changeStatus = 'same';
+        else {
+          out.changeStatus = 'changed';
+          const d = lineDiff(prev.text, text, { maxOut: 100 });
+          out.added = d.added; out.removed = d.removed;
+          if (a.diff !== false) out.diff = d.text;
+        }
+      } else {
+        out.textPreview = text.slice(0, 400);
+      }
+      if (a.webhook && out.changeStatus === 'changed') {
+        try {
+          const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
+          await fetch(a.webhook, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(out), signal: ctrl.signal })
+            .then(() => { out.webhookDelivered = true; }, () => { out.webhookDelivered = false; })
+            .finally(() => clearTimeout(t));
+        } catch { out.webhookDelivered = false; }
+      }
+      return { json: out };
+    },
+  },
+
+  // ── site (whole-site capabilities: discovery, crawling, llms.txt) ──
+  {
+    name: 'map', group: 'site', pageless: true, primary: 'url',
+    description: "DISCOVER a site's URLs instantly (robots.txt sitemaps + sitemap.xml, falls back to on-page links). Optional `search` filters URLs by substring. Use before crawl to plan.",
+    input: {
+      properties: {
+        url: { type: 'string', description: 'site root or any page on it' },
+        search: { type: 'string', description: 'filter: keep URLs containing this' },
+        limit: { type: 'number', description: 'max URLs (default 200)' },
+      }, required: ['url'],
+    },
+    run: async (a) => ({ json: await crawler.map(a.url, { limit: a.limit, search: a.search }) }),
+  },
+  {
+    name: 'crawl', group: 'site', pageless: true, primary: 'url',
+    description: 'CRAWL a whole site/section breadth-first (parallel pages): follows same-domain links with includePaths/excludePaths regex filters, maxDepth and page limit; respects robots.txt. Returns compact {url,title,text} per page — never raw HTML.',
+    input: {
+      properties: {
+        url: { type: 'string' },
+        limit: { type: 'number', description: 'max pages (default 15, cap 100)' },
+        maxDepth: { type: 'number', description: 'link depth from start (default 3)' },
+        includePaths: { type: 'array', items: { type: 'string' }, description: 'regex allowlist on pathname (e.g. "^/docs")' },
+        excludePaths: { type: 'array', items: { type: 'string' }, description: 'regex blocklist on pathname' },
+        allowSubdomains: { type: 'boolean' },
+        textChars: { type: 'number', description: 'text budget per page (default 1200; 0 = urls+titles only)' },
+        concurrency: { type: 'number' },
+      }, required: ['url'],
+    },
+    run: async (a, ctx) => {
+      const r = await crawler.crawl({
+        url: a.url, limit: a.limit, maxDepth: a.maxDepth, includePaths: a.includePaths, excludePaths: a.excludePaths,
+        allowSubdomains: a.allowSubdomains, textChars: a.textChars === undefined ? 1200 : a.textChars,
+        concurrency: a.concurrency, onEvent: ctx.onEvent,
+      });
+      return { json: r };
+    },
+  },
+  {
+    name: 'llmstxt', group: 'site', pageless: true, primary: 'url',
+    description: 'GENERATE an llms.txt for a site: discovers key pages (map), reads them in parallel, and writes the standard llms.txt (site summary + curated links with one-line descriptions).',
+    input: { properties: { url: { type: 'string' }, limit: { type: 'number', description: 'pages to read (default 10)' } }, required: ['url'] },
+    run: async (a, ctx) => {
+      const limit = Math.max(3, Math.min(Number(a.limit) || 10, 20));
+      const m = await crawler.map(a.url, { limit: 60 });
+      if (!m.urls.length) return { text: '(no URLs discovered — is the site reachable?)' };
+      // Prefer shallow paths (home/docs/pricing/about) over deep leaves.
+      const ranked = m.urls
+        .map((u) => { try { return { u, d: new URL(u).pathname.split('/').filter(Boolean).length }; } catch { return null; } })
+        .filter(Boolean).sort((x, y) => x.d - y.d).slice(0, limit).map((x) => x.u);
+      const r = await fanout({ urls: ranked, mode: 'read', concurrency: 4, onEvent: ctx.onEvent });
+      const compact = r.results.filter((x) => x && x.ok)
+        .map((x) => `URL: ${x.url}\nTITLE: ${x.title || ''}\n${String(x.text || '').slice(0, 900)}`)
+        .join('\n\n---\n\n');
+      const resp = await llm.callClaude({
+        system: 'You generate llms.txt files (the standard: https://llmstxt.org). Output ONLY the llms.txt content in Markdown: "# Site Name", a one-paragraph "> summary", then sections (## Docs, ## Pages...) with "- [Title](url): one-line description" entries. No commentary.',
+        messages: [{ role: 'user', content: `Generate the llms.txt for this site from these pages:\n\n${compact.slice(0, 24000)}` }],
+        maxTokens: 1600, model: ctx.model,
+      });
+      return { text: llm.textOf(resp) || '(generation failed)' };
     },
   },
 
@@ -340,9 +471,21 @@ const TOOLS = [
   },
   {
     name: 'search', group: 'multi-agent', pageless: true, primary: 'query',
-    description: 'Search the web and return result URLs (title + url). Bing by default; Brave API if BRAVE_SEARCH_API_KEY.',
-    input: { properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] },
-    run: async (a) => ({ json: await search(a.query, { limit: a.limit }) }),
+    description: 'Search the web and return result URLs (title + url). content:true also READS the top results in parallel and attaches their text — search with full content in one call.',
+    input: { properties: { query: { type: 'string' }, limit: { type: 'number' }, content: { type: 'boolean', description: 'fetch and attach the text of each result' } }, required: ['query'] },
+    run: async (a, ctx) => {
+      const results = await search(a.query, { limit: a.limit });
+      if (!a.content || !results.length) return { json: results };
+      const top = results.slice(0, Math.min(results.length, 6));
+      const r = await fanout({ urls: top.map((x) => x.url), mode: 'read', concurrency: 4, onEvent: ctx.onEvent });
+      const byUrl = new Map(r.results.filter(Boolean).map((x) => [x.url, x]));
+      return {
+        json: results.map((x) => {
+          const rec = byUrl.get(x.url);
+          return rec && rec.ok ? { ...x, text: String(rec.text || '').slice(0, 1200) } : x;
+        }),
+      };
+    },
   },
   {
     name: 'research', group: 'multi-agent', pageless: true, primary: 'query',

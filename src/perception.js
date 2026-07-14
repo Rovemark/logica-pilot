@@ -18,7 +18,7 @@
 // ── Functions executed INSIDE the page (injected via .toString()) ──────────
 
 /* eslint-disable */
-function __lp_collect(maxEls) {
+function __lp_collect(maxEls, maxChars) {
   var SEL = [
     'a[href]', 'button', 'input:not([type=hidden])', 'textarea', 'select',
     '[role=button]', '[role=link]', '[role=checkbox]', '[role=radio]',
@@ -79,7 +79,9 @@ function __lp_collect(maxEls) {
 
   var bodyText = '';
   try { bodyText = (document.body ? document.body.innerText : '') || ''; } catch (e) {}
-  bodyText = bodyText.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').slice(0, 3500);
+  bodyText = bodyText.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+  var textTotal = bodyText.length;
+  bodyText = bodyText.slice(0, maxChars || 3500);
 
   return {
     url: location.href,
@@ -90,7 +92,8 @@ function __lp_collect(maxEls) {
     viewportW: innerWidth,
     count: out.length,
     elements: out,
-    text: bodyText
+    text: bodyText,
+    textTotal: textTotal
   };
 }
 
@@ -128,12 +131,62 @@ function __lp_unmark() {
   if (o) o.remove();
   return true;
 }
+
+/** DOM → Markdown (LLM-ready). Main content only: skips nav/aside/footer/scripts. */
+function __lp_markdown(maxChars) {
+  var SKIP = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, NAV: 1, ASIDE: 1, FOOTER: 1, HEADER: 1, IFRAME: 1, SVG: 1, BUTTON: 1, FORM: 1 };
+  function inline(node) {
+    var out = '';
+    for (var c = node.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 3) { out += c.nodeValue.replace(/\s+/g, ' '); continue; }
+      if (c.nodeType !== 1 || SKIP[c.tagName]) continue;
+      var t = c.tagName;
+      if (t === 'A') {
+        var txt = inline(c).trim(); var href = c.getAttribute('href') || '';
+        if (txt) out += /^https?:|^\//.test(href) ? '[' + txt + '](' + c.href + ')' : txt;
+      } else if (t === 'STRONG' || t === 'B') out += '**' + inline(c).trim() + '**';
+      else if (t === 'EM' || t === 'I') out += '*' + inline(c).trim() + '*';
+      else if (t === 'CODE') out += '`' + (c.innerText || '').trim() + '`';
+      else if (t === 'IMG') { var alt = (c.getAttribute('alt') || '').trim(); if (alt) out += '![' + alt + ']'; }
+      else if (t === 'BR') out += '\n';
+      else out += inline(c);
+    }
+    return out;
+  }
+  function walk(node, out, depth) {
+    for (var c = node.firstChild; c; c = c.nextSibling) {
+      if (out.len > maxChars) return;
+      if (c.nodeType !== 1 || SKIP[c.tagName]) continue;
+      var st = window.getComputedStyle(c);
+      if (st.display === 'none' || st.visibility === 'hidden') continue;
+      var t = c.tagName;
+      var m = t.match(/^H([1-6])$/);
+      if (m) push(out, '#'.repeat(+m[1]) + ' ' + inline(c).trim());
+      else if (t === 'P') push(out, inline(c).trim());
+      else if (t === 'LI') { push(out, '- ' + inline(c).trim()); walk(c, out, depth + 1); }
+      else if (t === 'PRE') push(out, '```\n' + (c.innerText || '').trim().slice(0, 1500) + '\n```');
+      else if (t === 'BLOCKQUOTE') push(out, '> ' + inline(c).trim());
+      else if (t === 'TR') {
+        var cells = []; var tds = c.querySelectorAll('td,th');
+        for (var i = 0; i < tds.length; i++) cells.push((tds[i].innerText || '').replace(/\s+/g, ' ').trim());
+        if (cells.length) push(out, '| ' + cells.join(' | ') + ' |');
+      } else walk(c, out, depth + 1);
+    }
+  }
+  function push(out, line) { if (line && line.trim()) { out.parts.push(line); out.len += line.length + 1; } }
+  var root = document.querySelector('main, article, [role=main]') || document.body;
+  var out = { parts: [], len: 0 };
+  if (document.title) push(out, '# ' + document.title);
+  walk(root, out, 0);
+  var s = out.parts.join('\n\n');
+  return s.length > maxChars ? s.slice(0, maxChars) : s;
+}
 /* eslint-enable */
 
 // ── API (Node-side) ──────────────────────────────────────────────────────────
 
-async function snapshot(page, { maxEls = 120 } = {}) {
-  const expr = `(${__lp_collect.toString()})(${maxEls})`;
+async function snapshot(page, { maxEls = 120, maxChars = 3500 } = {}) {
+  const expr = `(${__lp_collect.toString()})(${maxEls}, ${Number(maxChars) || 3500})`;
   const data = await page.eval(expr);
   return data || { url: null, title: '', elements: [], text: '' };
 }
@@ -152,6 +205,12 @@ async function unmark(page) {
   } catch {
     return false;
   }
+}
+
+/** Page as LLM-ready Markdown (headings, lists, links, tables), main content only. */
+async function markdown(page, { maxChars = 20000 } = {}) {
+  const s = await page.eval(`(${__lp_markdown.toString()})(${Number(maxChars) || 20000})`);
+  return String(s || '').trim();
 }
 
 /** href as a short, descriptive label (the model acts by index, not by URL). */
@@ -206,4 +265,4 @@ function format(snap) {
   return lines.join('\n');
 }
 
-module.exports = { snapshot, mark, unmark, format };
+module.exports = { snapshot, mark, unmark, format, markdown };
