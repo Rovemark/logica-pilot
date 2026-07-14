@@ -52,7 +52,8 @@ function hostOf(url) {
 
 function siteFor(host) {
   const s = load();
-  if (!s.sites[host]) s.sites[host] = { visits: 0, elements: {}, recipes: [] };
+  if (!s.sites[host]) s.sites[host] = { visits: 0, elements: {}, recipes: [], fixes: [] };
+  if (!s.sites[host].fixes) s.sites[host].fixes = [];
   return s.sites[host];
 }
 
@@ -82,7 +83,22 @@ function recordRecipe(url, goal, steps) {
   save();
 }
 
-/** Learned hints for a host: top elements + known recipes. */
+/**
+ * Self-repair (#3): remember a failure and the fix that worked on this host, so
+ * next time the model is warned BEFORE it repeats the mistake. Converges toward
+ * zero breakage per site — impossible for a cold Playwright script.
+ */
+function recordFix(url, { problem, fix } = {}) {
+  const h = hostOf(url); if (!h || !problem || !fix) return;
+  const site = siteFor(h);
+  const key = String(problem).slice(0, 80).toLowerCase().trim();
+  site.fixes = (site.fixes || []).filter((f) => f.problem.toLowerCase().trim() !== key);
+  site.fixes.unshift({ problem: String(problem).slice(0, 120), fix: String(fix).slice(0, 160), ts: Date.now(), hits: 1 });
+  site.fixes = site.fixes.slice(0, 12);
+  save();
+}
+
+/** Learned hints for a host: top elements + known recipes + repair notes. */
 function recall(url) {
   const h = hostOf(url); if (!h) return null;
   const s = load().sites[h];
@@ -90,7 +106,7 @@ function recall(url) {
   const hot = Object.entries(s.elements || {})
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([k, n]) => ({ type: k.split(':')[0], label: k.split(':').slice(1).join(':'), count: n }));
-  return { host: h, visits: s.visits || 0, hot, recipes: (s.recipes || []).slice(0, 3) };
+  return { host: h, visits: s.visits || 0, hot, recipes: (s.recipes || []).slice(0, 3), fixes: (s.fixes || []).slice(0, 3) };
 }
 
 /** One compact line appended to the perception map, so the model sees what's learned. */
@@ -101,7 +117,13 @@ function hintLine(url) {
   if (r.visits > 1) bits.push(`seen ${r.visits}×`);
   if (r.hot.length) bits.push('often used here: ' + r.hot.slice(0, 3).map((e) => `"${e.label}"`).join(', '));
   if (r.recipes.length) bits.push(`${r.recipes.length} known recipe(s)`);
-  return bits.length ? '★ MEMORY (' + r.host + '): ' + bits.join(' · ') : '';
+  let line = bits.length ? '★ MEMORY (' + r.host + '): ' + bits.join(' · ') : '';
+  // Repair notes go on their own line so they read as explicit warnings.
+  if (r.fixes && r.fixes.length) {
+    const fixes = r.fixes.map((f) => `• ${f.problem} → ${f.fix}`).join('\n');
+    line += (line ? '\n' : '') + '⚠️ LEARNED ON THIS SITE:\n' + fixes;
+  }
+  return line;
 }
 
 function stats() {
@@ -121,4 +143,4 @@ function dump(host) {
   return s.sites;
 }
 
-module.exports = { recordVisit, recordAction, recordRecipe, recall, hintLine, stats, dump, hostOf, FILE };
+module.exports = { recordVisit, recordAction, recordRecipe, recordFix, recall, hintLine, stats, dump, hostOf, FILE };

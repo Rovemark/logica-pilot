@@ -15,6 +15,7 @@
 
 const { LogicaPilot } = require('./index');
 const { TOOLS, get } = require('./tools');
+const adapters = require('./adapters');
 
 const NAME = 'logica-pilot';
 let VERSION = '0.1.0';
@@ -37,7 +38,21 @@ function toMcpSchema(input) {
 }
 const MCP_TOOLS = TOOLS.map((t) => ({ name: 'browser_' + t.name, description: t.description, inputSchema: toMcpSchema(t.input) }));
 
+// Built-in tools + the user's saved Site Adapters (recomputed each list so newly
+// saved adapters show up without a restart). Adapter tools are named x_<name>.
+function listTools() {
+  return MCP_TOOLS.concat(adapters.toolDescriptors().map((a) => ({ name: a.name, description: a.description, inputSchema: a.inputSchema })));
+}
+
 async function callTool(mcpName, args) {
+  // Dynamic Site Adapter (x_<name>): fill the goal and drive the agent.
+  if (/^x_/.test(String(mcpName))) {
+    const ad = adapters.get(String(mcpName).replace(/^x_/, ''));
+    if (!ad) throw new Error('unknown adapter: ' + mcpName);
+    const runTool = get('adapter');
+    const p = await P();
+    return runTool.run({ action: 'run', name: ad.name, params: args || {} }, { model: undefined, page: p.page, pilot: p });
+  }
   const tool = get(String(mcpName).replace(/^browser_/, ''));
   if (!tool) throw new Error('unknown tool: ' + mcpName);
   const ctx = { model: undefined, watchLast };
@@ -65,7 +80,7 @@ async function handle(msg) {
   }
   if (method === 'notifications/initialized' || method === 'notifications/cancelled') return;
   if (method === 'ping') return send({ jsonrpc: '2.0', id, result: {} });
-  if (method === 'tools/list') return send({ jsonrpc: '2.0', id, result: { tools: MCP_TOOLS } });
+  if (method === 'tools/list') return send({ jsonrpc: '2.0', id, result: { tools: listTools() } });
   if (method === 'tools/call') {
     const nm = params && params.name;
     const args = (params && params.arguments) || {};

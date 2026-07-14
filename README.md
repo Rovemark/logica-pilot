@@ -9,7 +9,7 @@
 A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic
 intent — not pixel coordinates — then **clicks, types, scrolls and reads** on its own until the
 goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
-browser · **CLI and MCP** with the same 39 tools.
+browser · **CLI and MCP** with the same 41 tools.
 
 <p align="center">
   <img src="docs/media/pilot-run.gif" alt="The Pilot autonomously scrolls, extracts and answers a goal on a live page" width="100%">
@@ -58,7 +58,7 @@ $ logica-pilot memory
 |------|---------------|--------|
 | 🧠 **Site Memory** | Learns the important elements + recipes per host; repeat tasks warm-start (fewer tokens, known flows). | ✅ ships — `memory` tool |
 | 🔐 **Local session vault** | Acts as the *logged-in you*, on *your* machine — what cloud scraping APIs can't do (no credentials, no privacy leak). | ✅ ships — `session` tool |
-| 🛠️ **Self-repair memory** | Remembers each failure and its fix per site → converges toward zero breakage. | 🔜 roadmap |
+| 🛠️ **Self-repair memory** | Remembers each failure and its fix per site → converges toward zero breakage. | ✅ ships — learned on every `run` |
 | 🔌 **MCP-native distribution** | The default browser tool across the agent ecosystem (Claude Desktop, Cursor, Cline). | ✅ ships — MCP server |
 
 > Your interaction history is **local and private** — the moat is *your* accumulated data, not a vendor's cloud.
@@ -294,7 +294,7 @@ await pilot.close();
 
 ## MCP Server (Claude Desktop, Cursor, Cline, etc.)
 
-Logica Pilot exposes **39 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
+Logica Pilot exposes **41 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
 
 ### Configuration
 
@@ -316,7 +316,7 @@ Then set your AI credentials (one time):
 - Export `ANTHROPIC_API_KEY=sk-ant-…`, *or*
 - Run a local LogicaProxy (`:8317`)
 
-### The 39 Tools (Grouped by Function)
+### The 41 Tools (Grouped by Function)
 
 #### Navigation (5 tools)
 | Tool | Purpose |
@@ -350,10 +350,12 @@ Then set your AI credentials (one time):
 | **eval** | Run JavaScript in the page (power tool for devs) |
 | **pdf** | Save the current page as PDF |
 
-#### Autonomy (1 tool)
+#### Autonomy (3 tools)
 | Tool | Purpose |
 |------|---------|
-| **run** | Execute a multi-step objective autonomously (observe→decide→act loop) |
+| **run** | Execute a multi-step objective autonomously (observe→decide→act loop); saved by the flight recorder, learns fixes + recipes per site |
+| **adapter** | **Site Adapters** — turn a site task into a named, parameterized tool (`save`/`run`); saved adapters appear as their own MCP tools (`x_<name>`). Any site becomes an API |
+| **workflow** | **Autopilot Recorder** — save a task as replayable steps and replay it **deterministically by label** (no LLM); falls back to the AI agent on a miss |
 
 #### Session, Memory & Monitoring (5 tools)
 | Tool | Purpose |
@@ -587,7 +589,7 @@ src/
   llm.js                Brain (Messages API via LogicaProxy or Anthropic)
   agent.js              Autonomous loop (perceive → decide → act)
   electron-page.js      Adapter: webContents.debugger → page contract
-  mcp-server.js         MCP server (stdio, 39 tools)
+  mcp-server.js         MCP server (stdio, 41 tools)
   tools.js              SINGLE REGISTRY (CLI + MCP share this)
   fanout.js             Parallel multi-agent orchestration
   search.js             Web search (Bing default, Brave if key set)

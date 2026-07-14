@@ -38,6 +38,8 @@ const { checkChange } = require('./change');
 const monitor = require('./monitor');
 const dataset = require('./dataset');
 const flight = require('./flight');
+const adapters = require('./adapters');
+const workflow = require('./workflow');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -69,6 +71,39 @@ async function map(page, max = 120) {
   } catch {}
   return text;
 }
+// Self-repair (#3) + recipes (#1): learn from a finished run's trace. Records a
+// per-host fix when an action clearly failed and a DIFFERENT one recovered, and a
+// reusable recipe on success. Best-effort; never throws.
+const FAIL_RE = /ERROR|not found|no effect|did NOT|invalid|timeout|⚠️/i;
+function learnFromTrace(startUrl, goal, r) {
+  try {
+    const trace = (r && r.trace) || [];
+    if (!trace.length) return;
+    let host = startUrl || null;
+    const acts = trace.filter((s) => s.action && s.action !== 'done');
+    for (let i = 0; i < acts.length; i++) {
+      const s = acts[i];
+      if (s.action === 'navigate' && s.input && s.input.url) host = s.input.url;
+      const failed = FAIL_RE.test(String(s.result || ''));
+      if (!failed) continue;
+      // find the next DIFFERENT successful-looking action = the recovery
+      for (let j = i + 1; j < acts.length; j++) {
+        const nxt = acts[j];
+        if (FAIL_RE.test(String(nxt.result || ''))) continue;
+        if (nxt.action === s.action && JSON.stringify(nxt.input) === JSON.stringify(s.input)) continue;
+        const problem = `${s.action}${s.input && s.input.reason ? ' (' + String(s.input.reason).slice(0, 50) + ')' : ''} failed`;
+        const fix = `${nxt.action}${nxt.input && nxt.input.reason ? ' — ' + String(nxt.input.reason).slice(0, 60) : ''}`;
+        if (host) siteMemory.recordFix(host, { problem, fix });
+        break;
+      }
+    }
+    if (r && r.success && host && goal) {
+      const steps = acts.slice(0, 12).map((s) => ({ action: s.action, input: s.input && s.input.reason ? s.input.reason : (s.input && (s.input.url || s.input.text || s.input.index)) }));
+      siteMemory.recordRecipe(host, goal, steps);
+    }
+  } catch {}
+}
+
 async function ensureUrl(page, a) {
   if (a && a.url) {
     await page.goto(a.url);
@@ -419,6 +454,7 @@ const TOOLS = [
         }
       };
       const r = await agent.run(ctx.page, a.goal, { maxSteps: a.maxSteps || 12, model: ctx.model, startUrl: a.url, onStep });
+      learnFromTrace(a.url, a.goal, r); // self-repair + recipe learning
       const rep = rec.done(r);
       const text = typeof r === 'string' ? r : (r && (r.result || r.summary)) || JSON.stringify(r);
       return { text: `${text}\n\n📼 flight: ${rep.id} · report: ${rep.report}` };
@@ -496,6 +532,59 @@ const TOOLS = [
         const mon = a.id ? monitor.get(a.id) : { id: 'adhoc', url: a.url, tag: a.tag, notify: {} };
         if (!mon || !mon.url) return { json: { error: 'pass id (existing monitor) or url' } };
         return { json: await monitor.checkOne(mon, { force: true }) };
+      }
+      return { json: { error: 'unknown action' } };
+    },
+  },
+  {
+    name: 'adapter', group: 'autonomy', primary: 'action',
+    description: 'SITE ADAPTERS: turn a site task into a named, parameterized tool (action: save|list|run|remove). save a `goal` template with {params} for a host; `run` fills the params and drives the agent (warm-started by site memory). Saved adapters also appear as their own MCP tools (x_<name>).',
+    input: {
+      properties: {
+        action: { type: 'string', enum: ['save', 'list', 'run', 'remove'] },
+        name: { type: 'string' }, host: { type: 'string' }, goal: { type: 'string', description: 'template, e.g. "search {query} on Amazon and return the top 5 with price"' },
+        description: { type: 'string' }, params: { type: 'object', description: 'values for {params} when running' },
+        maxSteps: { type: 'number' },
+      }, required: ['action'],
+    },
+    run: async (a, ctx) => {
+      if (a.action === 'save') return { json: adapters.save({ name: a.name, host: a.host, goal: a.goal, description: a.description }) };
+      if (a.action === 'list') return { json: adapters.list() };
+      if (a.action === 'remove') return { json: adapters.remove(a.name) };
+      if (a.action === 'run') {
+        const ad = adapters.get(a.name);
+        if (!ad) return { json: { error: 'adapter not found: ' + a.name } };
+        const goal = adapters.fillGoal(ad.goal, a.params || {});
+        const rec = flight.record({ goal, url: ad.host, model: ctx.model });
+        const r = await agent.run(ctx.page, goal, { maxSteps: a.maxSteps || 15, model: ctx.model, startUrl: ad.host, onStep: (s) => rec.step(s) });
+        learnFromTrace(ad.host, goal, r);
+        const rep = rec.done(r);
+        return { text: `${(r && r.result) || JSON.stringify(r)}\n\n📼 ${rep.id}` };
+      }
+      return { json: { error: 'unknown action' } };
+    },
+  },
+  {
+    name: 'workflow', group: 'autonomy', primary: 'action',
+    description: 'AUTOPILOT RECORDER: save a task as a replayable workflow of concrete steps and REPLAY it deterministically (almost free, no LLM). Steps target elements by LABEL so replay survives layout changes; on a miss it falls back to the AI agent (action: save|list|replay|remove).',
+    input: {
+      properties: {
+        action: { type: 'string', enum: ['save', 'list', 'replay', 'remove'] },
+        name: { type: 'string' }, host: { type: 'string' }, goal: { type: 'string', description: 'natural-language fallback if a step fails' },
+        steps: { type: 'array', items: { type: 'object' }, description: '[{action:"navigate",url}|{action:"type",label,text,submit}|{action:"click",label}|{action:"scroll",direction}|{action:"press",key}|{action:"wait",ms}]' },
+        params: { type: 'object', description: '{key} substitutions at replay' },
+        fallback: { type: 'boolean', description: 'run the AI agent to finish if a step fails (default true)' },
+      }, required: ['action'],
+    },
+    run: async (a, ctx) => {
+      if (a.action === 'save') return { json: workflow.save({ name: a.name, host: a.host, goal: a.goal, steps: a.steps }) };
+      if (a.action === 'list') return { json: workflow.list() };
+      if (a.action === 'remove') return { json: workflow.remove(a.name) };
+      if (a.action === 'replay') {
+        const wf = workflow.get(a.name);
+        if (!wf) return { json: { error: 'workflow not found: ' + a.name } };
+        const agentFallback = a.fallback === false ? null : (goal) => agent.run(ctx.page, goal, { maxSteps: 12, model: ctx.model });
+        return { json: await workflow.replay(ctx.page, wf, { params: a.params, agentFallback }) };
       }
       return { json: { error: 'unknown action' } };
     },
