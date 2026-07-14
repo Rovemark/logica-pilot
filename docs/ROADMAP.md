@@ -1,10 +1,23 @@
-Tenho a calibração necessária (estrutura real confirmada: 1 commit, sem .github, sem electron-builder, Electron 33, 4147 LOC nos arquivos core). Produzo o roadmap.
+# ROADMAP — Logica Pilot
+
+## ✅ Shipped (desde este roadmap)
+
+Boa parte do que estava listado abaixo como P0/P1 já foi entregue. Feito e no ar:
+
+- **Confiabilidade da camada IA** — timeout + retry/backoff no `llm.js` (429/5xx, honra `retry-after`) + fallback Anthropic em 5xx; detector de loop/no-progress no agent; rastreio de custo/tokens (`usage` retornado por run).
+- **Eficiência de token** — prompt caching + poda de mapas antigos = **~77% menos custo de input** por run.
+- **Electron 37** + ad-block nativo (EasyList/EasyPrivacy) + extensões (Chrome Web Store/unpacked) + fix de reflow do painel.
+- **Human handoff** — detecta login/captcha/Cloudflare e pausa pra resolução humana (tool `handoff`).
+- **Memória + histórico de runs** — site-memory (flywheel) + **self-repair** (aprende consertos por site) + **flight recorder** (`runs`, report HTML).
+- **Suíte de automação (43 tools)** — crawl/map/index(BM25)/llmstxt, gather/ask, meta/product/images/media, batch, dataset, monitor+daemon, adapter (site→tool), workflow (replay determinístico).
+- **Attach ao browser real** (`--attach`), **proxy BYO + geo**, **redação de PII**, **consent-killer** — tudo local, zero-dep.
+- **Bug da New Tab** (motor de busca hardcoded) e o `single-instance`/escrita atômica de stores endereçados na linha de trabalho atual.
+
+**Ainda em aberto (bloco de release):** empacotamento (electron-builder/.dmg/.exe), code signing + notarização, auto-update assinado, e o hardening de segurança do Electron (`will-attach-webview`, sandbox, `openExternal`). São o caminho de "beta interno sólido" → "GA público".
 
 ---
 
-# ROADMAP — Logica Pilot · O que falta para virar produto
-
-## 1. VEREDICTO
+## 1. VEREDICTO (análise original — histórico)
 
 Logica Pilot é um **protótipo robusto / pre-beta excelente**, não um produto. A casca (abas, omnibox, favoritos, leitor, PDF, extensões Chrome, popovers flutuantes) e o motor de IA (percepção a11y+visão, CDP próprio sem Playwright, loop de tool-calling) estão num nível de engenharia raro para 1 commit / v0.1.0 / 4,1k LOC. **A maior lacuna única não é técnica do core — é que o produto é literalmente inentregável e inseguro para o mundo real**: roda só de fonte (`npm run browser`), com Electron 33 (18 CVEs high, Chromium 130 desatualizado num *browser*), zero testes, e o copiloto-estrela dirige a sessão autenticada do usuário sem nenhum guardrail. Hoje você tem um motor de Ferrari sem carroceria, sem freio e sem placa.
 

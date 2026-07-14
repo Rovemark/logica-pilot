@@ -1,6 +1,6 @@
 # Logica Pilot — MCP & CLI Guide
 
-**The token-efficient browser automation engine.** Exposed as a single tool registry accessible via **CLI**, **MCP (Model Context Protocol)**, or **programmatic API**. Same 25 tools, three surfaces — zero duplication.
+**The token-efficient browser automation engine.** Exposed as a single tool registry accessible via **CLI**, **MCP (Model Context Protocol)**, or **programmatic API**. Same 43 tools, three surfaces — zero duplication.
 
 ---
 
@@ -43,66 +43,23 @@ The engine auto-discovers an installed real browser (any installed browser).
 
 ---
 
-## The 25 Tools — Single Registry
+## The 43 Tools — Single Registry
 
-All tools are defined once in `src/tools.js`. Both MCP (stdio) and CLI (subcommands) expose the identical interface. MCP tool names are prefixed with `browser_` (e.g., `browser_navigate`). CLI commands are bare (e.g., `logica-pilot navigate`).
+All tools are defined once in `src/tools.js`. Both MCP (stdio) and CLI (subcommands) expose the identical interface. MCP tool names are prefixed with `browser_` (e.g., `browser_navigate`); CLI commands are bare (e.g., `logica-pilot navigate`). Saved **Site Adapters** also appear as their own MCP tools, `x_<name>`.
 
-### Navigation (5 tools)
+> **[TOOLS.md](TOOLS.md) is the canonical, complete reference** (every tool, its args, and examples). The summary below groups the 43 tools; see TOOLS.md for detail.
 
-| Tool | MCP Name | CLI Command | What It Does |
-|------|----------|-------------|--------------|
-| **navigate** | `browser_navigate` | `logica-pilot navigate <url>` | Go to a URL and return the **indexed map** (interactive elements + readable text) |
-| **back** | `browser_back` | `logica-pilot back` | Navigate back in history, return the page map |
-| **forward** | `browser_forward` | `logica-pilot forward` | Navigate forward in history, return the page map |
-| **reload** | `browser_reload` | `logica-pilot reload [--url U]` | Reload the current page (or navigate first if `url` provided) |
-| **wait** | `browser_wait` | `logica-pilot wait [--text "X"\|--selector S\|--timeout N]` | Block until text appears / selector exists / timeout (semantic wait, no brittle sleeps) |
+| Group | Tools (`browser_<name>` over MCP · `logica-pilot <name>` on the CLI) |
+|-------|------|
+| **Navigation** (5) | `navigate` · `back` · `forward` · `reload` · `wait` (semantic) |
+| **Perception** (10) | `observe` (indexed map) · `read` (markdown/paginate/`maxAge` cache/`redactPII`/summarize) · `extract` · `meta` · `images` · `product` · `media` · `links` · `handoff` · `screenshot` |
+| **Actions** (6) | `act` (click/type/press/scroll by index) · `fill` · `select` · `hover` · `eval` · `pdf` |
+| **Autonomy** (3) | `run` (autonomous loop + flight recorder + self-repair) · `adapter` (site→named tool `x_<name>`) · `workflow` (deterministic replay by label) |
+| **Site** (6) | `map` (discover URLs) · `crawl` (BFS, path filters, proxy/geo/redactPII) · `index` (local BM25, offline) · `dataset` (living tables) · `batch` (async jobs) · `llmstxt` |
+| **Multi-Agent** (8) | `fanout` · `search` (`content:true` reads results) · `gather` (schema in, JSON out) · `ask` · `research` · `compare` · `deal` · `factcheck` |
+| **Session & Monitoring** (5) | `session` (login cookies) · `memory` (site flywheel) · `watch` (change diff) · `monitor` (scheduled alerts) · `runs` (flight reports) |
 
-### Perception (6 tools)
-
-| Tool | MCP Name | CLI Command | What It Does |
-|------|----------|-------------|--------------|
-| **observe** | `browser_observe` | `logica-pilot observe [--url U]` | Return the **indexed semantic map** of current page (token-cheap perception replacing HTML/screenshot) |
-| **read** | `browser_read` | `logica-pilot read <url> [--summarize]` | Get **readable content** (nav/ads stripped) + optional AI summary |
-| **extract** | `browser_extract` | `logica-pilot extract <url> --task "..." \|--schema {...}` | Extract **structured data → JSON** (via instruction or JSON schema); or match by CSS selector |
-| **links** | `browser_links` | `logica-pilot links <url>` | Return all links on the page (text + url), deduped and compact |
-| **screenshot** | `browser_screenshot` | `logica-pilot screenshot <url> [--fullPage] [--marks]` | Capture page as image (fallback for opaque canvas/maps). `--marks` draws indices as badges |
-| **(perception implied)** | — | — | — |
-
-### Actions (7 tools)
-
-| Tool | MCP Name | CLI Command | What It Does |
-|------|----------|-------------|--------------|
-| **act** | `browser_act` | `logica-pilot act --action click\|type\|press\|scroll [options]` | Act **by index** (from `observe`): click, type, press key, or scroll. No selectors. |
-| **fill** | `browser_fill` | `logica-pilot fill --fields '[{index, text, submit?}]'` | Fill multiple form fields at once (form autopilot) |
-| **select** | `browser_select` | `logica-pilot select --index N --value "option"` | Select an option in a `<select>` dropdown |
-| **hover** | `browser_hover` | `logica-pilot hover --index N` | Hover the mouse over an element (reveals menus/tooltips) |
-| **eval** | `browser_eval` | `logica-pilot eval --expression "js code"` | Run JavaScript in the page and return the result (power tool for devs) |
-| **pdf** | `browser_pdf` | `logica-pilot pdf <url> [--out path]` | Save the current page as a PDF |
-| **(actions implied)** | — | — | — |
-
-### Autonomy (1 tool)
-
-| Tool | MCP Name | CLI Command | What It Does |
-|------|----------|-------------|--------------|
-| **run** | `browser_run` | `logica-pilot run "objective" [--url U] [--max-steps N]` | Execute a multi-step goal autonomously (agent observes → acts in a loop until complete) |
-
-### Session Management (2 tools)
-
-| Tool | MCP Name | CLI Command | What It Does |
-|------|----------|-------------|--------------|
-| **session** | `browser_session` | `logica-pilot session --action save\|load\|list --name "session name"` | Manage login sessions (cookies): `save` / `load` / `list`. Log in once, reuse forever. |
-| **watch** | `browser_watch` | `logica-pilot watch <url>` | Check if a URL **changed** since last check (content diff). Base for monitors (price alerts, stock checks, etc.) |
-
-### Multi-Agent Orchestration (4 tools)
-
-| Tool | MCP Name | CLI Command | What It Does |
-|------|----------|-------------|--------------|
-| **fanout** | `browser_fanout` | `logica-pilot fanout --urls a.com,b.com,c.com --task "..." [--synthesize "..."]` | **MULTI-AGENT**: run task on N URLs **in parallel** (separate headless pages) + optionally synthesize results into a summary |
-| **search** | `browser_search` | `logica-pilot search "query" [--limit N]` | Search the web and return URLs (title + url). Bing by default; Brave API if `BRAVE_SEARCH_API_KEY` set. |
-| **research** | `browser_research` | `logica-pilot research "question" [--limit N]` | **Deep Research**: search + read sources **in parallel** (multi-agent) + synthesize with citations `[1]`, `[2]`, etc. |
-| **compare** | `browser_compare` | `logica-pilot compare --urls a,b,c --task "specs, price..."` | **Compare**: extract from N URLs in parallel + synthesize ranked comparison table + recommendation |
-| **deal** | `browser_deal` | `logica-pilot deal "product name" [--limit N]` | **Best Deal**: search for product, extract price + shipping **in parallel**, rank by total cost. |
-| **factcheck** | `browser_factcheck` | `logica-pilot factcheck "claim" [--limit N]` | **Fact-Check**: search independent sources, synthesize verdict (**TRUE** / **FALSE** / **PARTIAL** / **UNVERIFIABLE**) with citations. |
+**New since v0.1** (all local, zero-dep): crawl/map/index(BM25)/llmstxt, gather/ask, meta/product/images/media, batch, dataset, monitor, adapter, workflow, runs, handoff — plus **attach to your real browser** (`--attach <port>`), **BYO proxy + geo**, **PII redaction**, and the **consent-killer**. See [TOOLS.md → Killer capabilities](TOOLS.md#killer-capabilities-what-a-cloud-scraper-cant-do).
 
 ---
 

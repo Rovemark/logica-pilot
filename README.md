@@ -320,6 +320,8 @@ Then set your AI credentials (one time):
 
 ### The 43 Tools (Grouped by Function)
 
+> Full reference — every tool, its args and examples — in **[docs/TOOLS.md](docs/TOOLS.md)**.
+
 #### Navigation (5 tools)
 | Tool | Purpose |
 |------|---------|
@@ -556,6 +558,11 @@ export LOGICA_PILOT_LOCATION=BR
 **PII redaction** (deterministic, local, free): `read --redactPII` / `crawl --redactPII` masks
 emails, phones, CPF/CNPJ, credit cards (Luhn-validated) and IPs **before** the text reaches any
 model — `[email]`, `[phone]`, `[cpf]`, `[card]`, `[ip]`.
+
+**Consent-killer** (automatic): cookie/consent walls are dismissed right after every navigation,
+**before** perception runs — a banner otherwise pollutes the whole indexed map and blocks the
+content. Two-phase: click a known dismiss control, let the site react, then remove any full-screen
+overlay still blocking + free the scroll.
 
 ### Attach to your everyday browser
 

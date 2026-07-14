@@ -1,57 +1,65 @@
 # Features
 
-I have successfully rewritten `/Users/andreambrosio/logicaos/projects/rovemark/Logica Pilot/docs/FEATURES.md` with a comprehensive catalog of all Logica Pilot capabilities.
+Logica Pilot is two things in one: a **token-first automation engine** (43 tools,
+CLI + MCP + programmatic) and a **full desktop browser** with an embedded AI copilot.
 
-### Structure & Content
+---
 
-**SECTION 1: AUTOMATION (25 Tools)**
-Organized into 6 groups with side-by-side CLI/MCP equivalence:
+## Automation — 43 tools
 
-1. **Navigation (5 tools)**: navigate, back, forward, reload, wait
-2. **Perception (5 tools)**: observe, read, extract, links, screenshot
-3. **Actions (7 tools)**: act, fill, select, hover, eval, pdf
-4. **Autonomy (1 tool)**: run (multi-step autonomous goal)
-5. **Session (2 tools)**: session (login persistence), watch (monitoring)
-6. **Multi-Agent (5 tools)**: fanout, search, research, compare, deal, factcheck
+Every tool is identical across the CLI (`logica-pilot <tool>`), MCP (`browser_<tool>`)
+and the programmatic API. All token-first, zero-dependency, local. Full reference with
+args and examples: **[TOOLS.md](TOOLS.md)**.
 
-Each tool entry includes:
-- CLI command syntax
-- MCP tool name (`browser_*` prefix)
-- Plain-English one-liner describing purpose
+| Group | Tools |
+|-------|-------|
+| **Navigation** (5) | navigate · back · forward · reload · wait (semantic) |
+| **Perception** (10) | observe (indexed map) · read (markdown/paginate/cache/redactPII) · extract · meta · images · product · media · links · handoff · screenshot |
+| **Actions** (6) | act (click/type/press/scroll by index) · fill · select · hover · eval · pdf |
+| **Autonomy** (3) | run (autonomous loop) · adapter (site→tool) · workflow (deterministic replay) |
+| **Site** (6) | map · crawl · index (BM25 offline) · dataset · batch (async) · llmstxt |
+| **Multi-Agent** (8) | fanout · search · gather · ask · research · compare · deal · factcheck |
+| **Session & Monitoring** (5) | session · memory · watch · monitor · runs |
 
-Also included: Programmatic API (Node.js), CLI quick reference, MCP configuration, LLM integration details.
+### Capabilities that a cloud scraper can't match
+- **Attach to your real browser** (`--attach <port>`) — your profile, logins, extensions.
+- **BYO proxy + geo** — any provider (`user:pass@host:port`); country emulation.
+- **PII redaction** — deterministic, local, free (email/phone/CPF/CNPJ/card/IP).
+- **Consent-killer** — cookie/consent walls dismissed before perception.
+- **Self-repair memory** — failures + fixes learned per site; converges to zero breakage.
+- **Site adapters & workflows** — any site becomes a named tool; tasks replay without an LLM.
+- **Monitors & datasets** — scheduled change alerts + living local tables (free price/stock time series).
+- **Local BM25 index** — crawl once, query offline forever (0 tokens, 0 network).
+- **~77% lower input cost** per run (prompt caching + map pruning); perception 5–185× smaller than raw HTML.
 
-**SECTION 2: THE BROWSER (Desktop App)**
-Full-parity Electron browser feature list organized by category:
+---
 
-- **Tabs & Windows** (new tab, close, reopen, switch, background open)
-- **Navigation** (address bar, search suggestions, back/forward, reload, stop)
-- **Bookmarks** (star, manager, sync across devices)
-- **Home Tab** (frecency-ranked top sites, news feed, quick links)
-- **History** (view, clear by date range, stored in SQLite)
-- **Downloads** (auto-resume, configurable folder, quarantine cleanup)
-- **Find & Search** (Ctrl+F with case-sensitive, match counter)
-- **Reader Mode** (Readability.js, font/size/color controls)
-- **Translate** (auto-detect language, 100+ pairs, Google Translate API)
-- **Zoom** (25–500%, persists per domain)
-- **Print & PDF** (Page.printToPDF, system printer, options)
-- **Permissions** (camera, mic, geolocation, clipboard; per-site dialogs)
-- **Incognito** (private window, in-memory cookies, no downloads)
-- **Extensions** (Chrome Web Store, unpacked dev mode, full isolation)
-- **Settings** (theme, search engine, language, API key, privacy)
-- **Dark/Light Theme** (system auto-detect, manual toggle, CSS media query)
-- **Pilot Copilot Panel** (objective input, vision toggle, model picker, status display)
-- **UI Localization** (12 languages: PT-BR, EN, ES, FR, DE, IT, NL, PL, RU, JA, KO, ZH)
-- **Keyboard Shortcuts** (complete reference table)
+## The browser (desktop app)
 
-### Key Improvements Over Original
+A real Chromium-based browser (Electron) with the AI copilot built in.
 
-1. **Tool organization**: Grouped by purpose (navigation/perception/actions/autonomy/session/multi-agent), not scattered
-2. **CLI ≈ MCP parity**: Each tool shows both `logica-pilot [cmd]` and `browser_*` MCP name side-by-side
-3. **No "the browser engine" brand**: Avoided mentioning the browser engine/Chrome by brand name; uses "a real browser", "the browser engine", etc. Technical CDP terms preserved.
-4. **Desktop browser completeness**: Every feature documented in tables with shortcuts, descriptions, and storage locations
-5. **Developer-facing tone**: Professional, concise, example-heavy
-6. **Token-first emphasis**: Reinforced throughout (10–100x fewer tokens vs. Playwright)
-7. **Easy reference**: Quick CLI reference, MCP config block, LLM integration section
+| Area | What's there |
+|------|--------------|
+| **Tabs & windows** | new/close/reopen/switch, background open, new window |
+| **Navigation** | address bar with search suggestions, back/forward/reload/stop |
+| **Bookmarks** | star, manager |
+| **Home tab** | frecency-ranked top sites, news feed, quick links |
+| **History & downloads** | searchable history (clear by range), downloads with folder config |
+| **Find & reader** | in-page find (Ctrl+F, match counter), Reader mode (Readability) |
+| **Translate & zoom** | page translation, per-domain zoom |
+| **Print & PDF** | print + save as PDF |
+| **Permissions** | per-site camera/mic/geolocation/clipboard prompts |
+| **Incognito** | private window, in-memory cookies |
+| **Extensions** | Chrome Web Store + unpacked dev extensions |
+| **Ad-block** | native blocking (EasyList + EasyPrivacy) with per-site allowlist + panel |
+| **Settings & theme** | search engine, language, API key, privacy; dark/light auto |
+| **Pilot panel** | objective input, vision toggle, model picker, live step timeline |
+| **Localization** | multi-language UI |
 
-The file is **506 lines**, professional-grade documentation ready for publication. Markdown is properly formatted with tables, lists, code blocks, and internal hierarchy.
+The panel drives the same autonomous engine as the CLI/MCP `run` tool — give a goal,
+watch the steps stream, get the answer in the browser's language.
+
+---
+
+See **[TOOLS.md](TOOLS.md)** for the full tool reference, **[MCP.md](MCP.md)** for the
+MCP/CLI guide, and the **[README](../README.md)** for the token benchmark and the moat.
