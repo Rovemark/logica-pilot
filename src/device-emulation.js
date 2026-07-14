@@ -58,9 +58,16 @@ DEVICES['tablet'] = DEVICES['ipad'];
  * @param {string|object} device - device name or custom { width, height, deviceScaleFactor, mobile, userAgent }
  */
 async function emulateDevice(page, device) {
+  // reset/clear: drop all device emulation, back to the real desktop viewport.
+  if (typeof device === 'string' && /^(reset|clear|off|desktop)$/i.test(device)) {
+    await page.send('Emulation.clearDeviceMetricsOverride').catch(() => {});
+    await page.send('Emulation.setUserAgentOverride', { userAgent: '' }).catch(() => {});
+    await page.send('Emulation.setTouchEmulationEnabled', { enabled: false }).catch(() => {});
+    return { ok: true, device: 'reset', reset: true };
+  }
   const profile = typeof device === 'string' ? DEVICES[device.toLowerCase()] : device;
   if (!profile) {
-    return { ok: false, error: `Unknown device: ${device}. Available: ${Object.keys(DEVICES).join(', ')}` };
+    return { ok: false, error: `Unknown device: ${device}. Available: ${Object.keys(DEVICES).join(', ')}, reset` };
   }
 
   await page.send('Emulation.setDeviceMetricsOverride', {
