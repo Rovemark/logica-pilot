@@ -49,7 +49,7 @@ async function cmdTool(tool, args) {
   for (const k of Object.keys(args)) if (k !== '_') a[k] = args[k];
   if (tool.primary && args._[1] !== undefined && a[tool.primary] === undefined) a[tool.primary] = args._[1];
   if (typeof a.urls === 'string') a.urls = a.urls.split(',').map((s) => s.trim()).filter(Boolean);
-  for (const k of ['schema', 'fields', 'includePaths', 'excludePaths']) if (typeof a[k] === 'string') { try { a[k] = JSON.parse(a[k]); } catch {} }
+  for (const k of ['schema', 'fields', 'includePaths', 'excludePaths', 'notify', 'rows', 'location']) if (typeof a[k] === 'string') { try { a[k] = JSON.parse(a[k]); } catch {} }
   for (const k of ['index', 'maxSteps', 'limit', 'amount', 'maxElements', 'timeout', 'concurrency', 'maxChars', 'offset', 'textChars', 'maxDepth']) {
     if (typeof a[k] === 'string') a[k] = parseInt(a[k], 10);
   }
@@ -122,6 +122,7 @@ async function main() {
   try {
     if (cmd === 'browser' || cmd === 'ui') return cmdBrowser(args);
     if (cmd === 'mcp' || cmd === 'serve') return require('../src/mcp-server').start();
+    if (cmd === 'monitor-daemon') { banner(); return require('../src/monitor').runDaemon({ tickMs: args.tick ? parseInt(args.tick, 10) : 30000 }); }
     if (cmd === 'version' || cmd === '--version' || cmd === '-v') {
       return console.log('logica-pilot ' + require('../package.json').version);
     }

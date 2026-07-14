@@ -29,11 +29,15 @@ const recipes = require('./recipes');
 const { search } = require('./search');
 const session = require('./session-store');
 const crawler = require('./crawl');
-const { lineDiff } = require('./diff');
 const crypto = require('crypto');
 const pageData = require('./page-data');
 const jobs = require('./jobs');
 const { redactPII } = require('./redact');
+const { dismissConsent } = require('./consent');
+const { checkChange } = require('./change');
+const monitor = require('./monitor');
+const dataset = require('./dataset');
+const flight = require('./flight');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -49,19 +53,6 @@ function cacheSave(key, data) {
   try { fs.mkdirSync(CACHE_DIR, { recursive: true }); fs.writeFileSync(path.join(CACHE_DIR, key + '.json'), JSON.stringify({ ts: Date.now(), ...data })); } catch {}
 }
 
-// ── change-tracking store (persistent snapshots per url+tag) ────────────────
-const WATCH_DIR = path.join(os.homedir(), '.logica-pilot', 'watch');
-function watchKey(url, tag) { return crypto.createHash('sha1').update(url + '|' + (tag || '')).digest('hex'); }
-function watchLoad(url, tag) {
-  try { return JSON.parse(fs.readFileSync(path.join(WATCH_DIR, watchKey(url, tag) + '.json'), 'utf8')); } catch { return null; }
-}
-function watchSave(url, tag, text) {
-  try {
-    fs.mkdirSync(WATCH_DIR, { recursive: true });
-    fs.writeFileSync(path.join(WATCH_DIR, watchKey(url, tag) + '.json'),
-      JSON.stringify({ url, tag: tag || '', ts: new Date().toISOString(), text: String(text).slice(0, 300000) }));
-  } catch {}
-}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const q = (id) => `[data-lpilot-id="${String(id).replace(/"/g, '')}"]`;
@@ -78,7 +69,14 @@ async function map(page, max = 120) {
   } catch {}
   return text;
 }
-async function ensureUrl(page, a) { if (a && a.url) await page.goto(a.url); }
+async function ensureUrl(page, a) {
+  if (a && a.url) {
+    await page.goto(a.url);
+    // Consent killer (#8): clear cookie/consent walls right after navigation, once,
+    // so the perception map isn't polluted (and the real content isn't blocked).
+    if (a.consent !== false) { try { await dismissConsent(page); } catch {} }
+  }
+}
 // ensures elements have data-lpilot-id (needed by index-based actions)
 async function ensureIds(page) { await perception.snapshot(page, { maxEls: 200 }); }
 
@@ -97,7 +95,7 @@ const TOOLS = [
     name: 'navigate', group: 'navigation', primary: 'url',
     description: 'Navigate to a URL and return the INDEXED MAP of the page (interactive elements + readable text). Token-cheap: use instead of downloading HTML.',
     input: { properties: { url: { type: 'string', description: 'Target URL' } }, required: ['url'] },
-    run: async (a, ctx) => { await ctx.page.goto(a.url); return { text: await map(ctx.page) }; },
+    run: async (a, ctx) => { await ctx.page.goto(a.url); if (a.consent !== false) { try { await dismissConsent(ctx.page); } catch {} } return { text: await map(ctx.page) }; },
   },
   {
     name: 'back', group: 'navigation',
@@ -410,11 +408,20 @@ const TOOLS = [
   // ── autonomy ──
   {
     name: 'run', group: 'autonomy', primary: 'goal',
-    description: 'Execute a multi-step OBJECTIVE autonomously (agent observes→acts in a loop). For whole tasks.',
-    input: { properties: { url: { type: 'string' }, goal: { type: 'string' }, maxSteps: { type: 'number' } }, required: ['goal'] },
+    description: 'Execute a multi-step OBJECTIVE autonomously (agent observes→acts in a loop). For whole tasks. Every run is saved by the flight recorder (see the `runs` tool); shots:true also captures a screenshot per step for the HTML report.',
+    input: { properties: { url: { type: 'string' }, goal: { type: 'string' }, maxSteps: { type: 'number' }, shots: { type: 'boolean', description: 'save a screenshot per step in the flight report' } }, required: ['goal'] },
     run: async (a, ctx) => {
-      const r = await agent.run(ctx.page, a.goal, { maxSteps: a.maxSteps || 12, model: ctx.model, startUrl: a.url });
-      return { text: typeof r === 'string' ? r : (r && (r.result || r.summary)) || JSON.stringify(r) };
+      const rec = flight.record({ goal: a.goal, url: a.url, model: ctx.model });
+      const onStep = async (s) => {
+        rec.step(s);
+        if (a.shots && ctx.page && s.action !== 'done') {
+          try { rec.shot(s.step, await actions.screenshot(ctx.page, { format: 'jpeg', quality: 55 })); } catch {}
+        }
+      };
+      const r = await agent.run(ctx.page, a.goal, { maxSteps: a.maxSteps || 12, model: ctx.model, startUrl: a.url, onStep });
+      const rep = rec.done(r);
+      const text = typeof r === 'string' ? r : (r && (r.result || r.summary)) || JSON.stringify(r);
+      return { text: `${text}\n\n📼 flight: ${rep.id} · report: ${rep.report}` };
     },
   },
 
@@ -455,25 +462,9 @@ const TOOLS = [
     run: async (a, ctx) => {
       await ctx.page.goto(a.url);
       await sleep(600);
+      try { await dismissConsent(ctx.page); } catch {}
       const snap = await perception.snapshot(ctx.page, { maxEls: 0, maxChars: 60000 });
-      const text = String(snap.text || '');
-      const prev = watchLoad(a.url, a.tag);
-      watchSave(a.url, a.tag, text);
-
-      const out = { url: a.url, title: snap.title, changeStatus: 'new', previousScrapeAt: null };
-      if (a.tag) out.tag = a.tag;
-      if (prev) {
-        out.previousScrapeAt = prev.ts;
-        if (prev.text === text) out.changeStatus = 'same';
-        else {
-          out.changeStatus = 'changed';
-          const d = lineDiff(prev.text, text, { maxOut: 100 });
-          out.added = d.added; out.removed = d.removed;
-          if (a.diff !== false) out.diff = d.text;
-        }
-      } else {
-        out.textPreview = text.slice(0, 400);
-      }
+      const out = checkChange(a.url, a.tag, String(snap.text || ''), { title: snap.title, diff: a.diff !== false });
       if (a.webhook && out.changeStatus === 'changed') {
         try {
           const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
@@ -483,6 +474,39 @@ const TOOLS = [
         } catch { out.webhookDelivered = false; }
       }
       return { json: out };
+    },
+  },
+  {
+    name: 'monitor', group: 'session', pageless: true, primary: 'action',
+    description: 'SCHEDULED change monitors with alerts (action: add|list|remove|check). add a URL with `every` (30m/2h/1d) and `notify` (telegram/webhook/desktop); a background daemon (`logica-pilot monitor-daemon`) checks due ones and alerts only when they actually change.',
+    input: {
+      properties: {
+        action: { type: 'string', enum: ['add', 'list', 'remove', 'check'] },
+        url: { type: 'string' }, id: { type: 'string' }, tag: { type: 'string' },
+        every: { type: 'string', description: 'cadence: 30m, 2h, 1d (default 30m)' },
+        label: { type: 'string' },
+        notify: { type: 'object', description: '{desktop:true} | {webhook:"https://…"} | {telegram:{token,chatId}} (or true for env TELEGRAM_BOT_TOKEN/CHAT_ID)' },
+      }, required: ['action'],
+    },
+    run: async (a) => {
+      if (a.action === 'add') return { json: monitor.add({ url: a.url, tag: a.tag, every: a.every, notify: a.notify, label: a.label }) };
+      if (a.action === 'list') return { json: monitor.list() };
+      if (a.action === 'remove') return { json: monitor.remove(a.id) };
+      if (a.action === 'check') {
+        const mon = a.id ? monitor.get(a.id) : { id: 'adhoc', url: a.url, tag: a.tag, notify: {} };
+        if (!mon || !mon.url) return { json: { error: 'pass id (existing monitor) or url' } };
+        return { json: await monitor.checkOne(mon, { force: true }) };
+      }
+      return { json: { error: 'unknown action' } };
+    },
+  },
+  {
+    name: 'runs', group: 'session', pageless: true, primary: 'action',
+    description: 'FLIGHT RECORDER: browse past autonomous runs (action: list|show). Every `run` is saved with its steps, token usage and screenshots as a self-contained HTML report. show returns the report path to open.',
+    input: { properties: { action: { type: 'string', enum: ['list', 'show'] }, id: { type: 'string' } } },
+    run: async (a) => {
+      if (a.action === 'show') { const r = flight.load(a.id); if (!r) return { json: { error: 'run not found' } }; return { json: { id: r.id, goal: r.goal, steps: r.steps.length, result: r.result, report: flight.reportPath(a.id) } }; }
+      return { json: flight.list() };
     },
   },
 
@@ -564,6 +588,26 @@ const TOOLS = [
     },
   },
   {
+    name: 'dataset', group: 'site', pageless: true, primary: 'action',
+    description: 'LIVING DATASETS (action: put|get|list|history|export). Turn scrape/gather output into a named local table: append with dedupe by `key`, track added/changed per run, export CSV/JSON. Combine with monitor for a free price/stock time series.',
+    input: {
+      properties: {
+        action: { type: 'string', enum: ['put', 'get', 'list', 'history', 'export'] },
+        name: { type: 'string' }, rows: { type: 'array', items: { type: 'object' } },
+        key: { type: 'string', description: 'dedupe column (e.g. "url" or "sku")' },
+        format: { type: 'string', enum: ['json', 'csv'] }, limit: { type: 'number' },
+      }, required: ['action'],
+    },
+    run: async (a) => {
+      if (a.action === 'put') return { json: dataset.put(a.name, a.rows || [], { key: a.key }) };
+      if (a.action === 'get') return { json: dataset.get(a.name, { limit: a.limit }) || { error: 'dataset not found' } };
+      if (a.action === 'list') return { json: dataset.list() };
+      if (a.action === 'history') return { json: dataset.history(a.name) || { error: 'dataset not found' } };
+      if (a.action === 'export') { const out = dataset.exportData(a.name, { format: a.format }); return out == null ? { json: { error: 'dataset not found' } } : { text: out }; }
+      return { json: { error: 'unknown action' } };
+    },
+  },
+  {
     name: 'llmstxt', group: 'site', pageless: true, primary: 'url',
     description: 'GENERATE an llms.txt for a site: discovers key pages (map), reads them in parallel, and writes the standard llms.txt (site summary + curated links with one-line descriptions).',
     input: { properties: { url: { type: 'string' }, limit: { type: 'number', description: 'pages to read (default 10)' } }, required: ['url'] },
@@ -642,6 +686,8 @@ const TOOLS = [
         query: { type: 'string', description: 'web search query (default: the instruction)' },
         limit: { type: 'number', description: 'sources when searching (default 4)' },
         proxy: { type: 'string' }, location: { type: 'object' },
+        dataset: { type: 'string', description: 'append the gathered rows to this named dataset (dedupe + history)' },
+        datasetKey: { type: 'string', description: 'dedupe column for the dataset (e.g. "url")' },
       }, required: ['instruction'],
     },
     run: async (a, ctx) => {
@@ -663,7 +709,13 @@ const TOOLS = [
       });
       const raw = llm.textOf(resp).replace(/```json/gi, '').replace(/```/g, '').trim();
       let data; try { data = JSON.parse(raw); } catch { data = { _raw: raw }; }
-      return { json: { data, sources: r.results.map((x) => ({ url: x.url, ok: !!x.ok })) } };
+      const out = { data, sources: r.results.map((x) => ({ url: x.url, ok: !!x.ok })) };
+      // Optionally persist to a living dataset: use the first array field of the result.
+      if (a.dataset) {
+        const rows = Array.isArray(data) ? data : (Object.values(data || {}).find((v) => Array.isArray(v)) || []);
+        if (rows.length) out.dataset = dataset.put(a.dataset, rows, { key: a.datasetKey });
+      }
+      return { json: out };
     },
   },
   {

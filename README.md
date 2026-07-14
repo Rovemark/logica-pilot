@@ -9,7 +9,7 @@
 A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic
 intent — not pixel coordinates — then **clicks, types, scrolls and reads** on its own until the
 goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
-browser · **CLI and MCP** with the same 36 tools.
+browser · **CLI and MCP** with the same 39 tools.
 
 <p align="center">
   <img src="docs/media/pilot-run.gif" alt="The Pilot autonomously scrolls, extracts and answers a goal on a live page" width="100%">
@@ -294,7 +294,7 @@ await pilot.close();
 
 ## MCP Server (Claude Desktop, Cursor, Cline, etc.)
 
-Logica Pilot exposes **36 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
+Logica Pilot exposes **39 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
 
 ### Configuration
 
@@ -316,7 +316,7 @@ Then set your AI credentials (one time):
 - Export `ANTHROPIC_API_KEY=sk-ant-…`, *or*
 - Run a local LogicaProxy (`:8317`)
 
-### The 36 Tools (Grouped by Function)
+### The 39 Tools (Grouped by Function)
 
 #### Navigation (5 tools)
 | Tool | Purpose |
@@ -355,18 +355,21 @@ Then set your AI credentials (one time):
 |------|---------|
 | **run** | Execute a multi-step objective autonomously (observe→decide→act loop) |
 
-#### Session, Memory & Monitoring (3 tools)
+#### Session, Memory & Monitoring (5 tools)
 | Tool | Purpose |
 |------|---------|
 | **session** | Manage login sessions (cookies): `save` / `load` / `list` — log in once, reuse forever |
 | **memory** | Show what Logica Pilot has **learned** per site (the flywheel): visits, hot elements, recipes |
 | **watch** | **Change tracking**: `changeStatus` new/same/changed vs the last snapshot (persisted across sessions), git-style diff of what changed, `tag` for separate histories, `webhook` on change |
+| **monitor** | **Scheduled monitors + alerts**: `add` a URL with a cadence + `notify` (telegram/webhook/desktop); a background daemon checks due ones and alerts only on real changes |
+| **runs** | **Flight recorder**: browse past autonomous runs — each `run` is saved with steps, token usage and screenshots as a self-contained HTML report |
 
-#### Site (4 tools)
+#### Site (5 tools)
 | Tool | Purpose |
 |------|---------|
 | **map** | **Discover a site's URLs instantly** — robots.txt sitemaps + sitemap.xml (recursive), on-page links fallback; `search` filter |
 | **crawl** | **Crawl a whole site/section** breadth-first in parallel: `includePaths`/`excludePaths` regex, `maxDepth`, page limit, robots.txt politeness — compact `{url,title,text}` per page |
+| **dataset** | **Living datasets**: scrape/gather output → named local table with dedupe, per-run diff and CSV/JSON export (a free price/stock time series with `monitor`) |
 | **batch** | **Async jobs**: start a fanout/crawl in the background (detached, survives the call), then `status`/`get` the results later |
 | **llmstxt** | **Generate an llms.txt** for any site: map → read key pages in parallel → standard llms.txt with curated links |
 
@@ -584,7 +587,7 @@ src/
   llm.js                Brain (Messages API via LogicaProxy or Anthropic)
   agent.js              Autonomous loop (perceive → decide → act)
   electron-page.js      Adapter: webContents.debugger → page contract
-  mcp-server.js         MCP server (stdio, 36 tools)
+  mcp-server.js         MCP server (stdio, 39 tools)
   tools.js              SINGLE REGISTRY (CLI + MCP share this)
   fanout.js             Parallel multi-agent orchestration
   search.js             Web search (Bing default, Brave if key set)
