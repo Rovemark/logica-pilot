@@ -9,7 +9,7 @@
 A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic
 intent — not pixel coordinates — then **clicks, types, scrolls and reads** on its own until the
 goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
-browser · **CLI and MCP** with the same 29 tools.
+browser · **CLI and MCP** with the same 34 tools.
 
 <p align="center">
   <img src="docs/media/pilot-run.gif" alt="The Pilot autonomously scrolls, extracts and answers a goal on a live page" width="100%">
@@ -294,7 +294,7 @@ await pilot.close();
 
 ## MCP Server (Claude Desktop, Cursor, Cline, etc.)
 
-Logica Pilot exposes **29 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
+Logica Pilot exposes **34 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
 
 ### Configuration
 
@@ -316,7 +316,7 @@ Then set your AI credentials (one time):
 - Export `ANTHROPIC_API_KEY=sk-ant-…`, *or*
 - Run a local LogicaProxy (`:8317`)
 
-### The 29 Tools (Grouped by Function)
+### The 34 Tools (Grouped by Function)
 
 #### Navigation (5 tools)
 | Tool | Purpose |
@@ -327,12 +327,15 @@ Then set your AI credentials (one time):
 | **reload** | Reload the page and return the map |
 | **wait** | Wait for text/selector/condition (semantic, no brittle sleeps) |
 
-#### Perception (5 tools)
+#### Perception (8 tools)
 | Tool | Purpose |
 |------|---------|
 | **observe** | Get the indexed map of the current page (semantic elements + readable text) |
-| **read** | Readable page content — `markdown:true` for **LLM-ready Markdown** (headings/links/tables); paginate with `maxChars`/`offset`; optional AI summary |
+| **read** | Readable page content — `markdown:true` for **LLM-ready Markdown** (headings/links/tables); paginate with `maxChars`/`offset`; `maxAge` local cache; optional AI summary |
 | **extract** | Extract structured data (JSON schema or natural language instruction) |
+| **meta** | Page metadata, **deterministic** (no AI): title/description/canonical/favicon, OpenGraph/Twitter, JSON-LD types |
+| **images** | All meaningful images (url + alt + size), og:image first, icons skipped — deterministic |
+| **product** | **Deterministic product data** from the page's own JSON-LD/microdata/og:price: name, brand, price, availability, rating — fails closed, never guesses |
 | **links** | Return all links (text + url), deduped, compact |
 | **screenshot** | Capture page; `marks:true` draws indices as visual fallback |
 
@@ -358,18 +361,20 @@ Then set your AI credentials (one time):
 | **memory** | Show what Logica Pilot has **learned** per site (the flywheel): visits, hot elements, recipes |
 | **watch** | **Change tracking**: `changeStatus` new/same/changed vs the last snapshot (persisted across sessions), git-style diff of what changed, `tag` for separate histories, `webhook` on change |
 
-#### Site (3 tools)
+#### Site (4 tools)
 | Tool | Purpose |
 |------|---------|
 | **map** | **Discover a site's URLs instantly** — robots.txt sitemaps + sitemap.xml (recursive), on-page links fallback; `search` filter |
 | **crawl** | **Crawl a whole site/section** breadth-first in parallel: `includePaths`/`excludePaths` regex, `maxDepth`, page limit, robots.txt politeness — compact `{url,title,text}` per page |
+| **batch** | **Async jobs**: start a fanout/crawl in the background (detached, survives the call), then `status`/`get` the results later |
 | **llmstxt** | **Generate an llms.txt** for any site: map → read key pages in parallel → standard llms.txt with curated links |
 
-#### Multi-Agent Recipes (6 tools)
+#### Multi-Agent Recipes (7 tools)
 | Tool | Purpose |
 |------|---------|
 | **fanout** | Run the same task on N URLs in **parallel** (separate headless pages) + optional synthesis |
 | **search** | Search the web; `content:true` also **reads the top results in parallel** and attaches their text. Bing default; Brave if `BRAVE_SEARCH_API_KEY` |
+| **ask** | Ask a question: with `url`, answers **grounded in that page** (quotes the passage); without, searches + reads sources + answers with citations `[n]` |
 | **research** | Deep Research: search + read sources in parallel + synthesize with citations `[n]` |
 | **compare** | Compare: extract from N URLs in parallel + synthesize comparison table + recommendation |
 | **deal** | Best Deal: search stores → extract price/shipping in parallel → rank by total cost |
@@ -551,7 +556,7 @@ src/
   llm.js                Brain (Messages API via LogicaProxy or Anthropic)
   agent.js              Autonomous loop (perceive → decide → act)
   electron-page.js      Adapter: webContents.debugger → page contract
-  mcp-server.js         MCP server (stdio, 29 tools)
+  mcp-server.js         MCP server (stdio, 34 tools)
   tools.js              SINGLE REGISTRY (CLI + MCP share this)
   fanout.js             Parallel multi-agent orchestration
   search.js             Web search (Bing default, Brave if key set)

@@ -31,6 +31,22 @@ const session = require('./session-store');
 const crawler = require('./crawl');
 const { lineDiff } = require('./diff');
 const crypto = require('crypto');
+const pageData = require('./page-data');
+const jobs = require('./jobs');
+
+// ── local page cache (opt-in via read's maxAge) ─────────────────────────────
+const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
+function cacheKey(parts) { return crypto.createHash('sha1').update(parts.join('|')).digest('hex'); }
+function cacheLoad(key, maxAgeMs) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(CACHE_DIR, key + '.json'), 'utf8'));
+    if (Date.now() - j.ts <= maxAgeMs) return j;
+  } catch {}
+  return null;
+}
+function cacheSave(key, data) {
+  try { fs.mkdirSync(CACHE_DIR, { recursive: true }); fs.writeFileSync(path.join(CACHE_DIR, key + '.json'), JSON.stringify({ ts: Date.now(), ...data })); } catch {}
+}
 
 // ── change-tracking store (persistent snapshots per url+tag) ────────────────
 const WATCH_DIR = path.join(os.homedir(), '.logica-pilot', 'watch');
@@ -134,12 +150,21 @@ const TOOLS = [
         markdown: { type: 'boolean', description: 'return Markdown instead of plain text' },
         maxChars: { type: 'number', description: 'chars per page (default 6000, max 20000)' },
         offset: { type: 'number', description: 'start position for pagination' },
+        maxAge: { type: 'number', description: 'ms: reuse a cached read this fresh (0 = always live)' },
       },
     },
     run: async (a, ctx) => {
-      await ensureUrl(ctx.page, a);
       const maxChars = Math.max(200, Math.min(Number(a.maxChars) || 6000, 20000));
       const offset = Math.max(0, Number(a.offset) || 0);
+      // Opt-in cache (Firecrawl-style maxAge): serve a fresh-enough previous read
+      // of the same url+format+window without reloading the page. 0 = always live.
+      const maxAge = Math.max(0, Number(a.maxAge) || 0);
+      const ck = a.url ? cacheKey(['read', a.url, a.markdown ? 'md' : 'txt', String(offset), String(maxChars)]) : null;
+      if (ck && maxAge > 0 && !a.summarize) {
+        const hit = cacheLoad(ck, maxAge);
+        if (hit) return { text: hit.text };
+      }
+      await ensureUrl(ctx.page, a);
       let text; let total;
       if (a.markdown) {
         const md = await perception.markdown(ctx.page, { maxChars: Math.min(offset + maxChars + 1, 60000) });
@@ -158,6 +183,7 @@ const TOOLS = [
       if (offset + text.length < total) {
         text += `\n\n[showing ${offset}–${offset + text.length} of ${total} chars — pass offset=${offset + text.length} for more]`;
       }
+      if (ck) cacheSave(ck, { text });
       return { text };
     },
   },
@@ -172,6 +198,30 @@ const TOOLS = [
         return { json: await extractStructured({ text: perception.format(snap), instruction: a.instruction, schema: a.schema, model: ctx.model }) };
       }
       return { text: await actions.extract(ctx.page, a.query || '') };
+    },
+  },
+  {
+    name: 'meta', group: 'perception', primary: 'url',
+    description: "Page METADATA, deterministic (no AI, no tokens): title, description, canonical, favicon, OpenGraph/Twitter tags, JSON-LD types. Instant identity card of any URL.",
+    input: { properties: { url: { type: 'string' } } },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await pageData.meta(ctx.page) }; },
+  },
+  {
+    name: 'images', group: 'perception', primary: 'url',
+    description: 'All meaningful IMAGES on the page (url + alt + size), og:image first, icons/trackers skipped. Deterministic, compact.',
+    input: { properties: { url: { type: 'string' }, max: { type: 'number', description: 'default 40' } } },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await pageData.images(ctx.page, { max: a.max }) }; },
+  },
+  {
+    name: 'product', group: 'perception', primary: 'url',
+    description: 'DETERMINISTIC product data from what the page itself declares (JSON-LD Product → microdata → og:price): name, brand, price, currency, availability, rating. Fails closed ({found:false}) instead of guessing — use `extract` for AI extraction.',
+    input: { properties: { url: { type: 'string' } } },
+    run: async (a, ctx) => {
+      await ensureUrl(ctx.page, a);
+      // SPAs inject JSON-LD after load — retry briefly before failing closed.
+      let out = await pageData.product(ctx.page);
+      for (let i = 0; i < 3 && !out.found; i++) { await sleep(1000); out = await pageData.product(ctx.page); }
+      return { json: out };
     },
   },
   {
@@ -420,6 +470,42 @@ const TOOLS = [
     },
   },
   {
+    name: 'batch', group: 'site', pageless: true, primary: 'action',
+    description: "ASYNC jobs: start a fanout/crawl in the background and check it later (action: start|status|get|list). start returns a jobId immediately; the job runs detached and survives this call. status → progress; get → the results when done.",
+    input: {
+      properties: {
+        action: { type: 'string', enum: ['start', 'status', 'get', 'list'] },
+        kind: { type: 'string', enum: ['fanout', 'crawl'], description: 'for start' },
+        id: { type: 'string', description: 'jobId, for status/get' },
+        // start passthrough (fanout: urls/task/mode/schema/synthesize — crawl: url/limit/maxDepth/includePaths/excludePaths/textChars)
+        urls: { type: 'array', items: { type: 'string' } }, task: { type: 'string' },
+        mode: { type: 'string', enum: ['extract', 'read', 'run'] }, schema: { type: 'object' }, synthesize: { type: 'string' },
+        url: { type: 'string' }, limit: { type: 'number' }, maxDepth: { type: 'number' },
+        includePaths: { type: 'array', items: { type: 'string' } }, excludePaths: { type: 'array', items: { type: 'string' } },
+        textChars: { type: 'number' },
+      }, required: ['action'],
+    },
+    run: async (a) => {
+      if (a.action === 'start') {
+        const kind = a.kind || (a.urls ? 'fanout' : 'crawl');
+        const params = kind === 'fanout'
+          ? { urls: a.urls, task: a.task, mode: a.mode, schema: a.schema, synthesize: a.synthesize }
+          : { url: a.url, limit: a.limit, maxDepth: a.maxDepth, includePaths: a.includePaths, excludePaths: a.excludePaths, textChars: a.textChars };
+        const id = jobs.start(kind, params);
+        return { json: { jobId: id, kind, status: 'queued', hint: `check with batch action=status id=${id}` } };
+      }
+      if (a.action === 'list') return { json: jobs.list() };
+      const job = a.id && jobs.readJob(a.id);
+      if (!job) return { json: { error: 'job not found', id: a.id || null } };
+      if (a.action === 'status') {
+        return { json: { id: job.id, kind: job.kind, status: job.status, progress: job.progress, startedAt: job.startedAt, finishedAt: job.finishedAt || null, error: job.error || undefined } };
+      }
+      // get
+      if (job.status !== 'done') return { json: { id: job.id, status: job.status, progress: job.progress, error: job.error || undefined } };
+      return { json: { id: job.id, kind: job.kind, result: job.result } };
+    },
+  },
+  {
     name: 'llmstxt', group: 'site', pageless: true, primary: 'url',
     description: 'GENERATE an llms.txt for a site: discovers key pages (map), reads them in parallel, and writes the standard llms.txt (site summary + curated links with one-line descriptions).',
     input: { properties: { url: { type: 'string' }, limit: { type: 'number', description: 'pages to read (default 10)' } }, required: ['url'] },
@@ -485,6 +571,40 @@ const TOOLS = [
           return rec && rec.ok ? { ...x, text: String(rec.text || '').slice(0, 1200) } : x;
         }),
       };
+    },
+  },
+  {
+    name: 'ask', group: 'multi-agent', pageless: true, primary: 'question',
+    description: 'ASK a question. With `url`: answers grounded ONLY in that page (quotes the passage). Without `url`: searches the web, reads the top results in parallel and answers with citations [n]. Tighter than research — one direct answer.',
+    input: { properties: { question: { type: 'string' }, url: { type: 'string' }, limit: { type: 'number', description: 'web mode: sources to read (default 4)' } }, required: ['question'] },
+    run: async (a, ctx) => {
+      if (a.url) {
+        const { Browser } = require('./browser');
+        const browser = await Browser.launch({ headless: true });
+        try {
+          const page = await browser.newPage();
+          await page.goto(a.url, { timeout: 25000 }).catch(() => {});
+          await sleep(600);
+          const md = await perception.markdown(page, { maxChars: 12000 });
+          const resp = await llm.callClaude({
+            system: 'Answer the question using ONLY the page content provided. Quote the relevant passage. If the answer is not on the page, say so plainly.',
+            messages: [{ role: 'user', content: `PAGE (${a.url}):\n${md}\n\nQUESTION: ${a.question}` }],
+            maxTokens: 700, model: ctx.model,
+          });
+          return { text: llm.textOf(resp) || '(no answer)' };
+        } finally { try { await browser.close(); } catch {} }
+      }
+      const results = await search(a.question, { limit: Math.max(2, Math.min(Number(a.limit) || 4, 8)) });
+      if (!results.length) return { text: '(no search results)' };
+      const r = await fanout({ urls: results.map((x) => x.url), mode: 'read', concurrency: 4, onEvent: ctx.onEvent });
+      const compact = r.results.filter((x) => x && x.ok)
+        .map((x, i) => `[${i}] ${x.url}\n${String(x.text || '').slice(0, 1500)}`).join('\n\n');
+      const resp = await llm.callClaude({
+        system: 'Answer the question directly and concisely from the sources, citing [n]. If sources disagree, say so.',
+        messages: [{ role: 'user', content: `SOURCES:\n${compact}\n\nQUESTION: ${a.question}` }],
+        maxTokens: 800, model: ctx.model,
+      });
+      return { text: llm.textOf(resp) || '(no answer)' };
     },
   },
   {
