@@ -42,6 +42,19 @@ const adapters = require('./adapters');
 const workflow = require('./workflow');
 const knowledge = require('./knowledge');
 const handoffLib = require('./handoff');
+const stealth = require('./stealth');
+const deviceEmulation = require('./device-emulation');
+const network = require('./network');
+const assertions = require('./assertions');
+const devtools = require('./devtools');
+const feedbackLib = require('./feedback');
+const hygiene = require('./hygiene');
+const primitives = require('./primitives');
+const tabs = require('./tabs');
+const captchaLib = require('./captcha');
+const video = require('./video');
+const proxyPool = require('./proxy-pool');
+const persist = require('./persist');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -900,6 +913,242 @@ const TOOLS = [
     description: '🧠 Fact-Check: search independent sources about the claim and give a verdict with citations.',
     input: { properties: { claim: { type: 'string' }, limit: { type: 'number' } }, required: ['claim'] },
     run: async (a, ctx) => { const r = await recipes.factcheck(a.claim, { limit: a.limit, model: ctx.model, onEvent: ctx.onEvent }); return { text: r.synthesis || JSON.stringify(r.results, null, 2) }; },
+  },
+
+  // ── browser control (stealth, device, geo, tabs, hygiene) ──
+  {
+    name: 'stealth', group: 'browser', primary: 'mode',
+    description: 'Anti-fingerprint stealth for the session (mode: regular|stealth|undetected). Patches navigator.webdriver, chrome.runtime, permissions, and (undetected) plugins/WebGL/languages. OPT-IN. NOTE: for CAPTCHAs prefer the `handoff` tool over bypass.',
+    input: { properties: { mode: { type: 'string', enum: ['regular', 'stealth', 'undetected'] } } },
+    run: async (a, ctx) => { const r = await stealth.applyStealthPatches(ctx.page, a.mode || 'stealth'); return { json: { applied: (a.mode || 'stealth') !== 'regular', mode: a.mode || 'stealth', patches: r || undefined } }; },
+  },
+  {
+    name: 'device', group: 'browser', primary: 'device',
+    description: 'Emulate a mobile device (iphone|ipad|android|reset) or a custom {width,height,mobile,userAgent}. action:list returns available profiles.',
+    input: { properties: { device: { type: 'string' }, url: { type: 'string' }, list: { type: 'boolean' } } },
+    run: async (a, ctx) => {
+      if (a.list) return { json: deviceEmulation.listDevices() };
+      await ensureUrl(ctx.page, a);
+      const r = await deviceEmulation.emulateDevice(ctx.page, a.device || 'reset');
+      return { json: r || { device: a.device } };
+    },
+  },
+  {
+    name: 'geo', group: 'browser',
+    description: 'Override GPS geolocation. Pass lat+lon (and optional accuracy), or clear:true to remove the override.',
+    input: { properties: { url: { type: 'string' }, lat: { type: 'number' }, lon: { type: 'number' }, accuracy: { type: 'number' }, clear: { type: 'boolean' } } },
+    run: async (a, ctx) => {
+      await ensureUrl(ctx.page, a);
+      if (a.clear) { await deviceEmulation.clearGeolocation(ctx.page); return { json: { cleared: true } }; }
+      if (a.lat == null || a.lon == null) return { json: { error: 'pass lat and lon (or clear:true)' } };
+      await deviceEmulation.setGeolocation(ctx.page, a.lat, a.lon, a.accuracy);
+      return { json: { lat: a.lat, lon: a.lon, accuracy: a.accuracy || 10 } };
+    },
+  },
+  {
+    name: 'tabs', group: 'browser', primary: 'action',
+    description: 'Multi-tab & iframe management (action: list|new|switch|close|frames). Drive multiple tabs in the same browser.',
+    input: { properties: { action: { type: 'string', enum: ['list', 'new', 'switch', 'close', 'frames'] }, url: { type: 'string' }, targetId: { type: 'string' } } },
+    run: async (a, ctx) => {
+      const conn = ctx.page && ctx.page._c;
+      const browser = ctx.pilot && ctx.pilot.browser;
+      if (a.action === 'frames') return { json: await tabs.listFrames(ctx.page) };
+      if (a.action === 'list') return { json: await tabs.listTabs(conn) };
+      if (a.action === 'new') { const p = await tabs.newTab(browser, a.url); return { json: { targetId: p && p.targetId, url: a.url || 'about:blank' } }; }
+      if (a.action === 'switch') { await tabs.switchTab(conn, a.targetId); return { json: { switched: a.targetId } }; }
+      if (a.action === 'close') { await tabs.closeTab(conn, a.targetId); return { json: { closed: a.targetId } }; }
+      return { json: { error: 'unknown action' } };
+    },
+  },
+  {
+    name: 'wipe', group: 'browser',
+    description: 'Per-task state hygiene: clear cookies/storage/cache (optionally only entries older than N days).',
+    input: { properties: { url: { type: 'string' }, cookies: { type: 'boolean' }, storage: { type: 'boolean' }, cache: { type: 'boolean' }, olderThanDays: { type: 'number' } } },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await hygiene.wipe(ctx.page, { cookies: a.cookies !== false, storage: a.storage !== false, cache: !!a.cache, olderThanDays: a.olderThanDays }) }; },
+  },
+  {
+    name: 'health', group: 'browser', pageless: false,
+    description: 'Browser health: alive, port, tab count, active browser, and any recent crashes.',
+    input: { properties: {} },
+    run: async (a, ctx) => { return { json: await hygiene.health(ctx.page, ctx.page && ctx.page._c) }; },
+  },
+  {
+    name: 'html', group: 'browser', primary: 'url',
+    description: 'Return the raw HTML of the page (or a selector). Prefer `read`/`observe` (token-first) unless you truly need raw markup.',
+    input: { properties: { url: { type: 'string' }, selector: { type: 'string' }, outer: { type: 'boolean' } } },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); const r = await hygiene.rawHtml(ctx.page, { selector: a.selector, outer: a.outer !== false }); return { text: (r && typeof r === 'object' && 'html' in r) ? r.html : r }; },
+  },
+  {
+    name: 'fast', group: 'browser',
+    description: 'Toggle fast mode: reduce per-command auto-wait for speed (on:true|false).',
+    input: { properties: { on: { type: 'boolean' } } },
+    run: async (a, ctx) => { await hygiene.setFastMode(ctx.page, a.on !== false); return { json: { fast: a.on !== false } }; },
+  },
+
+  // ── network control (block, throttle, intercept) ──
+  {
+    name: 'block', group: 'network',
+    description: 'Block requests by preset (images|fonts|media|ads) or URL patterns — faster, leaner scraping. off:true disables.',
+    input: { properties: { url: { type: 'string' }, what: { type: 'array', items: { type: 'string' } }, off: { type: 'boolean' } } },
+    run: async (a, ctx) => {
+      if (a.off) { await network.unblockResources(ctx.page); return { json: { blocking: false } }; }
+      await network.blockResources(ctx.page, a.what || ['images', 'fonts', 'ads']);
+      await ensureUrl(ctx.page, a);
+      return { json: { blocking: a.what || ['images', 'fonts', 'ads'] } };
+    },
+  },
+  {
+    name: 'throttle', group: 'network', primary: 'profile',
+    description: 'Simulate network conditions (slow3g|fast3g|offline) or off to restore.',
+    input: { properties: { url: { type: 'string' }, profile: { type: 'string' } } },
+    run: async (a, ctx) => {
+      if (!a.profile || a.profile === 'off') { await network.unthrottle(ctx.page); return { json: { throttle: 'off' } }; }
+      await network.throttle(ctx.page, a.profile);
+      await ensureUrl(ctx.page, a);
+      return { json: { throttle: a.profile } };
+    },
+  },
+  {
+    name: 'intercept', group: 'network', primary: 'action',
+    description: 'Request interception (action: mock|headers|clear). mock: fulfill matching requests with a canned response; headers: inject extra HTTP headers on all requests.',
+    input: { properties: { action: { type: 'string', enum: ['mock', 'headers', 'clear'] }, pattern: { type: 'string' }, response: { type: 'object' }, headers: { type: 'object' } } },
+    run: async (a, ctx) => {
+      if (a.action === 'clear') { await network.clearMocks(ctx.page); return { json: { cleared: true } }; }
+      if (a.action === 'headers') { await network.setExtraHeaders(ctx.page, a.headers || {}); return { json: { headers: Object.keys(a.headers || {}) } }; }
+      if (a.action === 'mock') { await network.mockResponse(ctx.page, a.pattern, a.response || {}); return { json: { mocking: a.pattern } }; }
+      return { json: { error: 'unknown action' } };
+    },
+  },
+
+  // ── devtools inspection + testing ──
+  {
+    name: 'inspect', group: 'devtools', primary: 'kind',
+    description: 'DevTools inspection (kind: console|network|perf|eval). console/network capture for `duration` ms; perf returns metrics; eval runs JS with a stack trace on error.',
+    input: { properties: { kind: { type: 'string', enum: ['console', 'network', 'perf', 'eval'] }, url: { type: 'string' }, duration: { type: 'number' }, filter: { type: 'string' }, expression: { type: 'string' } } },
+    run: async (a, ctx) => {
+      await ensureUrl(ctx.page, a);
+      if (a.kind === 'console') return { json: await devtools.captureConsole(ctx.page, { duration: a.duration }) };
+      if (a.kind === 'network') return { json: await devtools.captureNetwork(ctx.page, { duration: a.duration, filter: a.filter }) };
+      if (a.kind === 'perf') return { json: await devtools.getPerformanceMetrics(ctx.page) };
+      if (a.kind === 'eval') return { json: await devtools.debugEval(ctx.page, a.expression) };
+      return { json: { error: 'kind must be console|network|perf|eval' } };
+    },
+  },
+  {
+    name: 'assert', group: 'testing', primary: 'type',
+    description: 'Test assertions (title/url is|contains, text_visible, element_exists/count/text/value/visible, has_cookie, screenshot_match). Pass one {type,expected,selector?} or an `assertions` array.',
+    input: { properties: { url: { type: 'string' }, type: { type: 'string' }, expected: {}, selector: { type: 'string' }, index: { type: 'number' }, name: { type: 'string' }, assertions: { type: 'array', items: { type: 'object' } } } },
+    run: async (a, ctx) => {
+      await ensureUrl(ctx.page, a);
+      if (Array.isArray(a.assertions) && a.assertions.length) return { json: await assertions.runAssertions(ctx.page, a.assertions) };
+      return { json: await assertions.runAssertion(ctx.page, { type: a.type, expected: a.expected, selector: a.selector, index: a.index, name: a.name }) };
+    },
+  },
+
+  // ── extra action primitives (upload, dialog, storage, permission, drag, batch-eval) ──
+  {
+    name: 'upload', group: 'actions',
+    description: 'Upload file(s) to an <input type="file"> by index or CSS selector.',
+    input: { properties: { url: { type: 'string' }, target: {}, files: { type: 'array', items: { type: 'string' } } }, required: ['target', 'files'] },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await primitives.uploadFile(ctx.page, a.target, a.files) }; },
+  },
+  {
+    name: 'dialog', group: 'actions',
+    description: 'Auto-handle native dialogs (alert/confirm/prompt/beforeunload): accept:true|false, optional promptText. Set before the action that triggers it.',
+    input: { properties: { accept: { type: 'boolean' }, promptText: { type: 'string' } } },
+    run: async (a, ctx) => { await primitives.setupDialogHandler(ctx.page, { accept: a.accept !== false, promptText: a.promptText }); return { json: { autoHandle: a.accept !== false } }; },
+  },
+  {
+    name: 'drag', group: 'actions',
+    description: 'Drag and drop from one element index to another.',
+    input: { properties: { url: { type: 'string' }, from: { type: 'number' }, to: { type: 'number' } }, required: ['from', 'to'] },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await primitives.dragAndDrop(ctx.page, a.from, a.to) || { dragged: [a.from, a.to] } }; },
+  },
+  {
+    name: 'storage', group: 'actions', primary: 'action',
+    description: 'Read/write localStorage or sessionStorage (action: get|set|remove|clear; type: localStorage|sessionStorage).',
+    input: { properties: { url: { type: 'string' }, action: { type: 'string' }, type: { type: 'string' }, key: { type: 'string' }, value: { type: 'string' } }, required: ['action'] },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await primitives.storage(ctx.page, a.action, a.type || 'localStorage', a.key, a.value) }; },
+  },
+  {
+    name: 'permission', group: 'actions',
+    description: 'Grant browser permissions (e.g. geolocation, notifications, camera, microphone, clipboard) via CDP. reset:true clears grants.',
+    input: { properties: { permissions: { type: 'array', items: { type: 'string' } }, reset: { type: 'boolean' } } },
+    run: async (a, ctx) => {
+      if (a.reset) { await primitives.resetPermissions(ctx.page); return { json: { reset: true } }; }
+      await primitives.grantPermissions(ctx.page, a.permissions || []);
+      return { json: { granted: a.permissions || [] } };
+    },
+  },
+  {
+    name: 'evalbatch', group: 'actions',
+    description: 'Run several JS expressions in one round-trip; returns each result (or error) in order.',
+    input: { properties: { url: { type: 'string' }, expressions: { type: 'array', items: { type: 'string' } } }, required: ['expressions'] },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await primitives.evalBatch(ctx.page, a.expressions || []) }; },
+  },
+
+  // ── visual feedback + window control ──
+  {
+    name: 'feedback', group: 'browser',
+    description: 'Inject a visual feedback overlay (cursor trail, click ripples, keystroke/toast) so a human watching a headful run can see what the agent is doing. off:true removes it.',
+    input: { properties: { url: { type: 'string' }, off: { type: 'boolean' }, cursor: { type: 'boolean' }, ripples: { type: 'boolean' }, keystrokes: { type: 'boolean' }, toast: { type: 'boolean' }, glow: { type: 'boolean' } } },
+    run: async (a, ctx) => {
+      await ensureUrl(ctx.page, a);
+      if (a.off) { await feedbackLib.removeFeedback(ctx.page); return { json: { feedback: 'off' } }; }
+      await feedbackLib.injectFeedback(ctx.page, { cursor: a.cursor !== false, ripples: a.ripples !== false, keystrokes: !!a.keystrokes, toast: a.toast !== false, glow: a.glow !== false });
+      return { json: { feedback: 'on' } };
+    },
+  },
+  {
+    name: 'window', group: 'browser', primary: 'state',
+    description: 'Control the real browser window (state: normal|minimized|maximized|fullscreen|offscreen), or set left/top/width/height. Headful only.',
+    input: { properties: { state: { type: 'string' }, left: { type: 'number' }, top: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' } } },
+    run: async (a, ctx) => { return { json: await hygiene.setWindow(ctx.page, ctx.page && ctx.page._c, { state: a.state, left: a.left, top: a.top, width: a.width, height: a.height }) }; },
+  },
+
+  // ── CAPTCHA (detect; solving is opt-in) + video understanding ──
+  {
+    name: 'captcha', group: 'browser', primary: 'action',
+    description: 'CAPTCHA/bot-wall handling (action: detect|solve). detect is read-only; solve is OPT-IN (env LOGICA_PILOT_CAPTCHA=1 + solver key) and otherwise recommends the `handoff` tool for a human. Supports reCAPTCHA/hCaptcha/Turnstile.',
+    input: { properties: { url: { type: 'string' }, action: { type: 'string', enum: ['detect', 'solve'] } } },
+    run: async (a, ctx) => {
+      await ensureUrl(ctx.page, a);
+      if (a.action === 'solve') return { json: await captchaLib.solve(ctx.page, {}) };
+      return { json: await captchaLib.detect(ctx.page) };
+    },
+  },
+  {
+    name: 'video', group: 'perception', primary: 'url',
+    description: 'Token-first video understanding: extract sources/duration/platform, fetch caption tracks into a transcript, optionally sample keyframes (frames:N) and LLM-summarize (describe:true).',
+    input: { properties: { url: { type: 'string' }, describe: { type: 'boolean' }, frames: { type: 'number' }, index: { type: 'number' } } },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); const r = await video.analyze(ctx.page, { describe: a.describe, model: ctx.model, frames: a.frames, index: a.index }); if (r) delete r._frameData; return { json: r }; },
+  },
+
+  // ── proxy pools + cookie/CF persistence ──
+  {
+    name: 'proxypool', group: 'network', primary: 'action', pageless: true,
+    description: 'Named proxy pools with rotation (action: list|pick|add|remove|presets). pick returns a proxy string for --proxy on navigate/gather/crawl. Strategies: round-robin|sticky|random; sticky keyed by --session.',
+    input: { properties: { action: { type: 'string', enum: ['list', 'pick', 'add', 'remove', 'presets'] }, name: { type: 'string' }, proxies: { type: 'array', items: { type: 'string' } }, strategy: { type: 'string' }, geo: { type: 'string' }, session: { type: 'string' } } },
+    run: async (a) => {
+      if (a.action === 'presets') return { json: proxyPool.PRESETS };
+      if (a.action === 'list' || !a.action) return { json: proxyPool.list() };
+      if (a.action === 'add') return { json: proxyPool.add(a.name, a.proxies, { strategy: a.strategy, geo: a.geo }) };
+      if (a.action === 'remove') return { json: proxyPool.remove(a.name) };
+      if (a.action === 'pick') { const p = proxyPool.pick(a.name, { session: a.session, strategy: a.strategy, geo: a.geo }); return { json: p ? { proxy: p } : { error: 'pool empty or not found' } }; }
+      return { json: { error: 'unknown action' } };
+    },
+  },
+  {
+    name: 'persist', group: 'session', primary: 'action',
+    description: 'Domain-keyed cookie persistence tuned for Cloudflare clearance (action: save|load|list|clear). save/load apply to the current domain unless --domain is given; load BEFORE navigating so cf_clearance carries over.',
+    input: { properties: { url: { type: 'string' }, action: { type: 'string', enum: ['save', 'load', 'list', 'clear'] }, domain: { type: 'string' } } },
+    run: async (a, ctx) => {
+      if (a.action === 'list') return { json: persist.list() };
+      if (a.action === 'clear') return { json: persist.clear(a.domain) };
+      if (a.action === 'load') { const r = await persist.load(ctx.page, a.domain); await ensureUrl(ctx.page, a); return { json: r }; }
+      await ensureUrl(ctx.page, a);
+      return { json: await persist.save(ctx.page, a.domain) };
+    },
   },
 ];
 

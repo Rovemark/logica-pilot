@@ -1,4 +1,4 @@
-# Logica Pilot — Tool Reference (43 tools)
+# Logica Pilot — Tool Reference (68 tools)
 
 The complete, authoritative reference for every Logica Pilot capability. **One
 registry, three surfaces** — each tool is identical across:
@@ -24,7 +24,7 @@ never leaves the machine).
 | **reload** | Reload, return the map | `url` |
 | **wait** | Semantic wait (text/selector/timeout — no brittle sleeps) | `text`, `selector`, `timeout` |
 
-## Perception (10) — token-first perception
+## Perception (11) — token-first perception
 
 | Tool | Purpose | Args |
 |------|---------|------|
@@ -34,12 +34,13 @@ never leaves the machine).
 | **meta** | Deterministic metadata (0 tokens): title/description/canonical/favicon, OpenGraph/Twitter, JSON-LD types | `url` |
 | **images** | Meaningful images (url+alt+size), og:image first, icons skipped | `url`, `max` |
 | **product** | Deterministic product data (JSON-LD → microdata → og:price): name/brand/price/availability/rating — **fails closed**, never guesses | `url` |
+| **video** | Token-first video understanding: extract sources/duration/platform, fetch caption tracks into a transcript, optionally sample keyframes (`frames`) and LLM-summarize (`describe`) | `url`, `describe`, `frames`, `index` |
 | **media** | Discover video/audio/direct files/embeds; `download` saves direct files (size-capped) | `url`, `download`, `dir`, `maxMB` |
 | **links** | All links (text+url), deduped, compact | `url` |
 | **handoff** | **Human handoff** — detect a login/captcha/Cloudflare/payment wall; `wait` pauses for you to resolve it, then continues | `action`, `url`, `timeout` |
 | **screenshot** | Capture (visual fallback); `marks` draws the indices | `url`, `fullPage`, `marks` |
 
-## Actions (6) — act by index, no selectors
+## Actions (12) — act by index, no selectors
 
 | Tool | Purpose | Args |
 |------|---------|------|
@@ -49,6 +50,12 @@ never leaves the machine).
 | **hover** | Hover an element by index (reveals menus/tooltips) | `index*` |
 | **eval** | Run JavaScript in the page (power tool) | `expression*` |
 | **pdf** | Save the page as PDF | `out` |
+| **upload** | Upload file(s) to an `<input type="file">` by index or CSS selector | `target*`, `files*`, `url` |
+| **dialog** | Auto-handle native dialogs (alert/confirm/prompt/beforeunload): `accept`, optional `promptText`; set before the triggering action | `accept`, `promptText` |
+| **drag** | Drag and drop from one element index to another | `from*`, `to*`, `url` |
+| **storage** | Read/write localStorage or sessionStorage (`get`/`set`/`remove`/`clear`) | `action*`, `type`, `key`, `value`, `url` |
+| **permission** | Grant browser permissions (geolocation/notifications/camera/mic/clipboard…) via CDP; `reset` clears | `permissions`, `reset` |
+| **evalbatch** | Run several JS expressions in one round-trip; each result/error returned in order | `expressions*`, `url` |
 
 ## Autonomy (3)
 
@@ -82,15 +89,53 @@ never leaves the machine).
 | **deal** | Find stores → parallel price/shipping → rank by total cost | `product*`, `limit` |
 | **factcheck** | Independent sources + verdict with citations | `claim*`, `limit` |
 
-## Session, Memory & Monitoring (5)
+## Session, Memory & Monitoring (6)
 
 | Tool | Purpose | Args |
 |------|---------|------|
 | **session** | Login sessions (cookies): `save`/`load`/`list` — log in once, reuse forever | `action*`, `name`, `url` |
+| **persist** | Domain-keyed cookie persistence tuned for **Cloudflare clearance** (`save`/`load`/`list`/`clear`); load BEFORE navigating so `cf_clearance` carries over | `action`, `domain`, `url` |
 | **memory** | What the Pilot **learned** per site (flywheel): visits, hot elements, recipes, fixes | `domain` |
 | **watch** | Change tracking: `new`/`same`/`changed` vs the last snapshot (persisted), git-style diff, `tag`, `webhook` | `url*`, `tag`, `diff`, `webhook` |
 | **monitor** | Scheduled monitors + alerts: `add` a URL with a cadence + `notify` (telegram/webhook/desktop); daemon checks due ones | `action*`, `url`, `every`, `notify` |
 | **runs** | Flight recorder: browse past runs (steps + tokens + screenshots) as HTML reports | `action`, `id` |
+
+## Browser Control (11)
+
+| Tool | Purpose | Args |
+|------|---------|------|
+| **stealth** | Anti-fingerprint (`regular`/`stealth`/`undetected`): patches `navigator.webdriver`, `chrome.runtime`, permissions, plugins/WebGL/languages. **Opt-in**; for CAPTCHAs prefer `handoff` over bypass | `mode` |
+| **device** | Emulate a mobile device (`iphone`/`ipad`/`android`/`reset`) or custom viewport+UA; `list` returns profiles | `device`, `list`, `url` |
+| **geo** | Override GPS geolocation (`lat`+`lon`+`accuracy`), or `clear` | `lat`, `lon`, `accuracy`, `clear`, `url` |
+| **tabs** | Multi-tab & iframe management: `list`/`new`/`switch`/`close`/`frames` | `action`, `targetId`, `url` |
+| **wipe** | Per-task hygiene: clear cookies/storage/cache (optionally only `olderThanDays`) | `cookies`, `storage`, `cache`, `olderThanDays`, `url` |
+| **health** | Browser health: alive, tab count, memory, recent crashes | — |
+| **html** | Raw HTML of the page (or a `selector`) — prefer `read`/`observe` unless you need raw markup | `selector`, `outer`, `url` |
+| **fast** | Fast mode: reduce per-command auto-wait + disable animations | `on` |
+| **feedback** | Visual overlay (cursor trail, click ripples, keystroke/toast) so a human watching a headful run sees what the agent does; `off` removes | `off`, `cursor`, `ripples`, `keystrokes`, `toast`, `glow`, `url` |
+| **window** | Control the real window: `normal`/`minimized`/`maximized`/`fullscreen`/`offscreen`, or set bounds (headful only) | `state`, `left`, `top`, `width`, `height` |
+| **captcha** | CAPTCHA/bot-wall handling: `detect` (read-only) / `solve` (**opt-in** via `LOGICA_PILOT_CAPTCHA` + solver key, else recommends `handoff`); reCAPTCHA/hCaptcha/Turnstile | `action`, `url` |
+
+## Network (4)
+
+| Tool | Purpose | Args |
+|------|---------|------|
+| **block** | Block requests by preset (`images`/`fonts`/`media`/`ads`) or URL patterns — leaner scraping; `off` disables | `what`, `off`, `url` |
+| **throttle** | Simulate network (`slow3g`/`fast3g`/`offline`) or `off` | `profile`, `url` |
+| **intercept** | Request interception: `mock` (canned response) / `headers` (inject) / `clear` | `action`, `pattern`, `response`, `headers` |
+| **proxypool** | Named proxy pools with rotation: `list`/`pick`/`add`/`remove`/`presets`; strategies round-robin/sticky/random (sticky keyed by `session`); `pick` returns a proxy for `--proxy` | `action`, `name`, `proxies`, `strategy`, `geo`, `session` |
+
+## DevTools (1)
+
+| Tool | Purpose | Args |
+|------|---------|------|
+| **inspect** | DevTools inspection: `console`/`network` capture (`duration` ms), `perf` metrics, `eval` with a stack trace | `kind`, `duration`, `filter`, `expression`, `url` |
+
+## Testing (1)
+
+| Tool | Purpose | Args |
+|------|---------|------|
+| **assert** | Assertions (title/url is/contains, text_visible, element_exists/count/text/value/visible, has_cookie, screenshot_match); one `{type,expected,selector?}` or an `assertions` array | `type`, `expected`, `selector`, `index`, `name`, `assertions`, `url` |
 
 ---
 

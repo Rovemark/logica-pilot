@@ -1,6 +1,6 @@
 # Logica Pilot — MCP & CLI Guide
 
-**The token-efficient browser automation engine.** Exposed as a single tool registry accessible via **CLI**, **MCP (Model Context Protocol)**, or **programmatic API**. Same 43 tools, three surfaces — zero duplication.
+**The token-efficient browser automation engine.** Exposed as a single tool registry accessible via **CLI**, **MCP (Model Context Protocol)**, or **programmatic API**. Same 68 tools, three surfaces — zero duplication.
 
 ---
 
@@ -43,11 +43,11 @@ The engine auto-discovers an installed real browser (any installed browser).
 
 ---
 
-## The 43 Tools — Single Registry
+## The 68 Tools — Single Registry
 
 All tools are defined once in `src/tools.js`. Both MCP (stdio) and CLI (subcommands) expose the identical interface. MCP tool names are prefixed with `browser_` (e.g., `browser_navigate`); CLI commands are bare (e.g., `logica-pilot navigate`). Saved **Site Adapters** also appear as their own MCP tools, `x_<name>`.
 
-> **[TOOLS.md](TOOLS.md) is the canonical, complete reference** (every tool, its args, and examples). The summary below groups the 43 tools; see TOOLS.md for detail.
+> **[TOOLS.md](TOOLS.md) is the canonical, complete reference** (every tool, its args, and examples). The summary below groups the 68 tools; see TOOLS.md for detail.
 
 | Group | Tools (`browser_<name>` over MCP · `logica-pilot <name>` on the CLI) |
 |-------|------|

@@ -48,10 +48,10 @@ async function cmdTool(tool, args) {
   const a = {};
   for (const k of Object.keys(args)) if (k !== '_') a[k] = args[k];
   if (tool.primary && args._[1] !== undefined && a[tool.primary] === undefined) a[tool.primary] = args._[1];
-  if (typeof a.urls === 'string') a.urls = a.urls.split(',').map((s) => s.trim()).filter(Boolean);
-  for (const k of ['schema', 'fields', 'includePaths', 'excludePaths', 'notify', 'rows', 'location', 'params', 'steps']) if (typeof a[k] === 'string') { try { a[k] = JSON.parse(a[k]); } catch {} }
-  for (const k of ['index', 'maxSteps', 'limit', 'amount', 'maxElements', 'timeout', 'concurrency', 'maxChars', 'offset', 'textChars', 'maxDepth']) {
-    if (typeof a[k] === 'string') a[k] = parseInt(a[k], 10);
+  for (const k of ['urls', 'what', 'files', 'permissions', 'levels']) if (typeof a[k] === 'string') a[k] = a[k].split(',').map((s) => s.trim()).filter(Boolean);
+  for (const k of ['schema', 'fields', 'includePaths', 'excludePaths', 'notify', 'rows', 'location', 'params', 'steps', 'assertions', 'response', 'headers', 'expressions']) if (typeof a[k] === 'string') { try { a[k] = JSON.parse(a[k]); } catch {} }
+  for (const k of ['index', 'maxSteps', 'limit', 'amount', 'maxElements', 'timeout', 'concurrency', 'maxChars', 'offset', 'textChars', 'maxDepth', 'lat', 'lon', 'accuracy', 'from', 'to', 'duration', 'olderThanDays']) {
+    if (typeof a[k] === 'string') a[k] = Number(a[k]);
   }
 
   banner();

@@ -9,7 +9,7 @@
 A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic
 intent — not pixel coordinates — then **clicks, types, scrolls and reads** on its own until the
 goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
-browser · **CLI and MCP** with the same 43 tools.
+browser · **CLI and MCP** with the same 68 tools.
 
 <p align="center">
   <img src="docs/media/pilot-run.gif" alt="The Pilot autonomously scrolls, extracts and answers a goal on a live page" width="100%">
@@ -296,7 +296,7 @@ await pilot.close();
 
 ## MCP Server (Claude Desktop, Cursor, Cline, etc.)
 
-Logica Pilot exposes **43 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
+Logica Pilot exposes **68 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
 
 ### Configuration
 
@@ -318,7 +318,7 @@ Then set your AI credentials (one time):
 - Export `ANTHROPIC_API_KEY=sk-ant-…`, *or*
 - Run a local LogicaProxy (`:8317`)
 
-### The 43 Tools (Grouped by Function)
+### The 68 Tools (Grouped by Function)
 
 > Full reference — every tool, its args and examples — in **[docs/TOOLS.md](docs/TOOLS.md)**.
 
@@ -331,7 +331,7 @@ Then set your AI credentials (one time):
 | **reload** | Reload the page and return the map |
 | **wait** | Wait for text/selector/condition (semantic, no brittle sleeps) |
 
-#### Perception (10 tools)
+#### Perception (11 tools)
 | Tool | Purpose |
 |------|---------|
 | **observe** | Get the indexed map of the current page (semantic elements + readable text) |
@@ -340,12 +340,13 @@ Then set your AI credentials (one time):
 | **meta** | Page metadata, **deterministic** (no AI): title/description/canonical/favicon, OpenGraph/Twitter, JSON-LD types |
 | **images** | All meaningful images (url + alt + size), og:image first, icons skipped — deterministic |
 | **product** | **Deterministic product data** from the page's own JSON-LD/microdata/og:price: name, brand, price, availability, rating — fails closed, never guesses |
+| **video** | **Token-first video understanding**: sources/duration/platform (YouTube/Vimeo), caption tracks → transcript, optional keyframe sampling (`frames`) + LLM summary (`describe`) |
 | **media** | Discover video/audio/direct files/embeds on the page; `download:true` saves direct files to disk (size-capped) |
 | **handoff** | **Human handoff** — detect a login/captcha/Cloudflare/payment wall and (`wait`) pause for you to resolve it in a visible window, then continue — instead of trying to bypass it |
 | **links** | Return all links (text + url), deduped, compact |
 | **screenshot** | Capture page; `marks:true` draws indices as visual fallback |
 
-#### Actions (6 tools)
+#### Actions (12 tools)
 | Tool | Purpose |
 |------|---------|
 | **act** | Act by index: `click` / `type` / `press` / `scroll` (no selectors, no coordinates) |
@@ -354,6 +355,12 @@ Then set your AI credentials (one time):
 | **hover** | Hover over an element by index (reveals menus/tooltips) |
 | **eval** | Run JavaScript in the page (power tool for devs) |
 | **pdf** | Save the current page as PDF |
+| **upload** | Upload file(s) to an `<input type="file">` by index or CSS selector |
+| **dialog** | Auto-handle native dialogs (alert/confirm/prompt/beforeunload) — set `accept` (+ `promptText`) before the triggering action |
+| **drag** | Drag and drop from one element index to another |
+| **storage** | Read/write localStorage or sessionStorage (`get`/`set`/`remove`/`clear`) |
+| **permission** | Grant browser permissions (geolocation/notifications/camera/mic/clipboard…) via CDP; `reset` clears |
+| **evalbatch** | Run several JS expressions in one round-trip; each result/error returned in order |
 
 #### Autonomy (3 tools)
 | Tool | Purpose |
@@ -362,10 +369,11 @@ Then set your AI credentials (one time):
 | **adapter** | **Site Adapters** — turn a site task into a named, parameterized tool (`save`/`run`); saved adapters appear as their own MCP tools (`x_<name>`). Any site becomes an API |
 | **workflow** | **Autopilot Recorder** — save a task as replayable steps and replay it **deterministically by label** (no LLM); falls back to the AI agent on a miss |
 
-#### Session, Memory & Monitoring (5 tools)
+#### Session, Memory & Monitoring (6 tools)
 | Tool | Purpose |
 |------|---------|
 | **session** | Manage login sessions (cookies): `save` / `load` / `list` — log in once, reuse forever |
+| **persist** | **Domain-keyed cookie persistence** tuned for Cloudflare clearance (`save`/`load`/`list`/`clear`) — a solved bot-wall carries `cf_clearance` across runs instead of re-triggering "Just a moment…" |
 | **memory** | Show what Logica Pilot has **learned** per site (the flywheel): visits, hot elements, recipes |
 | **watch** | **Change tracking**: `changeStatus` new/same/changed vs the last snapshot (persisted across sessions), git-style diff of what changed, `tag` for separate histories, `webhook` on change |
 | **monitor** | **Scheduled monitors + alerts**: `add` a URL with a cadence + `notify` (telegram/webhook/desktop); a background daemon checks due ones and alerts only on real changes |
@@ -392,6 +400,35 @@ Then set your AI credentials (one time):
 | **compare** | Compare: extract from N URLs in parallel + synthesize comparison table + recommendation |
 | **deal** | Best Deal: search stores → extract price/shipping in parallel → rank by total cost |
 | **factcheck** | Fact-Check: search independent sources + synthesize verdict with citations |
+
+#### Browser Control (11 tools)
+| Tool | Purpose |
+|------|---------|
+| **stealth** | **Anti-fingerprint** (`regular`/`stealth`/`undetected`): patches `navigator.webdriver`, `chrome.runtime`, permissions, plugins/WebGL/languages. Opt-in; for CAPTCHAs prefer `handoff` over bypass |
+| **device** | Emulate a mobile device (iphone/ipad/android/reset) or a custom viewport + user-agent; `list` returns profiles |
+| **geo** | Override GPS geolocation (`lat`+`lon`+`accuracy`) or `clear` it |
+| **tabs** | Multi-tab & iframe management: `list` / `new` / `switch` / `close` / `frames` |
+| **wipe** | Per-task hygiene: clear cookies/storage/cache (optionally only entries `olderThanDays`) |
+| **health** | Browser health: alive, tab count, memory, recent crashes |
+| **html** | Raw HTML of the page (or a `selector`) — for when you truly need markup over token-first perception |
+| **fast** | Fast mode: reduce per-command auto-wait and disable animations/transitions |
+| **feedback** | Inject a **visual overlay** (cursor trail, click ripples, keystroke/toast) so a human watching a headful run sees what the agent is doing |
+| **window** | Control the real window: `normal`/`minimized`/`maximized`/`fullscreen`/`offscreen`, or set bounds (headful) |
+| **captcha** | CAPTCHA/bot-wall handling: `detect` (read-only) or `solve` (**opt-in** via env + solver key, else recommends `handoff`); reCAPTCHA/hCaptcha/Turnstile |
+
+#### Network (4 tools)
+| Tool | Purpose |
+|------|---------|
+| **block** | Block requests by preset (images/fonts/media/ads) or URL patterns — leaner, faster scraping |
+| **throttle** | Simulate network conditions (`slow3g`/`fast3g`/`offline`) or restore |
+| **intercept** | Request interception: `mock` (canned response for matching requests) / `headers` (inject) / `clear` |
+| **proxypool** | **Named proxy pools** with rotation (`list`/`pick`/`add`/`remove`/`presets`): round-robin/sticky/random, geo tags, sticky-per-session; `pick` returns a proxy for `--proxy` (Webshare/Bright Data/IPRoyal/Oxylabs/Smartproxy presets) |
+
+#### DevTools & Testing (2 tools)
+| Tool | Purpose |
+|------|---------|
+| **inspect** | DevTools inspection: `console`/`network` capture (over `duration`), `perf` metrics (Web Vitals), `eval` with a stack trace on error |
+| **assert** | **Test assertions**: title/url is/contains, text_visible, element exists/count/text/value/visible, has_cookie, screenshot_match (visual regression) — one or an `assertions` array |
 
 **Example (Claude asking Pilot to compare products):**
 
@@ -619,7 +656,7 @@ src/
   llm.js                Brain (Messages API via LogicaProxy or Anthropic)
   agent.js              Autonomous loop (perceive → decide → act)
   electron-page.js      Adapter: webContents.debugger → page contract
-  mcp-server.js         MCP server (stdio, 43 tools)
+  mcp-server.js         MCP server (stdio, 68 tools)
   tools.js              SINGLE REGISTRY (CLI + MCP share this)
   fanout.js             Parallel multi-agent orchestration
   search.js             Web search (Bing default, Brave if key set)
