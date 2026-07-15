@@ -67,6 +67,7 @@ const actorLib = require('./actor');
 const webhooksLib = require('./webhooks');
 const schedulerLib = require('./scheduler');
 const sessionPoolLib = require('./session-pool');
+const vectorizeLib = require('./vectorize');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -1127,6 +1128,12 @@ const TOOLS = [
     description: 'Read/write localStorage or sessionStorage (action: get|set|remove|clear; type: localStorage|sessionStorage).',
     input: { properties: { url: { type: 'string' }, action: { type: 'string' }, type: { type: 'string' }, key: { type: 'string' }, value: { type: 'string' } }, required: ['action'] },
     run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await primitives.storage(ctx.page, a.action, a.type || 'localStorage', a.key, a.value) }; },
+  },
+  {
+    name: 'vectorize', group: 'http', primary: 'dataset', pageless: true,
+    description: 'Scrape → RAG bridge (Apify vector-DB integrations): chunk + embed + upsert a dataset into a vector DB, INCREMENTALLY (recurring crawls only re-embed changed rows). embed: local (offline/private, default) | openai | voyage. target: qdrant | chroma | pinecone | dry (plan only). Zero-dep recursive chunker + sha256 delta.',
+    input: { properties: { dataset: { type: 'string' }, embed: { type: 'string', enum: ['local', 'openai', 'voyage'] }, target: { type: 'string', enum: ['dry', 'qdrant', 'chroma', 'pinecone'] }, url: { type: 'string' }, collection: { type: 'string' }, apiKey: { type: 'string' }, model: { type: 'string' }, dataFields: { type: 'array', items: { type: 'string' } }, metadataFields: { type: 'array', items: { type: 'string' } }, chunkSize: { type: 'number' }, overlap: { type: 'number' }, dim: { type: 'number' } }, required: ['dataset'] },
+    run: async (a) => ({ json: await vectorizeLib.vectorize({ dataset: a.dataset, embed: a.embed || 'local', target: a.target || 'dry', url: a.url, collection: a.collection, apiKey: a.apiKey, model: a.model, dataFields: a.dataFields, metadataFields: a.metadataFields, chunkSize: a.chunkSize != null ? Number(a.chunkSize) : 1000, overlap: a.overlap != null ? Number(a.overlap) : 150, dim: a.dim != null ? Number(a.dim) : 256 }) }),
   },
   {
     name: 'webhook', group: 'http', primary: 'action', pageless: true,
