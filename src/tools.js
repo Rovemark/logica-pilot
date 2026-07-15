@@ -58,6 +58,8 @@ const persist = require('./persist');
 const httpEngine = require('./http-engine');
 const requestQueue = require('./request-queue');
 const kvs = require('./kvs');
+const fingerprintLib = require('./fingerprint');
+const crawlerLib = require('./crawler');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -942,6 +944,17 @@ const TOOLS = [
     run: async (a, ctx) => { const r = await stealth.applyStealthPatches(ctx.page, a.mode || 'stealth'); return { json: { applied: (a.mode || 'stealth') !== 'regular', mode: a.mode || 'stealth', patches: r || undefined } }; },
   },
   {
+    name: 'fingerprint', group: 'browser',
+    description: 'Apply a statistically-realistic, INTERNALLY-CONSISTENT browser fingerprint (unlike stealth\'s static patches): coherent UA + UA-CH + platform + screen + webgl + languages + hardware, weighted by real market share. Filter by browser (chrome|edge|firefox|safari) / os (windows|macos|android|ios); seed = sticky identity. Apply BEFORE navigating.',
+    input: { properties: { url: { type: 'string' }, browser: { type: 'string' }, os: { type: 'string' }, seed: { type: 'string' } } },
+    run: async (a, ctx) => {
+      const fp = fingerprintLib.generate({ browser: a.browser, os: a.os, seed: a.seed });
+      const r = await fingerprintLib.applyFingerprint(ctx.page, fp);
+      await ensureUrl(ctx.page, a);
+      return { json: { ...r, platform: fp.platform, screen: fp.screen, webgl: fp.webgl.vendor, cores: fp.cores } };
+    },
+  },
+  {
     name: 'device', group: 'browser', primary: 'device',
     description: 'Emulate a mobile device (iphone|ipad|android|reset) or a custom {width,height,mobile,userAgent}. action:list returns available profiles.',
     input: { properties: { device: { type: 'string' }, url: { type: 'string' }, list: { type: 'boolean' } } },
@@ -1115,6 +1128,22 @@ const TOOLS = [
       if (a.action === 'next') { const n = q.fetchNext(); return { json: n ? { url: n.url, label: n.label, key: n.k } : { empty: true } }; }
       if (a.action === 'failed') return { json: q.failed() };
       return { json: q.stats() };
+    },
+  },
+  {
+    name: 'crawler', group: 'site', primary: 'url',
+    description: 'Crawlee-style structured crawler: durable queue + a pageFunction run on every matched page → rows into a named dataset, with auto link-enqueue, concurrency, retry, and RESUME. engine:http (cheap, no browser) or browser. pageFunction is JS whose return object(s) become dataset rows; `context.url/userData/enqueue()` available. strategy: same-domain|same-hostname|same-origin; globs to filter.',
+    input: { properties: { url: { type: 'string' }, urls: { type: 'array', items: { type: 'string' } }, name: { type: 'string' }, pageFunction: { type: 'string' }, engine: { type: 'string', enum: ['http', 'browser'] }, strategy: { type: 'string' }, globs: { type: 'array', items: { type: 'string' } }, maxDepth: { type: 'number' }, maxRequests: { type: 'number' }, maxConcurrency: { type: 'number' }, resume: { type: 'boolean' } } },
+    run: async (a, ctx) => {
+      const startUrls = a.urls && a.urls.length ? a.urls : (a.url ? [a.url] : []);
+      if (!startUrls.length) return { json: { error: 'pass url or urls' } };
+      const res = await crawlerLib.run(ctx.pilot, {
+        startUrls, name: a.name, pageFunction: a.pageFunction, engine: a.engine || 'browser',
+        strategy: a.strategy, globs: a.globs, maxDepth: a.maxDepth != null ? Number(a.maxDepth) : 2,
+        maxRequests: a.maxRequests != null ? Number(a.maxRequests) : 200, maxConcurrency: a.maxConcurrency != null ? Number(a.maxConcurrency) : 5,
+        resume: !!a.resume, onEvent: ctx.onEvent,
+      });
+      return { json: res };
     },
   },
   {
