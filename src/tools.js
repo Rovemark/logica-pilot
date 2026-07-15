@@ -61,6 +61,8 @@ const kvs = require('./kvs');
 const fingerprintLib = require('./fingerprint');
 const crawlerLib = require('./crawler');
 const adaptive = require('./adaptive');
+const apisLib = require('./apis');
+const jsdataLib = require('./jsdata');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -1207,6 +1209,31 @@ const TOOLS = [
       if (a.action === 'solve') return { json: await captchaLib.solve(ctx.page, {}) };
       return { json: await captchaLib.detect(ctx.page) };
     },
+  },
+  {
+    name: 'apis', group: 'perception', primary: 'url',
+    description: 'Discover the backend JSON APIs a page calls (action:discover) and re-fire them (action:replay) — hit the private API directly instead of scraping HTML. discover navigates and catalogs XHR/Fetch JSON responses ranked by richness; replay uses in-page fetch so it carries live session cookies/auth. Pass `on` (a page URL) before replay to establish cookies.',
+    input: { properties: { url: { type: 'string' }, action: { type: 'string', enum: ['discover', 'replay'] }, duration: { type: 'number' }, on: { type: 'string' }, method: { type: 'string' }, params: { type: 'object' }, body: {} } },
+    run: async (a, ctx) => {
+      if (a.action === 'replay') {
+        if (a.on) await ctx.page.goto(a.on);
+        else { const cur = await ctx.page.eval('location.href').catch(() => 'about:blank'); if (/^about:blank/.test(cur)) { try { await ctx.page.goto(new URL(a.url).origin); } catch {} } }
+        return { json: await apisLib.replay(ctx.page, a.url, { method: a.method, params: a.params, body: a.body }) };
+      }
+      return { json: await apisLib.discover(ctx.page, a.url, { duration: a.duration != null ? Number(a.duration) : 5000 }) };
+    },
+  },
+  {
+    name: 'jsdata', group: 'perception', primary: 'url',
+    description: 'Surface in-page JS hydration state — __NEXT_DATA__, __NUXT__, __APOLLO_STATE__, __INITIAL_STATE__, and every <script type="application/json"|"ld+json">. Clean structured data BEFORE it is rendered into HTML (invisible to observe/read).',
+    input: { properties: { url: { type: 'string' } } },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await jsdataLib.surface(ctx.page) }; },
+  },
+  {
+    name: 'locate', group: 'perception', primary: 'value',
+    description: 'Reverse-lookup: paste a value you SEE on the page and get the exact JSON-path + source (hydration blob / JSON-LD script / discovered API) that yields it — the fastest way to author a scraper. regex:true to match a pattern.',
+    input: { properties: { url: { type: 'string' }, value: { type: 'string' }, regex: { type: 'boolean' } }, required: ['value'] },
+    run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await jsdataLib.locate(ctx.page, a.value, { regex: a.regex }) }; },
   },
   {
     name: 'video', group: 'perception', primary: 'url',
