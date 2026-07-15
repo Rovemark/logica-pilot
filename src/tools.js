@@ -413,6 +413,7 @@ const TOOLS = [
         key: { type: 'string', description: 'key (press): Enter, Tab, Escape, ArrowDown…' },
         direction: { type: 'string', enum: ['up', 'down'] },
         amount: { type: 'number' },
+        human: { type: 'boolean', description: 'click via a human-like curved mouse path (anti-detection; slower)' },
       }, required: ['action'],
     },
     run: async (a, ctx) => {
@@ -432,7 +433,7 @@ const TOOLS = [
       }
       let res;
       switch (a.action) {
-        case 'click': res = await actions.click(ctx.page, a.index); break;
+        case 'click': res = a.human ? JSON.stringify(await require('./humanize').humanClickIndex(ctx.page, a.index)) : await actions.click(ctx.page, a.index); break;
         case 'type': res = await actions.type(ctx.page, a.index, a.text || '', !!a.submit); break;
         case 'press': res = await actions.pressKey(ctx.page, a.key || 'Enter'); break;
         case 'scroll': res = await actions.scroll(ctx.page, a.direction || 'down', a.amount || 600); break;
