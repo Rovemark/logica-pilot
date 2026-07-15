@@ -1201,7 +1201,7 @@ const TOOLS = [
   {
     name: 'crawler', group: 'site', primary: 'url',
     description: 'Crawlee-style structured crawler: durable queue + a pageFunction run on every matched page → rows into a named dataset, with auto link-enqueue, concurrency, retry, and RESUME. engine:http (cheap, no browser) or browser. pageFunction is JS whose return object(s) become dataset rows; `context.url/userData/enqueue()` available. strategy: same-domain|same-hostname|same-origin; globs to filter.',
-    input: { properties: { url: { type: 'string' }, urls: { type: 'array', items: { type: 'string' } }, name: { type: 'string' }, pageFunction: { type: 'string' }, engine: { type: 'string', enum: ['http', 'browser', 'adaptive'] }, strategy: { type: 'string' }, globs: { type: 'array', items: { type: 'string' } }, maxDepth: { type: 'number' }, maxRequests: { type: 'number' }, maxConcurrency: { type: 'number' }, resume: { type: 'boolean' }, sessionPool: { type: 'string' } } },
+    input: { properties: { url: { type: 'string' }, urls: { type: 'array', items: { type: 'string' } }, name: { type: 'string' }, pageFunction: { type: 'string' }, engine: { type: 'string', enum: ['http', 'browser', 'adaptive'] }, strategy: { type: 'string' }, globs: { type: 'array', items: { type: 'string' } }, maxDepth: { type: 'number' }, maxRequests: { type: 'number' }, maxConcurrency: { type: 'number' }, resume: { type: 'boolean' }, sessionPool: { type: 'string' }, browsers: { type: 'number', description: 'use a managed pool of N browsers (rotates + retires to avoid memory leaks on long crawls)' }, autoscale: { type: 'boolean', description: 'dynamically adjust concurrency to CPU/mem/event-loop pressure' } } },
     run: async (a, ctx) => {
       const startUrls = a.urls && a.urls.length ? a.urls : (a.url ? [a.url] : []);
       if (!startUrls.length) return { json: { error: 'pass url or urls' } };
@@ -1209,7 +1209,7 @@ const TOOLS = [
         startUrls, name: a.name, pageFunction: a.pageFunction, engine: a.engine || 'browser',
         strategy: a.strategy, globs: a.globs, maxDepth: a.maxDepth != null ? Number(a.maxDepth) : 2,
         maxRequests: a.maxRequests != null ? Number(a.maxRequests) : 200, maxConcurrency: a.maxConcurrency != null ? Number(a.maxConcurrency) : 5,
-        resume: !!a.resume, onEvent: ctx.onEvent, sessionPool: a.sessionPool,
+        resume: !!a.resume, onEvent: ctx.onEvent, sessionPool: a.sessionPool, browsers: a.browsers != null ? Number(a.browsers) : 0, autoscale: !!a.autoscale,
       });
       return { json: res };
     },
