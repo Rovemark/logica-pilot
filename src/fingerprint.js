@@ -104,4 +104,23 @@ async function applyFingerprint(page, fp) {
   return { applied: true, ua: fp.userAgent, os: fp.os, browser: fp.browser };
 }
 
-module.exports = { generate, applyFingerprint, injectionScript, clientHints, PROFILES };
+/**
+ * Block WebRTC IP leaks — behind a proxy, RTCPeerConnection can still expose the
+ * real local/public IP via ICE candidates. This neutralizes the leak while keeping
+ * the API present (returning a stub that yields no host candidates). Call after
+ * applyFingerprint, especially when a proxy is active.
+ */
+async function blockWebRTC(page) {
+  const script = `(() => {
+    const noop = function(){};
+    const Stub = function(){ return { createDataChannel: () => ({}), createOffer: () => Promise.resolve({}), createAnswer: () => Promise.resolve({}), setLocalDescription: () => Promise.resolve(), setRemoteDescription: () => Promise.resolve(), addIceCandidate: () => Promise.resolve(), addEventListener: noop, removeEventListener: noop, close: noop, getStats: () => Promise.resolve(new Map()), onicecandidate: null }; };
+    try { Object.defineProperty(window, 'RTCPeerConnection', { get: () => Stub, configurable: true }); } catch(e){}
+    try { Object.defineProperty(window, 'webkitRTCPeerConnection', { get: () => Stub, configurable: true }); } catch(e){}
+    try { if (navigator.mediaDevices) navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]); } catch(e){}
+  })()`;
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: script }).catch(() => {});
+  await page.eval(script).catch(() => {});
+  return { webrtc: 'blocked' };
+}
+
+module.exports = { generate, applyFingerprint, injectionScript, clientHints, blockWebRTC, PROFILES };

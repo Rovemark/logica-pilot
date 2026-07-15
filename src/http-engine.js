@@ -28,7 +28,24 @@ const { URL } = require('url');
 const CHROME_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-function defaultHeaders(u) {
+// Browser-like headers in Chrome's canonical order. When a fingerprint is supplied,
+// UA + client-hints + accept-language are all derived from it (internally consistent,
+// and rotatable) instead of static — closing the cheapest anti-bot signals. Pure Node
+// can't byte-match a browser's JA3/TLS ClientHello, so for JA3-sensitive hosts route
+// through the real browser (engine:'browser'/adaptive) — this hardens the cheap path.
+function defaultHeaders(u, fp) {
+  if (fp) {
+    const ch = require('./fingerprint').clientHints(fp);
+    return {
+      'user-agent': fp.userAgent,
+      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'accept-language': fp.acceptLanguage || 'en-US,en;q=0.9',
+      'accept-encoding': 'gzip, deflate, br',
+      ...ch,
+      'sec-fetch-dest': 'document', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none',
+      'upgrade-insecure-requests': '1', host: u.host,
+    };
+  }
   return {
     'user-agent': CHROME_UA,
     accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -156,12 +173,14 @@ async function httpFetch(url, opts = {}) {
   } = opts;
   const px = parseProxy(proxy);
   const jar = cookies && typeof cookies === 'object' ? cookies : (cookies ? {} : null);
+  // Optional realistic fingerprint (true = generate one; or pass a generated fp).
+  const fp = opts.fingerprint === true ? require('./fingerprint').generate({}) : (opts.fingerprint && typeof opts.fingerprint === 'object' ? opts.fingerprint : null);
 
   let current = url;
   let redirects = 0;
   for (;;) {
     const u = new URL(current);
-    const headers = { ...defaultHeaders(u), ...(opts.headers || {}) };
+    const headers = { ...defaultHeaders(u, fp), ...(opts.headers || {}) };
     const ck = serializeCookies(jar, u);
     if (ck) headers.cookie = ck;
     if (body != null) headers['content-length'] = Buffer.byteLength(body);

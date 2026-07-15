@@ -146,7 +146,7 @@ async function ensureUrl(page, a) {
 // the http response meta (or null for the browser path) so callers can read status.
 async function ensureContent(page, a) {
   if (a && a.engine === 'http' && a.url) {
-    const r = await httpEngine.httpFetch(a.url, { proxy: a.proxy, cookies: a.cookies });
+    const r = await httpEngine.httpFetch(a.url, { proxy: a.proxy, cookies: a.cookies, fingerprint: a.fingerprint });
     await httpEngine.loadHtml(page, r.body, r.url);
     return { engine: 'http', status: r.status, contentType: r.contentType, finalUrl: r.url };
   }
@@ -971,12 +971,13 @@ const TOOLS = [
   {
     name: 'fingerprint', group: 'browser',
     description: 'Apply a statistically-realistic, INTERNALLY-CONSISTENT browser fingerprint (unlike stealth\'s static patches): coherent UA + UA-CH + platform + screen + webgl + languages + hardware, weighted by real market share. Filter by browser (chrome|edge|firefox|safari) / os (windows|macos|android|ios); seed = sticky identity. Apply BEFORE navigating.',
-    input: { properties: { url: { type: 'string' }, browser: { type: 'string' }, os: { type: 'string' }, seed: { type: 'string' } } },
+    input: { properties: { url: { type: 'string' }, browser: { type: 'string' }, os: { type: 'string' }, seed: { type: 'string' }, webrtc: { type: 'boolean', description: 'also block WebRTC IP leaks (recommended behind a proxy)' } } },
     run: async (a, ctx) => {
       const fp = fingerprintLib.generate({ browser: a.browser, os: a.os, seed: a.seed });
       const r = await fingerprintLib.applyFingerprint(ctx.page, fp);
+      if (a.webrtc) await fingerprintLib.blockWebRTC(ctx.page);
       await ensureUrl(ctx.page, a);
-      return { json: { ...r, platform: fp.platform, screen: fp.screen, webgl: fp.webgl.vendor, cores: fp.cores } };
+      return { json: { ...r, webrtc: a.webrtc ? 'blocked' : undefined, platform: fp.platform, screen: fp.screen, webgl: fp.webgl.vendor, cores: fp.cores } };
     },
   },
   {
@@ -1216,9 +1217,9 @@ const TOOLS = [
   {
     name: 'fetch', group: 'http', primary: 'url', pageless: true,
     description: 'Raw HTTP fetch WITHOUT a browser (Apify/Crawlee cheap path): GET/POST a URL or JSON API. Follows redirects, gzip/br, browser-like headers, cookie jar, proxy (user:pass@host:port via CONNECT). as:json parses the body; as:text strips tags. 10-50x faster than a browser for static/SSR pages & APIs.',
-    input: { properties: { url: { type: 'string' }, method: { type: 'string' }, headers: { type: 'object' }, body: { type: 'string' }, proxy: { type: 'string' }, as: { type: 'string', enum: ['raw', 'json', 'text'] }, maxBytes: { type: 'number' } }, required: ['url'] },
+    input: { properties: { url: { type: 'string' }, method: { type: 'string' }, headers: { type: 'object' }, body: { type: 'string' }, proxy: { type: 'string' }, as: { type: 'string', enum: ['raw', 'json', 'text'] }, maxBytes: { type: 'number' }, fingerprint: { type: 'boolean', description: 'send a realistic, internally-consistent browser header set (rotatable) instead of the static default' } }, required: ['url'] },
     run: async (a) => {
-      const r = await httpEngine.httpFetch(a.url, { method: a.method || 'GET', headers: a.headers, body: a.body, proxy: a.proxy, maxBytes: a.maxBytes });
+      const r = await httpEngine.httpFetch(a.url, { method: a.method || 'GET', headers: a.headers, body: a.body, proxy: a.proxy, maxBytes: a.maxBytes, fingerprint: a.fingerprint });
       if (a.as === 'json') { try { return { json: { status: r.status, url: r.url, data: JSON.parse(r.body) } }; } catch (e) { return { json: { status: r.status, url: r.url, error: 'not JSON: ' + e.message, body: r.body.slice(0, 500) } }; } }
       if (a.as === 'text') { const txt = r.body.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); return { json: { status: r.status, url: r.url, contentType: r.contentType, text: txt.slice(0, 20000) } }; }
       return { json: { status: r.status, url: r.url, contentType: r.contentType, redirects: r.redirects, bytes: r.body.length, headers: r.headers, body: r.body.length > 20000 ? r.body.slice(0, 20000) + '…[truncated]' : r.body } };
