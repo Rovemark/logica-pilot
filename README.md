@@ -9,7 +9,7 @@
 A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic
 intent — not pixel coordinates — then **clicks, types, scrolls and reads** on its own until the
 goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
-browser · **CLI and MCP** with the same 80 tools.
+browser · **CLI and MCP** with the same 82 tools.
 
 <p align="center">
   <img src="docs/media/pilot-run.gif" alt="The Pilot autonomously scrolls, extracts and answers a goal on a live page" width="100%">
@@ -296,7 +296,7 @@ await pilot.close();
 
 ## MCP Server (Claude Desktop, Cursor, Cline, etc.)
 
-Logica Pilot exposes **80 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
+Logica Pilot exposes **82 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
 
 ### Configuration
 
@@ -318,7 +318,7 @@ Then set your AI credentials (one time):
 - Export `ANTHROPIC_API_KEY=sk-ant-…`, *or*
 - Run a local LogicaProxy (`:8317`)
 
-### The 80 Tools (Grouped by Function)
+### The 82 Tools (Grouped by Function)
 
 > Full reference — every tool, its args and examples — in **[docs/TOOLS.md](docs/TOOLS.md)**.
 
@@ -382,13 +382,14 @@ Then set your AI credentials (one time):
 | **monitor** | **Scheduled monitors + alerts**: `add` a URL with a cadence + `notify` (telegram/webhook/desktop); a background daemon checks due ones and alerts only on real changes |
 | **runs** | **Flight recorder**: browse past autonomous runs — each `run` is saved with steps, token usage and screenshots as a self-contained HTML report |
 
-#### Site (8 tools)
+#### Site (9 tools)
 | Tool | Purpose |
 |------|---------|
 | **map** | **Discover a site's URLs instantly** — robots.txt sitemaps + sitemap.xml (recursive), on-page links fallback; `search` filter |
 | **crawl** | **Crawl a whole site/section** breadth-first in parallel: `includePaths`/`excludePaths` regex, `maxDepth`, page limit, robots.txt politeness — compact `{url,title,text}` per page |
 | **crawler** | **Crawlee-style structured crawler**: a durable queue + a `pageFunction` run on every matched page → rows into a dataset; auto link-enqueue (`strategy`/`globs`), concurrency, retry, **resume**; `engine` http/browser/adaptive; `sessionPool` to rotate identities |
 | **actor** | **Formal Actor packaging**: a versioned, self-describing unit = manifest + typed INPUT schema + entry (crawler/tool). `run` validates+coerces input → dataset + INPUT/OUTPUT KVS; REST-callable (`POST /v1/actors/:name/runs`) |
+| **registry** | **Shareable Actor registry** (Apify Store, self-hostable + federated): `publish` a local actor, `search` a catalog, `add` someone else's scraper. Any `serve` node hosts `/index.json` for federation |
 | **index** | **Local BM25 search**: crawl a site once into a named index, then query it forever **offline — 0 tokens, 0 network**. Any docs set becomes a searchable knowledge base |
 | **dataset** | **Living datasets**: scrape/gather output → named local table with dedupe, per-run diff and CSV/JSON export (a free price/stock time series with `monitor`) |
 | **batch** | **Async jobs**: start a fanout/crawl in the background (detached, survives the call), then `status`/`get` the results later |
@@ -437,12 +438,13 @@ Then set your AI credentials (one time):
 | **inspect** | DevTools inspection: `console`/`network` capture (over `duration`), `perf` metrics (Web Vitals), `eval` with a stack trace on error |
 | **assert** | **Test assertions**: title/url is/contains, text_visible, element exists/count/text/value/visible, has_cookie, screenshot_match (visual regression) — one or an `assertions` array |
 
-#### HTTP & Storage (5 tools) — Apify/Crawlee parity
+#### HTTP & Storage (6 tools) — Apify/Crawlee parity
 | Tool | Purpose |
 |------|---------|
 | **fetch** | **Raw HTTP fetch, no browser** (Crawlee's cheap path): GET/POST a URL or JSON API; follows redirects, gzip/br, cookie jar, proxy via CONNECT, realistic `fingerprint` headers; `as` json/text. 10-50× faster for static/SSR pages & APIs |
 | **queue** | **Durable RequestQueue**: a persisted, deduped, resumable frontier — a crawl killed mid-run resumes where it stopped; per-URL retry → dead-letter. `add`/`stats`/`next`/`failed`/`list`/`drop` |
 | **kvs** | **Key-Value Store**: arbitrary blobs/records (screenshots, PDFs, Actor INPUT/OUTPUT, checkpoints, RAG payloads); JSON/text/binary. `set`/`get`/`list`/`delete` |
+| **vectorize** | **Scrape → RAG bridge**: chunk + embed + upsert a dataset into a vector DB, **incrementally** (only re-embeds changed rows). embed local/openai/voyage; target qdrant/chroma/pinecone/dry |
 | **webhook** | **Run-lifecycle webhooks**: subscribe to `run.succeeded`/`failed`/… → POST on the event ("job done → pull the dataset"). Backs the n8n/Zapier connectors |
 | **schedule** | **Cron scheduling of Actors**: run any actor on a 5-field cron (step/range/list). `add`/`list`/`remove`/`enable`/`run-due` |
 
@@ -674,7 +676,7 @@ src/
   llm.js                Brain (Messages API via LogicaProxy or Anthropic)
   agent.js              Autonomous loop (perceive → decide → act)
   electron-page.js      Adapter: webContents.debugger → page contract
-  mcp-server.js         MCP server (stdio, 80 tools)
+  mcp-server.js         MCP server (stdio, 82 tools)
   tools.js              SINGLE REGISTRY (CLI + MCP share this)
   fanout.js             Parallel multi-agent orchestration
   search.js             Web search (Bing default, Brave if key set)

@@ -1,4 +1,4 @@
-# Logica Pilot — Tool Reference (80 tools)
+# Logica Pilot — Tool Reference (82 tools)
 
 The complete, authoritative reference for every Logica Pilot capability. **One
 registry, three surfaces** — each tool is identical across:
@@ -60,23 +60,23 @@ never leaves the machine).
 | **permission** | Grant browser permissions (geolocation/notifications/camera/mic/clipboard…) via CDP; `reset` clears | `permissions`, `reset` |
 | **evalbatch** | Run several JS expressions in one round-trip; each result/error returned in order | `expressions*`, `url` |
 
-## Autonomy (6)
+## Autonomy (3)
 
 | Tool | Purpose | Args |
 |------|---------|------|
 | **run** | Execute a multi-step objective autonomously (observe→decide→act). Saved by the flight recorder; **learns fixes + recipes** per site; `shots` captures a screenshot per step | `goal*`, `url`, `maxSteps`, `shots` |
 | **adapter** | **Site Adapters** — a site task becomes a named, parameterized tool (`save`/`run`); saved adapters appear as their own MCP tools `x_<name>` | `action*`, `name`, `host`, `goal`, `params` |
 | **workflow** | **Autopilot Recorder** — save concrete steps, `replay` deterministically **by label** (no LLM); AI fallback on a miss | `action*`, `name`, `steps`, `params`, `fallback` |
-| **actor** | **Formal Actor packaging** — a versioned, self-describing unit = manifest + typed INPUT schema + entry (crawler/tool) + engine. `init`/`list`/`get`/`run`/`remove`; `run` validates+coerces input, writes a dataset + INPUT/OUTPUT to the run KVS; REST-callable | `action*`, `name`, `input`, `schema`, `entry`, `engine` |
-| **crawler** | **Crawlee-style structured crawler** — durable queue + a `pageFunction` on every matched page → rows into a dataset; auto link-enqueue (`strategy`/`globs`), concurrency, retry, **resume**; `engine` http/browser/adaptive; `sessionPool` to rotate identities | `url`, `name`, `pageFunction`, `engine`, `strategy`, `globs`, `maxDepth`, `maxRequests`, `maxConcurrency`, `resume`, `sessionPool` |
-| **sessions** | **Rotating identity pool** with health scoring (SessionPool): sticky fingerprint+proxy+cookies per session; `borrow` least-used, `good`/`bad` scoring, auto-retire burned identities; feed `crawler --sessionPool` | `action*`, `name`, `id`, `maxPoolSize`, `pool` |
 
-## Site (6) — whole-site capabilities
+## Site (9) — whole-site capabilities
 
 | Tool | Purpose | Args |
 |------|---------|------|
 | **map** | Discover a site's URLs instantly (robots.txt sitemaps + sitemap.xml, on-page links fallback); `search` filter | `url*`, `search`, `limit` |
 | **crawl** | Crawl a site/section BFS in parallel: `includePaths`/`excludePaths` regex, `maxDepth`, robots.txt; compact `{url,title,text}` | `url*`, `limit`, `maxDepth`, `includePaths`, `excludePaths`, `proxy`, `location`, `redactPII` |
+| **crawler** | **Crawlee-style structured crawler** — durable queue + a `pageFunction` on every matched page → rows into a dataset; auto link-enqueue (`strategy`/`globs`), concurrency, retry, **resume**; `engine` http/browser/adaptive; `browsers`/`autoscale`/`sessionPool` | `url`, `name`, `pageFunction`, `engine`, `strategy`, `globs`, `maxDepth`, `maxRequests`, `browsers`, `autoscale`, `sessionPool` |
+| **actor** | **Formal Actor packaging** — a versioned, self-describing unit = manifest + typed INPUT schema + entry (crawler/tool). `run` validates+coerces input, writes a dataset + INPUT/OUTPUT to the run KVS; REST-callable | `action*`, `name`, `input`, `schema`, `entry` |
+| **registry** | **Shareable Actor registry** (self-hostable, federated): `publish`/`search`/`add`; any `serve` node hosts `/index.json` for federation | `action*`, `name`, `query`, `version`, `url` |
 | **index** | **Local BM25 search** — crawl once, then query **offline (0 tokens, 0 network)** | `action*`, `name`, `url`, `q`, `k`, `limit` |
 | **dataset** | **Living datasets** — scrape/gather output → named table with dedupe, per-run diff, CSV/JSON export | `action*`, `name`, `rows`, `key`, `format` |
 | **batch** | **Async jobs** — start a fanout/crawl detached, then `status`/`get` | `action*`, `kind`, `id`, … |
@@ -145,13 +145,14 @@ never leaves the machine).
 |------|---------|------|
 | **assert** | Assertions (title/url is/contains, text_visible, element_exists/count/text/value/visible, has_cookie, screenshot_match); one `{type,expected,selector?}` or an `assertions` array | `type`, `expected`, `selector`, `index`, `name`, `assertions`, `url` |
 
-## HTTP & Storage (5) — Apify/Crawlee parity
+## HTTP & Storage (6) — Apify/Crawlee parity
 
 | Tool | Purpose | Args |
 |------|---------|------|
 | **fetch** | **Raw HTTP fetch, no browser** (Crawlee's cheap path): GET/POST a URL or JSON API; redirects, gzip/br, cookie jar, proxy via CONNECT, `fingerprint` headers; `as` json/text. 10-50× faster for static/SSR pages & APIs | `url*`, `method`, `headers`, `body`, `proxy`, `as`, `fingerprint`, `maxBytes` |
 | **queue** | **Durable RequestQueue** — persisted, deduped, resumable frontier (a crawl killed mid-run resumes; per-URL retry → dead-letter). `add`/`stats`/`next`/`failed`/`list`/`drop` | `action`, `name`, `urls`, `url`, `label`, `clear` |
 | **kvs** | **Key-Value Store** — arbitrary blobs/records (screenshots, PDFs, Actor INPUT/OUTPUT, checkpoints, RAG payloads). JSON/text/`{base64,contentType}`. `set`/`get`/`list`/`delete`/`stores`/`drop` | `action`, `store`, `key`, `value`, `contentType` |
+| **vectorize** | **Scrape → RAG bridge**: chunk + embed + upsert a dataset into a vector DB, INCREMENTALLY (only re-embeds changed rows). embed local/openai/voyage; target qdrant/chroma/pinecone/dry | `dataset*`, `embed`, `target`, `url`, `collection`, `dataFields`, `chunkSize` |
 | **webhook** | **Run-lifecycle webhooks** — subscribe to `run.succeeded`/`failed`/… → POST on the event ("job done → pull the dataset"). `add`/`list`/`remove`/`fire` | `action`, `event`, `url`, `actor`, `id`, `data` |
 | **schedule** | **Cron scheduling of Actors** — 5-field cron (step/range/list). `add`/`list`/`remove`/`enable`/`run-due` | `action`, `cron`, `actor`, `input`, `id`, `enabled` |
 
