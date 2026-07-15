@@ -68,6 +68,7 @@ const webhooksLib = require('./webhooks');
 const schedulerLib = require('./scheduler');
 const sessionPoolLib = require('./session-pool');
 const vectorizeLib = require('./vectorize');
+const registryLib = require('./registry');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -1187,6 +1188,20 @@ const TOOLS = [
       if (a.action === 'next') { const n = q.fetchNext(); return { json: n ? { url: n.url, label: n.label, key: n.k } : { empty: true } }; }
       if (a.action === 'failed') return { json: q.failed() };
       return { json: q.stats() };
+    },
+  },
+  {
+    name: 'registry', group: 'site', primary: 'action', pageless: true,
+    description: 'Shareable Actor registry (Apify Store, self-hostable + federated): publish a local actor, search a catalog, and install someone else\'s scraper. action: publish|search|add|list|info|remote|unpublish. Remote registries are any URL served by `logica-pilot serve` (/index.json).',
+    input: { properties: { action: { type: 'string', enum: ['publish', 'search', 'add', 'list', 'info', 'remote', 'unpublish'] }, name: { type: 'string' }, query: { type: 'string' }, version: { type: 'string' }, url: { type: 'string' } } },
+    run: async (a) => {
+      if (a.action === 'publish') return { json: registryLib.publish(a.name) };
+      if (a.action === 'search') return { json: await registryLib.search(a.query || a.name || '') };
+      if (a.action === 'add') return { json: await registryLib.add(a.name, { version: a.version }) };
+      if (a.action === 'info') return { json: registryLib.info(a.name, a.version) || { error: 'not found' } };
+      if (a.action === 'remote') return { json: registryLib.addRemote(a.url) };
+      if (a.action === 'unpublish') return { json: registryLib.unpublish(a.name, a.version) };
+      return { json: registryLib.list() };
     },
   },
   {

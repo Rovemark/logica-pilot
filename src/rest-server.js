@@ -158,7 +158,16 @@ function makeServer({ apiKey, model } = {}) {
         return typeof v === 'string' ? send(res, 200, v, 'text/plain; charset=utf-8') : send(res, 200, v);
       }
 
-      return send(res, 404, { error: 'not found', hint: 'GET /?url= · GET /v1/tools · POST /v1/tools/:name · GET /v1/datasets/:name/items · GET /health' });
+      // Registry federation: serve this node's catalog + manifests so another LP can addRemote() it.
+      if (req.method === 'GET' && u.pathname === '/index.json') {
+        return send(res, 200, { actors: require('./registry').list() });
+      }
+      if (req.method === 'GET' && (m = u.pathname.match(/^\/([a-z0-9_-]+)@([\w.-]+)\/actor\.json$/i))) {
+        const man = require('./registry').info(m[1], m[2]);
+        return man ? send(res, 200, man) : send(res, 404, { error: 'actor not found' });
+      }
+
+      return send(res, 404, { error: 'not found', hint: 'GET /?url= · GET /v1/tools · POST /v1/tools/:name · GET /v1/datasets/:name/items · GET /index.json · GET /health' });
     } catch (e) {
       return send(res, 500, { error: e.message });
     }
