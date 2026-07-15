@@ -50,7 +50,7 @@ async function cmdTool(tool, args) {
   if (tool.primary && args._[1] !== undefined && a[tool.primary] === undefined) a[tool.primary] = args._[1];
   for (const k of ['urls', 'what', 'files', 'permissions', 'levels']) if (typeof a[k] === 'string') a[k] = a[k].split(',').map((s) => s.trim()).filter(Boolean);
   for (const k of ['schema', 'fields', 'includePaths', 'excludePaths', 'notify', 'rows', 'location', 'params', 'steps', 'assertions', 'response', 'headers', 'expressions']) if (typeof a[k] === 'string') { try { a[k] = JSON.parse(a[k]); } catch {} }
-  for (const k of ['index', 'maxSteps', 'limit', 'amount', 'maxElements', 'timeout', 'concurrency', 'maxChars', 'offset', 'textChars', 'maxDepth', 'lat', 'lon', 'accuracy', 'from', 'to', 'duration', 'olderThanDays']) {
+  for (const k of ['index', 'maxSteps', 'limit', 'amount', 'maxElements', 'timeout', 'concurrency', 'maxChars', 'offset', 'textChars', 'maxDepth', 'lat', 'lon', 'accuracy', 'from', 'to', 'duration', 'olderThanDays', 'maxBytes']) {
     if (typeof a[k] === 'string') a[k] = Number(a[k]);
   }
 
@@ -125,7 +125,16 @@ async function main() {
 
   try {
     if (cmd === 'browser' || cmd === 'ui') return cmdBrowser(args);
-    if (cmd === 'mcp' || cmd === 'serve') return require('../src/mcp-server').start();
+    if (cmd === 'mcp') return require('../src/mcp-server').start();
+    if (cmd === 'serve') {
+      banner();
+      const port = args.port ? parseInt(args.port, 10) : 8080;
+      const { host, authenticated } = await require('../src/rest-server').serve({ port, host: args.host, model: args.model });
+      const key = process.env.LOGICA_PILOT_API_KEY;
+      console.log(`  ${C.green}◢${C.reset} REST API on ${C.cyan}http://${host}:${port}${C.reset}  ${authenticated ? C.dim + '(x-api-key required)' + C.reset : C.dim + '(loopback, no auth — set LOGICA_PILOT_API_KEY for remote)' + C.reset}`);
+      console.log(`  ${C.dim}GET /?url=…&render_js=&markdown=&screenshot=&extract=  ·  POST /v1/tools/:name  ·  GET /v1/tools  ·  GET /health${C.reset}`);
+      return; // keep the process alive (server is listening)
+    }
     if (cmd === 'monitor-daemon') { banner(); return require('../src/monitor').runDaemon({ tickMs: args.tick ? parseInt(args.tick, 10) : 30000 }); }
     if (cmd === 'version' || cmd === '--version' || cmd === '-v') {
       return console.log('logica-pilot ' + require('../package.json').version);

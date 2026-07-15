@@ -55,6 +55,9 @@ const captchaLib = require('./captcha');
 const video = require('./video');
 const proxyPool = require('./proxy-pool');
 const persist = require('./persist');
+const httpEngine = require('./http-engine');
+const requestQueue = require('./request-queue');
+const kvs = require('./kvs');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -126,6 +129,20 @@ async function ensureUrl(page, a) {
     // so the perception map isn't polluted (and the real content isn't blocked).
     if (a.consent !== false) { try { await dismissConsent(page); } catch {} }
   }
+}
+
+// engine:'http' → fetch over raw HTTP (no browser navigation) and load the HTML into
+// the page so the existing DOM parsers (read/observe/extract/meta/product) run on it
+// at a fraction of the cost. engine:'browser' (default) navigates normally. Returns
+// the http response meta (or null for the browser path) so callers can read status.
+async function ensureContent(page, a) {
+  if (a && a.engine === 'http' && a.url) {
+    const r = await httpEngine.httpFetch(a.url, { proxy: a.proxy, cookies: a.cookies });
+    await httpEngine.loadHtml(page, r.body, r.url);
+    return { engine: 'http', status: r.status, contentType: r.contentType, finalUrl: r.url };
+  }
+  await ensureUrl(page, a);
+  return { engine: 'browser' };
 }
 // ensures elements have data-lpilot-id (needed by index-based actions)
 async function ensureIds(page) { await perception.snapshot(page, { maxEls: 200 }); }
@@ -201,6 +218,8 @@ const TOOLS = [
         offset: { type: 'number', description: 'start position for pagination' },
         maxAge: { type: 'number', description: 'ms: reuse a cached read this fresh (0 = always live)' },
         redactPII: { type: 'boolean', description: 'mask emails, phones, CPF/CNPJ, cards (Luhn), IPs — deterministic, local' },
+        engine: { type: 'string', enum: ['browser', 'http'], description: 'http = fetch over raw HTTP + parse without a browser navigation (10-50x cheaper for static/SSR pages; no JS). Default browser.' },
+        proxy: { type: 'string', description: 'engine:http only — user:pass@host:port' },
       },
     },
     run: async (a, ctx) => {
@@ -209,12 +228,12 @@ const TOOLS = [
       // Opt-in cache (Firecrawl-style maxAge): serve a fresh-enough previous read
       // of the same url+format+window without reloading the page. 0 = always live.
       const maxAge = Math.max(0, Number(a.maxAge) || 0);
-      const ck = a.url ? cacheKey(['read', a.url, a.markdown ? 'md' : 'txt', String(offset), String(maxChars), a.redactPII ? 'pii' : '']) : null;
+      const ck = a.url ? cacheKey(['read', a.url, a.markdown ? 'md' : 'txt', String(offset), String(maxChars), a.redactPII ? 'pii' : '', a.engine || '']) : null;
       if (ck && maxAge > 0 && !a.summarize) {
         const hit = cacheLoad(ck, maxAge);
         if (hit) return { text: hit.text };
       }
-      await ensureUrl(ctx.page, a);
+      await ensureContent(ctx.page, a);
       let text; let total;
       if (a.markdown) {
         const md = await perception.markdown(ctx.page, { maxChars: Math.min(offset + maxChars + 1, 60000) });
@@ -1069,6 +1088,45 @@ const TOOLS = [
     description: 'Read/write localStorage or sessionStorage (action: get|set|remove|clear; type: localStorage|sessionStorage).',
     input: { properties: { url: { type: 'string' }, action: { type: 'string' }, type: { type: 'string' }, key: { type: 'string' }, value: { type: 'string' } }, required: ['action'] },
     run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await primitives.storage(ctx.page, a.action, a.type || 'localStorage', a.key, a.value) }; },
+  },
+  {
+    name: 'kvs', group: 'http', primary: 'action', pageless: true,
+    description: 'Key-Value Store (Apify KeyValueStore) for arbitrary blobs/records: screenshots, PDFs, Actor INPUT/OUTPUT, crawl checkpoints, RAG payloads. action: set|get|list|delete|stores|drop. Values: JSON object, text, or {base64,contentType} for binary.',
+    input: { properties: { action: { type: 'string', enum: ['set', 'get', 'list', 'delete', 'stores', 'drop'] }, store: { type: 'string' }, key: { type: 'string' }, value: {}, contentType: { type: 'string' } } },
+    run: async (a) => {
+      if (a.action === 'stores') return { json: kvs.listStores() };
+      if (a.action === 'drop') return { json: kvs.drop(a.store) };
+      const store = a.store || 'default';
+      if (a.action === 'set') { let v = a.value; if (typeof v === 'string') { try { v = JSON.parse(v); } catch {} } return { json: kvs.setValue(store, a.key, v, { contentType: a.contentType }) }; }
+      if (a.action === 'get') { const v = kvs.getValue(store, a.key); return v == null ? { json: { error: 'key not found' } } : (typeof v === 'string' ? { text: v } : { json: v }); }
+      if (a.action === 'delete') return { json: kvs.del(store, a.key) };
+      return { json: kvs.listKeys(store) };
+    },
+  },
+  {
+    name: 'queue', group: 'http', primary: 'action', pageless: true,
+    description: 'Durable, resumable, deduped request queue (Crawlee RequestQueue). action: add|stats|next|failed|list|drop. Persists to disk — a crawl killed mid-run resumes where it stopped, dedups across runs, tracks per-URL retry/dead-letter.',
+    input: { properties: { action: { type: 'string', enum: ['add', 'stats', 'next', 'failed', 'list', 'drop'] }, name: { type: 'string' }, urls: { type: 'array', items: { type: 'string' } }, url: { type: 'string' }, label: { type: 'string' }, clear: { type: 'boolean' } } },
+    run: async (a) => {
+      if (a.action === 'list') return { json: requestQueue.list() };
+      if (a.action === 'drop') return { json: requestQueue.drop(a.name) };
+      const q = requestQueue.open(a.name || 'default', { clear: !!a.clear });
+      if (a.action === 'add') { const urls = a.urls && a.urls.length ? a.urls : (a.url ? [a.url] : []); const r = q.addBatch(urls.map((u) => ({ url: u, label: a.label })));  return { json: { ...r, stats: q.stats() } }; }
+      if (a.action === 'next') { const n = q.fetchNext(); return { json: n ? { url: n.url, label: n.label, key: n.k } : { empty: true } }; }
+      if (a.action === 'failed') return { json: q.failed() };
+      return { json: q.stats() };
+    },
+  },
+  {
+    name: 'fetch', group: 'http', primary: 'url', pageless: true,
+    description: 'Raw HTTP fetch WITHOUT a browser (Apify/Crawlee cheap path): GET/POST a URL or JSON API. Follows redirects, gzip/br, browser-like headers, cookie jar, proxy (user:pass@host:port via CONNECT). as:json parses the body; as:text strips tags. 10-50x faster than a browser for static/SSR pages & APIs.',
+    input: { properties: { url: { type: 'string' }, method: { type: 'string' }, headers: { type: 'object' }, body: { type: 'string' }, proxy: { type: 'string' }, as: { type: 'string', enum: ['raw', 'json', 'text'] }, maxBytes: { type: 'number' } }, required: ['url'] },
+    run: async (a) => {
+      const r = await httpEngine.httpFetch(a.url, { method: a.method || 'GET', headers: a.headers, body: a.body, proxy: a.proxy, maxBytes: a.maxBytes });
+      if (a.as === 'json') { try { return { json: { status: r.status, url: r.url, data: JSON.parse(r.body) } }; } catch (e) { return { json: { status: r.status, url: r.url, error: 'not JSON: ' + e.message, body: r.body.slice(0, 500) } }; } }
+      if (a.as === 'text') { const txt = r.body.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); return { json: { status: r.status, url: r.url, contentType: r.contentType, text: txt.slice(0, 20000) } }; }
+      return { json: { status: r.status, url: r.url, contentType: r.contentType, redirects: r.redirects, bytes: r.body.length, headers: r.headers, body: r.body.length > 20000 ? r.body.slice(0, 20000) + '…[truncated]' : r.body } };
+    },
   },
   {
     name: 'permission', group: 'actions',
