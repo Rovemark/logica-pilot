@@ -65,6 +65,9 @@ async function cmdTool(tool, args) {
     if (!tool.pageless) {
       // --attach <port>: drive an already-running browser (real profile/logins).
       const opts = args.attach ? { attach: args.attach === true ? 9222 : parseInt(args.attach, 10) } : { headless: !args.headful };
+      if (args.proxy) opts.proxy = args.proxy;
+      if (args.proxyPool) { opts.proxyPool = args.proxyPool; opts.proxyStrategy = args.proxyStrategy; opts.proxySession = args.proxySession; }
+      if (args.location) opts.location = args.location;
       pilot = new LogicaPilot(opts); await pilot.launch(); ctx.page = pilot.page; ctx.pilot = pilot;
     }
     printOut(await tool.run(a, ctx), !!args.json);

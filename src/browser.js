@@ -260,6 +260,17 @@ class Browser {
       opts.proxy || process.env.LOGICA_PILOT_PROXY || process.env.HTTPS_PROXY || process.env.HTTP_PROXY,
     );
 
+    // Named proxy pool (per-request auth + rotation): Chromium's --proxy-server can't
+    // carry creds or rotate, so we stand up a local forwarding proxy that rotates
+    // upstreams from the pool and point Chromium at it. See proxy-server.js.
+    let localProxyServer = null;
+    let proxyServerArg = proxy ? proxy.server : null;
+    if (opts.proxyPool) {
+      const lp = await require('./proxy-server').startProxy({ pool: opts.proxyPool, strategy: opts.proxyStrategy, session: opts.proxySession });
+      localProxyServer = lp.server;
+      proxyServerArg = lp.url;
+    }
+
     const args = [
       `--user-data-dir=${userDataDir}`,
       '--remote-debugging-pipe',
@@ -281,7 +292,7 @@ class Browser {
       `--window-size=${width},${height}`,
     ];
     if (headless) args.push('--headless=new', '--hide-scrollbars', '--mute-audio');
-    if (proxy) args.push(`--proxy-server=${proxy.server}`);
+    if (proxyServerArg) args.push(`--proxy-server=${proxyServerArg}`);
     if (Array.isArray(opts.extraArgs)) args.push(...opts.extraArgs);
     args.push('about:blank');
 
@@ -338,6 +349,7 @@ class Browser {
       binary,
     });
     browser._proxyAuth = proxy && proxy.username ? { username: proxy.username, password: proxy.password } : null;
+    browser._localProxy = localProxyServer;
     browser._location = resolveLocation(opts.location || process.env.LOGICA_PILOT_LOCATION || null);
     return browser;
   }
@@ -438,6 +450,7 @@ class Browser {
     try {
       this._child.kill('SIGKILL');
     } catch {}
+    try { if (this._localProxy) this._localProxy.close(); } catch {}
     cleanupDir(this._userDataDir);
   }
 }

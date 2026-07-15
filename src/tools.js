@@ -60,6 +60,7 @@ const requestQueue = require('./request-queue');
 const kvs = require('./kvs');
 const fingerprintLib = require('./fingerprint');
 const crawlerLib = require('./crawler');
+const adaptive = require('./adaptive');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -143,6 +144,9 @@ async function ensureContent(page, a) {
     await httpEngine.loadHtml(page, r.body, r.url);
     return { engine: 'http', status: r.status, contentType: r.contentType, finalUrl: r.url };
   }
+  if (a && a.engine === 'adaptive' && a.url) {
+    return adaptive.smartLoad(page, a.url, { proxy: a.proxy, cookies: a.cookies });
+  }
   await ensureUrl(page, a);
   return { engine: 'browser' };
 }
@@ -220,8 +224,8 @@ const TOOLS = [
         offset: { type: 'number', description: 'start position for pagination' },
         maxAge: { type: 'number', description: 'ms: reuse a cached read this fresh (0 = always live)' },
         redactPII: { type: 'boolean', description: 'mask emails, phones, CPF/CNPJ, cards (Luhn), IPs — deterministic, local' },
-        engine: { type: 'string', enum: ['browser', 'http'], description: 'http = fetch over raw HTTP + parse without a browser navigation (10-50x cheaper for static/SSR pages; no JS). Default browser.' },
-        proxy: { type: 'string', description: 'engine:http only — user:pass@host:port' },
+        engine: { type: 'string', enum: ['browser', 'http', 'adaptive'], description: 'browser (default, full CDP) · http (raw fetch, 10-50x cheaper, no JS) · adaptive (try http, auto-escalate to browser on JS-shell/anti-bot; caches per-host verdict).' },
+        proxy: { type: 'string', description: 'http/adaptive engine — user:pass@host:port' },
       },
     },
     run: async (a, ctx) => {
@@ -1133,7 +1137,7 @@ const TOOLS = [
   {
     name: 'crawler', group: 'site', primary: 'url',
     description: 'Crawlee-style structured crawler: durable queue + a pageFunction run on every matched page → rows into a named dataset, with auto link-enqueue, concurrency, retry, and RESUME. engine:http (cheap, no browser) or browser. pageFunction is JS whose return object(s) become dataset rows; `context.url/userData/enqueue()` available. strategy: same-domain|same-hostname|same-origin; globs to filter.',
-    input: { properties: { url: { type: 'string' }, urls: { type: 'array', items: { type: 'string' } }, name: { type: 'string' }, pageFunction: { type: 'string' }, engine: { type: 'string', enum: ['http', 'browser'] }, strategy: { type: 'string' }, globs: { type: 'array', items: { type: 'string' } }, maxDepth: { type: 'number' }, maxRequests: { type: 'number' }, maxConcurrency: { type: 'number' }, resume: { type: 'boolean' } } },
+    input: { properties: { url: { type: 'string' }, urls: { type: 'array', items: { type: 'string' } }, name: { type: 'string' }, pageFunction: { type: 'string' }, engine: { type: 'string', enum: ['http', 'browser', 'adaptive'] }, strategy: { type: 'string' }, globs: { type: 'array', items: { type: 'string' } }, maxDepth: { type: 'number' }, maxRequests: { type: 'number' }, maxConcurrency: { type: 'number' }, resume: { type: 'boolean' } } },
     run: async (a, ctx) => {
       const startUrls = a.urls && a.urls.length ? a.urls : (a.url ? [a.url] : []);
       if (!startUrls.length) return { json: { error: 'pass url or urls' } };
