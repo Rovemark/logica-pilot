@@ -63,6 +63,7 @@ const crawlerLib = require('./crawler');
 const adaptive = require('./adaptive');
 const apisLib = require('./apis');
 const jsdataLib = require('./jsdata');
+const actorLib = require('./actor');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -1134,6 +1135,22 @@ const TOOLS = [
       if (a.action === 'next') { const n = q.fetchNext(); return { json: n ? { url: n.url, label: n.label, key: n.k } : { empty: true } }; }
       if (a.action === 'failed') return { json: q.failed() };
       return { json: q.stats() };
+    },
+  },
+  {
+    name: 'actor', group: 'site', primary: 'action',
+    description: 'Formal Actor packaging (Apify Actors): a self-describing, versioned unit = manifest + typed INPUT schema + entry (crawler config or tool call) + engine settings. action: init|list|get|run|remove. run validates+coerces the input, executes, and writes rows to a dataset + INPUT/OUTPUT to the run KVS. Makes a scraper portable + REST-callable (POST /v1/actors/:name/runs).',
+    input: { properties: { action: { type: 'string', enum: ['init', 'list', 'get', 'run', 'remove'] }, name: { type: 'string' }, input: { type: 'object' }, description: { type: 'string' }, schema: { type: 'object' }, entry: { type: 'object' }, engine: { type: 'object' } } },
+    run: async (a, ctx) => {
+      if (a.action === 'list') return { json: actorLib.list() };
+      if (a.action === 'get') return { json: actorLib.get(a.name) || { error: 'not found' } };
+      if (a.action === 'remove') return { json: actorLib.remove(a.name) };
+      if (a.action === 'init') return { json: actorLib.init(a.name, { description: a.description, input: a.schema || a.input, entry: a.entry, engine: a.engine }).manifest };
+      if (a.action === 'run') {
+        const runTool = (name, args, opts) => require('./rest-server').runTool(name, args, opts);
+        return { json: await actorLib.run(a.name, a.input || {}, { pilot: ctx.pilot, runTool, model: ctx.model }) };
+      }
+      return { json: { error: 'unknown action' } };
     },
   },
   {
