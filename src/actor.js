@@ -103,6 +103,8 @@ async function run(name, rawInput, { pilot, runTool, model, runId } = {}) {
 
   kvs.setValue(rid, 'INPUT', input);
   kvs.setValue(rid, 'OUTPUT', result);
+  // Fire run-lifecycle webhook (best-effort, non-blocking on failure).
+  try { await require('./webhooks').fire(result && result.error ? 'run.failed' : 'run.succeeded', { actor: safe(name), dataset: dsName, datasetId: dsName, runId: rid, status: result && result.error ? 'FAILED' : 'SUCCEEDED' }); } catch {}
   return { actor: safe(name), runId: rid, dataset: dsName, input, result };
 }
 

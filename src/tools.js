@@ -64,6 +64,8 @@ const adaptive = require('./adaptive');
 const apisLib = require('./apis');
 const jsdataLib = require('./jsdata');
 const actorLib = require('./actor');
+const webhooksLib = require('./webhooks');
+const schedulerLib = require('./scheduler');
 
 // ── local page cache (opt-in via read's maxAge) ─────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.logica-pilot', 'cache');
@@ -1108,6 +1110,32 @@ const TOOLS = [
     description: 'Read/write localStorage or sessionStorage (action: get|set|remove|clear; type: localStorage|sessionStorage).',
     input: { properties: { url: { type: 'string' }, action: { type: 'string' }, type: { type: 'string' }, key: { type: 'string' }, value: { type: 'string' } }, required: ['action'] },
     run: async (a, ctx) => { await ensureUrl(ctx.page, a); return { json: await primitives.storage(ctx.page, a.action, a.type || 'localStorage', a.key, a.value) }; },
+  },
+  {
+    name: 'webhook', group: 'http', primary: 'action', pageless: true,
+    description: 'Run-lifecycle webhooks (Apify webhooks): subscribe to run.created|succeeded|failed|aborted|timed_out and get a POST when it happens — "job finished → pull the dataset". action: add|list|remove|fire. Backs the n8n/Zapier connectors.',
+    input: { properties: { action: { type: 'string', enum: ['add', 'list', 'remove', 'fire'] }, event: { type: 'string' }, url: { type: 'string' }, actor: { type: 'string' }, id: { type: 'string' }, data: { type: 'object' } } },
+    run: async (a) => {
+      if (a.action === 'add') return { json: webhooksLib.add(a.event, a.url, { actor: a.actor }) };
+      if (a.action === 'remove') return { json: webhooksLib.remove(a.id) };
+      if (a.action === 'fire') return { json: await webhooksLib.fire(a.event, a.data || {}) };
+      return { json: webhooksLib.list() };
+    },
+  },
+  {
+    name: 'schedule', group: 'http', primary: 'action', pageless: true,
+    description: 'Cron scheduling of Actors (Apify schedules): run any actor on a 5-field cron (min hour dom mon dow). action: add|list|remove|enable|run-due. run-due executes schedules whose time has come (call from a daemon/cron).',
+    input: { properties: { action: { type: 'string', enum: ['add', 'list', 'remove', 'enable', 'run-due'] }, cron: { type: 'string' }, actor: { type: 'string' }, input: { type: 'object' }, id: { type: 'string' }, enabled: { type: 'boolean' } } },
+    run: async (a, ctx) => {
+      if (a.action === 'add') return { json: schedulerLib.add(a.cron, a.actor, a.input || {}) };
+      if (a.action === 'remove') return { json: schedulerLib.remove(a.id) };
+      if (a.action === 'enable') return { json: schedulerLib.setEnabled(a.id, a.enabled !== false) };
+      if (a.action === 'run-due') {
+        const runner = (actor, input) => require('./rest-server').runTool('actor', { action: 'run', name: actor, input }, { model: ctx.model });
+        return { json: await schedulerLib.runDue(runner) };
+      }
+      return { json: schedulerLib.list() };
+    },
   },
   {
     name: 'kvs', group: 'http', primary: 'action', pageless: true,
