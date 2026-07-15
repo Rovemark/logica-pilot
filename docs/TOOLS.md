@@ -1,4 +1,4 @@
-# Logica Pilot — Tool Reference (68 tools)
+# Logica Pilot — Tool Reference (80 tools)
 
 The complete, authoritative reference for every Logica Pilot capability. **One
 registry, three surfaces** — each tool is identical across:
@@ -24,16 +24,19 @@ never leaves the machine).
 | **reload** | Reload, return the map | `url` |
 | **wait** | Semantic wait (text/selector/timeout — no brittle sleeps) | `text`, `selector`, `timeout` |
 
-## Perception (11) — token-first perception
+## Perception (14) — token-first perception
 
 | Tool | Purpose | Args |
 |------|---------|------|
 | **observe** | The indexed map (`[n] type "label"` + text) — replaces HTML/screenshot | `url`, `maxElements` |
-| **read** | Readable content; `markdown` = LLM-ready Markdown; `maxChars`/`offset` pagination; `maxAge` cache; `redactPII`; `summarize` | `url`, `markdown`, `maxChars`, `offset`, `maxAge`, `redactPII`, `summarize` |
+| **read** | Readable content; `markdown` = LLM-ready Markdown; `maxChars`/`offset` pagination; `maxAge` cache; `redactPII`; `summarize`; **`engine`** = `browser`\|`http`\|`adaptive` (http = fetch+parse without a browser, 10-50× cheaper; adaptive auto-escalates) | `url`, `markdown`, `maxChars`, `offset`, `maxAge`, `redactPII`, `summarize`, `engine`, `proxy` |
 | **extract** | Structured JSON (`instruction`/`schema`) or CSS-matched text (`query`) | `url`, `instruction`, `schema`, `query` |
 | **meta** | Deterministic metadata (0 tokens): title/description/canonical/favicon, OpenGraph/Twitter, JSON-LD types | `url` |
 | **images** | Meaningful images (url+alt+size), og:image first, icons skipped | `url`, `max` |
 | **product** | Deterministic product data (JSON-LD → microdata → og:price): name/brand/price/availability/rating — **fails closed**, never guesses | `url` |
+| **apis** | **Backend API discovery** — find the private JSON APIs a page calls (`discover`) and re-fire them (`replay`, carries live session/auth). Hit the data source, not the HTML | `url`, `action`, `duration`, `on`, `method`, `params`, `body` |
+| **jsdata** | Surface in-page JS hydration state (`__NEXT_DATA__`, `__NUXT__`, `__APOLLO_STATE__`, …) + every `application/json`/`ld+json` script — clean data before it's rendered | `url` |
+| **locate** | **Reverse-lookup** — paste a value you see on the page, get the exact JSON-path + source (hydration blob / JSON-LD / discovered API) that yields it | `url`, `value*`, `regex` |
 | **video** | Token-first video understanding: extract sources/duration/platform, fetch caption tracks into a transcript, optionally sample keyframes (`frames`) and LLM-summarize (`describe`) | `url`, `describe`, `frames`, `index` |
 | **media** | Discover video/audio/direct files/embeds; `download` saves direct files (size-capped) | `url`, `download`, `dir`, `maxMB` |
 | **links** | All links (text+url), deduped, compact | `url` |
@@ -57,13 +60,16 @@ never leaves the machine).
 | **permission** | Grant browser permissions (geolocation/notifications/camera/mic/clipboard…) via CDP; `reset` clears | `permissions`, `reset` |
 | **evalbatch** | Run several JS expressions in one round-trip; each result/error returned in order | `expressions*`, `url` |
 
-## Autonomy (3)
+## Autonomy (6)
 
 | Tool | Purpose | Args |
 |------|---------|------|
 | **run** | Execute a multi-step objective autonomously (observe→decide→act). Saved by the flight recorder; **learns fixes + recipes** per site; `shots` captures a screenshot per step | `goal*`, `url`, `maxSteps`, `shots` |
 | **adapter** | **Site Adapters** — a site task becomes a named, parameterized tool (`save`/`run`); saved adapters appear as their own MCP tools `x_<name>` | `action*`, `name`, `host`, `goal`, `params` |
 | **workflow** | **Autopilot Recorder** — save concrete steps, `replay` deterministically **by label** (no LLM); AI fallback on a miss | `action*`, `name`, `steps`, `params`, `fallback` |
+| **actor** | **Formal Actor packaging** — a versioned, self-describing unit = manifest + typed INPUT schema + entry (crawler/tool) + engine. `init`/`list`/`get`/`run`/`remove`; `run` validates+coerces input, writes a dataset + INPUT/OUTPUT to the run KVS; REST-callable | `action*`, `name`, `input`, `schema`, `entry`, `engine` |
+| **crawler** | **Crawlee-style structured crawler** — durable queue + a `pageFunction` on every matched page → rows into a dataset; auto link-enqueue (`strategy`/`globs`), concurrency, retry, **resume**; `engine` http/browser/adaptive; `sessionPool` to rotate identities | `url`, `name`, `pageFunction`, `engine`, `strategy`, `globs`, `maxDepth`, `maxRequests`, `maxConcurrency`, `resume`, `sessionPool` |
+| **sessions** | **Rotating identity pool** with health scoring (SessionPool): sticky fingerprint+proxy+cookies per session; `borrow` least-used, `good`/`bad` scoring, auto-retire burned identities; feed `crawler --sessionPool` | `action*`, `name`, `id`, `maxPoolSize`, `pool` |
 
 ## Site (6) — whole-site capabilities
 
@@ -100,11 +106,13 @@ never leaves the machine).
 | **monitor** | Scheduled monitors + alerts: `add` a URL with a cadence + `notify` (telegram/webhook/desktop); daemon checks due ones | `action*`, `url`, `every`, `notify` |
 | **runs** | Flight recorder: browse past runs (steps + tokens + screenshots) as HTML reports | `action`, `id` |
 
-## Browser Control (11)
+## Browser Control (13)
 
 | Tool | Purpose | Args |
 |------|---------|------|
 | **stealth** | Anti-fingerprint (`regular`/`stealth`/`undetected`): patches `navigator.webdriver`, `chrome.runtime`, permissions, plugins/WebGL/languages. **Opt-in**; for CAPTCHAs prefer `handoff` over bypass | `mode` |
+| **fingerprint** | **Realistic, internally-consistent fingerprint** (vs stealth's static patches): coherent UA + UA-CH + platform + screen + webgl + languages + hardware, weighted by market share; `browser`/`os` filter, `seed` = sticky, `webrtc` blocks IP leak | `browser`, `os`, `seed`, `webrtc`, `url` |
+| **sessions** | **Rotating identity pool** with health scoring (SessionPool): sticky fingerprint+proxy+cookies per session; `borrow` least-used, `good`/`bad` scoring, auto-retire burned identities; feed `crawler --sessionPool` | `action*`, `name`, `id`, `maxPoolSize`, `pool` |
 | **device** | Emulate a mobile device (`iphone`/`ipad`/`android`/`reset`) or custom viewport+UA; `list` returns profiles | `device`, `list`, `url` |
 | **geo** | Override GPS geolocation (`lat`+`lon`+`accuracy`), or `clear` | `lat`, `lon`, `accuracy`, `clear`, `url` |
 | **tabs** | Multi-tab & iframe management: `list`/`new`/`switch`/`close`/`frames` | `action`, `targetId`, `url` |
@@ -136,6 +144,18 @@ never leaves the machine).
 | Tool | Purpose | Args |
 |------|---------|------|
 | **assert** | Assertions (title/url is/contains, text_visible, element_exists/count/text/value/visible, has_cookie, screenshot_match); one `{type,expected,selector?}` or an `assertions` array | `type`, `expected`, `selector`, `index`, `name`, `assertions`, `url` |
+
+## HTTP & Storage (5) — Apify/Crawlee parity
+
+| Tool | Purpose | Args |
+|------|---------|------|
+| **fetch** | **Raw HTTP fetch, no browser** (Crawlee's cheap path): GET/POST a URL or JSON API; redirects, gzip/br, cookie jar, proxy via CONNECT, `fingerprint` headers; `as` json/text. 10-50× faster for static/SSR pages & APIs | `url*`, `method`, `headers`, `body`, `proxy`, `as`, `fingerprint`, `maxBytes` |
+| **queue** | **Durable RequestQueue** — persisted, deduped, resumable frontier (a crawl killed mid-run resumes; per-URL retry → dead-letter). `add`/`stats`/`next`/`failed`/`list`/`drop` | `action`, `name`, `urls`, `url`, `label`, `clear` |
+| **kvs** | **Key-Value Store** — arbitrary blobs/records (screenshots, PDFs, Actor INPUT/OUTPUT, checkpoints, RAG payloads). JSON/text/`{base64,contentType}`. `set`/`get`/`list`/`delete`/`stores`/`drop` | `action`, `store`, `key`, `value`, `contentType` |
+| **webhook** | **Run-lifecycle webhooks** — subscribe to `run.succeeded`/`failed`/… → POST on the event ("job done → pull the dataset"). `add`/`list`/`remove`/`fire` | `action`, `event`, `url`, `actor`, `id`, `data` |
+| **schedule** | **Cron scheduling of Actors** — 5-field cron (step/range/list). `add`/`list`/`remove`/`enable`/`run-due` | `action`, `cron`, `actor`, `input`, `id`, `enabled` |
+
+> **Serve it as an API:** `logica-pilot serve` exposes the whole registry over HTTP — `GET /?url=…&render_js=&markdown=&screenshot=&extract=` (ScrapingBee/ScraperAPI drop-in), `POST /v1/tools/:name`, `POST /v1/actors/:name/runs`, `GET /v1/datasets/:name/items`, `GET /v1/key-value-stores/:store/records/:key`. Token auth via `LOGICA_PILOT_API_KEY`.
 
 ---
 

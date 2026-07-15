@@ -1,6 +1,6 @@
 # Logica Pilot — MCP & CLI Guide
 
-**The token-efficient browser automation engine.** Exposed as a single tool registry accessible via **CLI**, **MCP (Model Context Protocol)**, or **programmatic API**. Same 68 tools, three surfaces — zero duplication.
+**The token-efficient browser automation engine.** Exposed as a single tool registry accessible via **CLI**, **MCP (Model Context Protocol)**, or **programmatic API**. Same 80 tools, three surfaces — zero duplication.
 
 ---
 
@@ -43,23 +43,27 @@ The engine auto-discovers an installed real browser (any installed browser).
 
 ---
 
-## The 68 Tools — Single Registry
+## The 80 Tools — Single Registry
 
 All tools are defined once in `src/tools.js`. Both MCP (stdio) and CLI (subcommands) expose the identical interface. MCP tool names are prefixed with `browser_` (e.g., `browser_navigate`); CLI commands are bare (e.g., `logica-pilot navigate`). Saved **Site Adapters** also appear as their own MCP tools, `x_<name>`.
 
-> **[TOOLS.md](TOOLS.md) is the canonical, complete reference** (every tool, its args, and examples). The summary below groups the 68 tools; see TOOLS.md for detail.
+> **[TOOLS.md](TOOLS.md) is the canonical, complete reference** (every tool, its args, and examples). The summary below groups the 80 tools; see TOOLS.md for detail.
 
 | Group | Tools (`browser_<name>` over MCP · `logica-pilot <name>` on the CLI) |
 |-------|------|
 | **Navigation** (5) | `navigate` · `back` · `forward` · `reload` · `wait` (semantic) |
-| **Perception** (10) | `observe` (indexed map) · `read` (markdown/paginate/`maxAge` cache/`redactPII`/summarize) · `extract` · `meta` · `images` · `product` · `media` · `links` · `handoff` · `screenshot` |
-| **Actions** (6) | `act` (click/type/press/scroll by index) · `fill` · `select` · `hover` · `eval` · `pdf` |
+| **Perception** (14) | `observe` · `read` (markdown/cache/redactPII/`engine:http`·`adaptive`) · `extract` · `meta` · `images` · `product` · `apis` (backend API discovery) · `jsdata` (hydration state) · `locate` (value→path) · `video` · `media` · `links` · `handoff` · `screenshot` |
+| **Actions** (12) | `act` · `fill` · `select` · `hover` · `eval` · `pdf` · `upload` · `dialog` · `drag` · `storage` · `permission` · `evalbatch` |
 | **Autonomy** (3) | `run` (autonomous loop + flight recorder + self-repair) · `adapter` (site→named tool `x_<name>`) · `workflow` (deterministic replay by label) |
-| **Site** (6) | `map` (discover URLs) · `crawl` (BFS, path filters, proxy/geo/redactPII) · `index` (local BM25, offline) · `dataset` (living tables) · `batch` (async jobs) · `llmstxt` |
+| **Site** (8) | `map` · `crawl` (BFS) · `crawler` (Crawlee-style: queue+pageFunction+dataset+resume) · `actor` (manifest+INPUT schema) · `index` (BM25 offline) · `dataset` · `batch` · `llmstxt` |
 | **Multi-Agent** (8) | `fanout` · `search` (`content:true` reads results) · `gather` (schema in, JSON out) · `ask` · `research` · `compare` · `deal` · `factcheck` |
-| **Session & Monitoring** (5) | `session` (login cookies) · `memory` (site flywheel) · `watch` (change diff) · `monitor` (scheduled alerts) · `runs` (flight reports) |
+| **Session & Monitoring** (6) | `session` · `persist` (CF-clearance) · `memory` · `watch` · `monitor` · `runs` |
+| **Browser Control** (13) | `stealth` · `fingerprint` (realistic+webrtc) · `sessions` (rotating pool) · `device` · `geo` · `tabs` · `wipe` · `health` · `html` · `fast` · `feedback` · `window` · `captcha` |
+| **Network** (4) | `block` · `throttle` · `intercept` (mock/headers) · `proxypool` (named pools + local rotating forwarder) |
+| **DevTools & Testing** (2) | `inspect` · `assert` (+ screenshot-diff) |
+| **HTTP & Storage** (5) | `fetch` (browserless HTTP) · `queue` (durable RequestQueue) · `kvs` (Key-Value Store) · `webhook` (run-lifecycle) · `schedule` (cron) |
 
-**New since v0.1** (all local, zero-dep): crawl/map/index(BM25)/llmstxt, gather/ask, meta/product/images/media, batch, dataset, monitor, adapter, workflow, runs, handoff — plus **attach to your real browser** (`--attach <port>`), **BYO proxy + geo**, **PII redaction**, and the **consent-killer**. See [TOOLS.md → Killer capabilities](TOOLS.md#killer-capabilities-what-a-cloud-scraper-cant-do).
+**Apify/Crawlee parity** (all local, zero-dep): browserless HTTP tier + adaptive routing, durable RequestQueue + KVS, a **REST API** (`serve` = ScrapingBee/ScraperAPI drop-in), a Crawlee-style `crawler`, realistic fingerprints + rotating `sessions` + local rotating proxy, backend API discovery (`apis`/`jsdata`/`locate`), formal `actor` packaging, `webhook` + `schedule`. Plus **attach to your real browser** (`--attach`), **BYO proxy + geo**, **PII redaction**, **consent-killer**. See [TOOLS.md → Killer capabilities](TOOLS.md#killer-capabilities-what-a-cloud-scraper-cant-do).
 
 ---
 

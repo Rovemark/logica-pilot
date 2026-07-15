@@ -9,8 +9,9 @@ Boa parte do que estava listado abaixo como P0/P1 já foi entregue. Feito e no a
 - **Electron 37** + ad-block nativo (EasyList/EasyPrivacy) + extensões (Chrome Web Store/unpacked) + fix de reflow do painel.
 - **Human handoff** — detecta login/captcha/Cloudflare e pausa pra resolução humana (tool `handoff`).
 - **Memória + histórico de runs** — site-memory (flywheel) + **self-repair** (aprende consertos por site) + **flight recorder** (`runs`, report HTML).
-- **Suíte de automação (68 tools)** — crawl/map/index(BM25)/llmstxt, gather/ask, meta/product/images/media, batch, dataset, monitor+daemon, adapter (site→tool), workflow (replay determinístico).
+- **Suíte de automação (80 tools)** — crawl/map/index(BM25)/llmstxt, gather/ask, meta/product/images/media, batch, dataset, monitor+daemon, adapter (site→tool), workflow (replay determinístico).
 - **Controle de browser + anti-bot** — stealth/anti-fingerprint (opt-in), device+geo, tabs/frames, block/throttle, request mock/intercept, **proxy pools nomeados** (round-robin/sticky/geo), **persistência de cf_clearance** por domínio, CAPTCHA (detect + handoff; solve gated), inspect (console/network/perf), assert (+ screenshot-diff), vídeo (transcript/keyframes), feedback visual, upload/dialog/drag/storage/permission.
+- **Paridade Apify/Crawlee** — motor HTTP sem browser (`fetch`, `read --engine http`) + roteamento adaptativo (HTTP↔browser aprendido por host); **RequestQueue durável/resumível** + **Key-Value Store**; **API REST** (`serve`, drop-in ScrapingBee); **crawler Crawlee-style** (queue+pageFunction+dataset+resume); **fingerprints realistas** + **SessionPool rotativo** + **proxy local com auth/rotação**; **descoberta de API/XHR** (`apis`/`jsdata`/`locate`); **Actors formais** (manifest+INPUT schema); **webhooks** + **cron scheduler**.
 - **Attach ao browser real** (`--attach`), **proxy BYO + geo**, **redação de PII**, **consent-killer** — tudo local, zero-dep.
 - **Bug da New Tab** (motor de busca hardcoded) e o `single-instance`/escrita atômica de stores endereçados na linha de trabalho atual.
 

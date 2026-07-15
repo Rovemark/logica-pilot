@@ -9,7 +9,7 @@
 A real browser with an embedded autonomous AI copilot. The AI **perceives** pages by semantic
 intent — not pixel coordinates — then **clicks, types, scrolls and reads** on its own until the
 goal is met. Pure CDP engine · zero-dependency core · headless agent mode **and** a full desktop
-browser · **CLI and MCP** with the same 68 tools.
+browser · **CLI and MCP** with the same 80 tools.
 
 <p align="center">
   <img src="docs/media/pilot-run.gif" alt="The Pilot autonomously scrolls, extracts and answers a goal on a live page" width="100%">
@@ -296,7 +296,7 @@ await pilot.close();
 
 ## MCP Server (Claude Desktop, Cursor, Cline, etc.)
 
-Logica Pilot exposes **68 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
+Logica Pilot exposes **80 tools** as a Model Context Protocol (MCP) server. Any agent can drive a browser token-efficiently and in parallel. CLI and MCP surfaces share **the same registry** — identical tools, defined once.
 
 ### Configuration
 
@@ -318,7 +318,7 @@ Then set your AI credentials (one time):
 - Export `ANTHROPIC_API_KEY=sk-ant-…`, *or*
 - Run a local LogicaProxy (`:8317`)
 
-### The 68 Tools (Grouped by Function)
+### The 80 Tools (Grouped by Function)
 
 > Full reference — every tool, its args and examples — in **[docs/TOOLS.md](docs/TOOLS.md)**.
 
@@ -331,15 +331,18 @@ Then set your AI credentials (one time):
 | **reload** | Reload the page and return the map |
 | **wait** | Wait for text/selector/condition (semantic, no brittle sleeps) |
 
-#### Perception (11 tools)
+#### Perception (14 tools)
 | Tool | Purpose |
 |------|---------|
 | **observe** | Get the indexed map of the current page (semantic elements + readable text) |
-| **read** | Readable page content — `markdown:true` for **LLM-ready Markdown** (headings/links/tables); paginate with `maxChars`/`offset`; `maxAge` local cache; optional AI summary |
+| **read** | Readable page content — `markdown:true` for **LLM-ready Markdown**; paginate with `maxChars`/`offset`; `maxAge` local cache; optional AI summary; **`engine:http`/`adaptive`** to parse without a browser (10-50× cheaper) |
 | **extract** | Extract structured data (JSON schema or natural language instruction) |
 | **meta** | Page metadata, **deterministic** (no AI): title/description/canonical/favicon, OpenGraph/Twitter, JSON-LD types |
 | **images** | All meaningful images (url + alt + size), og:image first, icons skipped — deterministic |
 | **product** | **Deterministic product data** from the page's own JSON-LD/microdata/og:price: name, brand, price, availability, rating — fails closed, never guesses |
+| **apis** | **Backend API discovery** — find the private JSON APIs a page calls (`discover`) and re-fire them (`replay`, carries live session/auth). Hit the data source, not the HTML |
+| **jsdata** | Surface in-page JS **hydration state** (`__NEXT_DATA__`, `__NUXT__`, `__APOLLO_STATE__`, …) + every `application/json`/`ld+json` script — clean data before it's rendered |
+| **locate** | **Reverse-lookup** — paste a value you see on the page, get the exact JSON-path + source (hydration / JSON-LD / discovered API) that yields it |
 | **video** | **Token-first video understanding**: sources/duration/platform (YouTube/Vimeo), caption tracks → transcript, optional keyframe sampling (`frames`) + LLM summary (`describe`) |
 | **media** | Discover video/audio/direct files/embeds on the page; `download:true` saves direct files to disk (size-capped) |
 | **handoff** | **Human handoff** — detect a login/captcha/Cloudflare/payment wall and (`wait`) pause for you to resolve it in a visible window, then continue — instead of trying to bypass it |
@@ -379,11 +382,13 @@ Then set your AI credentials (one time):
 | **monitor** | **Scheduled monitors + alerts**: `add` a URL with a cadence + `notify` (telegram/webhook/desktop); a background daemon checks due ones and alerts only on real changes |
 | **runs** | **Flight recorder**: browse past autonomous runs — each `run` is saved with steps, token usage and screenshots as a self-contained HTML report |
 
-#### Site (6 tools)
+#### Site (8 tools)
 | Tool | Purpose |
 |------|---------|
 | **map** | **Discover a site's URLs instantly** — robots.txt sitemaps + sitemap.xml (recursive), on-page links fallback; `search` filter |
 | **crawl** | **Crawl a whole site/section** breadth-first in parallel: `includePaths`/`excludePaths` regex, `maxDepth`, page limit, robots.txt politeness — compact `{url,title,text}` per page |
+| **crawler** | **Crawlee-style structured crawler**: a durable queue + a `pageFunction` run on every matched page → rows into a dataset; auto link-enqueue (`strategy`/`globs`), concurrency, retry, **resume**; `engine` http/browser/adaptive; `sessionPool` to rotate identities |
+| **actor** | **Formal Actor packaging**: a versioned, self-describing unit = manifest + typed INPUT schema + entry (crawler/tool). `run` validates+coerces input → dataset + INPUT/OUTPUT KVS; REST-callable (`POST /v1/actors/:name/runs`) |
 | **index** | **Local BM25 search**: crawl a site once into a named index, then query it forever **offline — 0 tokens, 0 network**. Any docs set becomes a searchable knowledge base |
 | **dataset** | **Living datasets**: scrape/gather output → named local table with dedupe, per-run diff and CSV/JSON export (a free price/stock time series with `monitor`) |
 | **batch** | **Async jobs**: start a fanout/crawl in the background (detached, survives the call), then `status`/`get` the results later |
@@ -401,10 +406,12 @@ Then set your AI credentials (one time):
 | **deal** | Best Deal: search stores → extract price/shipping in parallel → rank by total cost |
 | **factcheck** | Fact-Check: search independent sources + synthesize verdict with citations |
 
-#### Browser Control (11 tools)
+#### Browser Control (13 tools)
 | Tool | Purpose |
 |------|---------|
 | **stealth** | **Anti-fingerprint** (`regular`/`stealth`/`undetected`): patches `navigator.webdriver`, `chrome.runtime`, permissions, plugins/WebGL/languages. Opt-in; for CAPTCHAs prefer `handoff` over bypass |
+| **fingerprint** | **Realistic, internally-consistent fingerprint** (vs stealth's static patches): coherent UA + UA-CH + platform + screen + webgl + languages + hardware, weighted by market share; `seed` = sticky identity; `webrtc` blocks IP leak behind a proxy |
+| **sessions** | **Rotating identity pool** with health scoring (SessionPool): sticky fingerprint+proxy+cookies per session; `borrow` least-used, `good`/`bad` scoring, auto-retire burned identities; feed `crawler --sessionPool` to spread a crawl across identities |
 | **device** | Emulate a mobile device (iphone/ipad/android/reset) or a custom viewport + user-agent; `list` returns profiles |
 | **geo** | Override GPS geolocation (`lat`+`lon`+`accuracy`) or `clear` it |
 | **tabs** | Multi-tab & iframe management: `list` / `new` / `switch` / `close` / `frames` |
@@ -429,6 +436,17 @@ Then set your AI credentials (one time):
 |------|---------|
 | **inspect** | DevTools inspection: `console`/`network` capture (over `duration`), `perf` metrics (Web Vitals), `eval` with a stack trace on error |
 | **assert** | **Test assertions**: title/url is/contains, text_visible, element exists/count/text/value/visible, has_cookie, screenshot_match (visual regression) — one or an `assertions` array |
+
+#### HTTP & Storage (5 tools) — Apify/Crawlee parity
+| Tool | Purpose |
+|------|---------|
+| **fetch** | **Raw HTTP fetch, no browser** (Crawlee's cheap path): GET/POST a URL or JSON API; follows redirects, gzip/br, cookie jar, proxy via CONNECT, realistic `fingerprint` headers; `as` json/text. 10-50× faster for static/SSR pages & APIs |
+| **queue** | **Durable RequestQueue**: a persisted, deduped, resumable frontier — a crawl killed mid-run resumes where it stopped; per-URL retry → dead-letter. `add`/`stats`/`next`/`failed`/`list`/`drop` |
+| **kvs** | **Key-Value Store**: arbitrary blobs/records (screenshots, PDFs, Actor INPUT/OUTPUT, checkpoints, RAG payloads); JSON/text/binary. `set`/`get`/`list`/`delete` |
+| **webhook** | **Run-lifecycle webhooks**: subscribe to `run.succeeded`/`failed`/… → POST on the event ("job done → pull the dataset"). Backs the n8n/Zapier connectors |
+| **schedule** | **Cron scheduling of Actors**: run any actor on a 5-field cron (step/range/list). `add`/`list`/`remove`/`enable`/`run-due` |
+
+> **Run it as an HTTP service:** `logica-pilot serve` exposes the whole registry — `GET /?url=…&render_js=&markdown=&screenshot=&extract=` is a **drop-in for ScrapingBee/ScraperAPI**, plus `POST /v1/tools/:name`, `POST /v1/actors/:name/runs`, `GET /v1/datasets/:name/items`, `GET /v1/key-value-stores/:store/records/:key`. Token auth via `LOGICA_PILOT_API_KEY`.
 
 **Example (Claude asking Pilot to compare products):**
 
@@ -656,7 +674,7 @@ src/
   llm.js                Brain (Messages API via LogicaProxy or Anthropic)
   agent.js              Autonomous loop (perceive → decide → act)
   electron-page.js      Adapter: webContents.debugger → page contract
-  mcp-server.js         MCP server (stdio, 68 tools)
+  mcp-server.js         MCP server (stdio, 80 tools)
   tools.js              SINGLE REGISTRY (CLI + MCP share this)
   fanout.js             Parallel multi-agent orchestration
   search.js             Web search (Bing default, Brave if key set)

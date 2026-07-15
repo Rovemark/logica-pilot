@@ -1,11 +1,11 @@
 # Features
 
-Logica Pilot is two things in one: a **token-first automation engine** (68 tools,
+Logica Pilot is two things in one: a **token-first automation engine** (80 tools,
 CLI + MCP + programmatic) and a **full desktop browser** with an embedded AI copilot.
 
 ---
 
-## Automation — 68 tools
+## Automation — 80 tools
 
 Every tool is identical across the CLI (`logica-pilot <tool>`), MCP (`browser_<tool>`)
 and the programmatic API. All token-first, zero-dependency, local. Full reference with
@@ -14,15 +14,25 @@ args and examples: **[TOOLS.md](TOOLS.md)**.
 | Group | Tools |
 |-------|-------|
 | **Navigation** (5) | navigate · back · forward · reload · wait (semantic) |
-| **Perception** (11) | observe (indexed map) · read (markdown/paginate/cache/redactPII) · extract · meta · images · product · video (transcript/keyframes) · media · links · handoff · screenshot |
+| **Perception** (14) | observe (indexed map) · read (markdown/cache/redactPII/**engine http·adaptive**) · extract · meta · images · product · **apis (backend API discovery)** · **jsdata (hydration state)** · **locate (value→path)** · video · media · links · handoff · screenshot |
 | **Actions** (12) | act (click/type/press/scroll by index) · fill · select · hover · eval · pdf · upload · dialog · drag · storage · permission · evalbatch |
 | **Autonomy** (3) | run (autonomous loop) · adapter (site→tool) · workflow (deterministic replay) |
-| **Site** (6) | map · crawl · index (BM25 offline) · dataset · batch (async) · llmstxt |
+| **Site** (8) | map · crawl · **crawler (Crawlee-style: queue+pageFunction+dataset+resume)** · **actor (manifest+INPUT schema)** · index (BM25 offline) · dataset · batch (async) · llmstxt |
 | **Multi-Agent** (8) | fanout · search · gather · ask · research · compare · deal · factcheck |
 | **Session & Monitoring** (6) | session · persist (CF-clearance) · memory · watch · monitor · runs |
-| **Browser Control** (11) | stealth · device · geo · tabs · wipe · health · html · fast · feedback · window · captcha |
-| **Network** (4) | block · throttle · intercept (mock/headers) · proxypool (named pools) |
+| **Browser Control** (13) | stealth · **fingerprint (realistic, consistent + webrtc-block)** · **sessions (rotating identity pool)** · device · geo · tabs · wipe · health · html · fast · feedback · window · captcha |
+| **Network** (4) | block · throttle · intercept (mock/headers) · proxypool (named pools + local rotating forwarder) |
 | **DevTools & Testing** (2) | inspect (console/network/perf/eval) · assert (+ screenshot-diff) |
+| **HTTP & Storage** (5) | **fetch (browserless HTTP)** · **queue (durable RequestQueue)** · **kvs (Key-Value Store)** · **webhook (run-lifecycle)** · **schedule (cron)** |
+
+### Apify/Crawlee parity — what makes it a scraping platform, not just a browser
+- **Browserless HTTP tier + adaptive routing** — `fetch`/`read --engine http` skip Chrome on the ~70% of the web that renders over HTTP (10-50× cheaper); `engine:adaptive` tries HTTP first and auto-escalates to the browser on JS-shell/anti-bot, learning per host.
+- **Durable, resumable storage** — a crawl killed mid-run resumes (RequestQueue WAL); Key-Value Store for blobs/INPUT/OUTPUT/checkpoints.
+- **REST API** — `logica-pilot serve` = a drop-in for ScrapingBee/ScraperAPI (`GET /?url=…`) + `/v1/tools`, `/v1/actors/:name/runs`, `/v1/datasets`, `/v1/key-value-stores`.
+- **Crawlee-style crawler** — a `pageFunction` per matched page → dataset rows, auto-enqueue, retry, resume, identity rotation.
+- **Realistic fingerprints + rotating SessionPool + local rotating proxy** — internally-consistent identities (UA⇔UA-CH⇔webgl⇔screen), health-scored rotation, per-request proxy auth+rotation, WebRTC-leak block.
+- **Backend API discovery** — `apis` finds + replays the private JSON APIs a page calls; `jsdata` surfaces hydration state; `locate` reverse-maps a value to its endpoint/path.
+- **Formal Actors + webhooks + cron** — versioned, typed, portable units; run-lifecycle webhooks; scheduled runs.
 
 ### Capabilities that a cloud scraper can't match
 - **Attach to your real browser** (`--attach <port>`) — your profile, logins, extensions.
