@@ -180,7 +180,9 @@ function makeServer({ apiKey, model } = {}) {
 
       // GET /v1/llm/status — does the brain have a real user key? (the AI panel asks this)
       if (req.method === 'GET' && u.pathname === '/v1/llm/status') {
-        return send(res, 200, { hasKey: llm.hasUserKey(), model: llm.DEFAULT_MODEL });
+        // "pronto" = tem chave do usuário OU aponta pro Router (assinatura) via env.
+        const router = !!process.env.LOGICA_PILOT_LLM_URL;
+        return send(res, 200, { hasKey: llm.hasUserKey(), router, ready: llm.hasUserKey() || router, model: llm.DEFAULT_MODEL });
       }
 
       // POST /v1/llm/config — inject the user's Anthropic key/model at runtime (from the panel Settings).
