@@ -74,7 +74,10 @@ function cefDebugPort() {
 // drive it autonomously toward `goal` with the feedback overlay ON (the arrow cursor
 // follows every synthetic click). The user watches the AI work live; their real
 // mouse stays free. Detaches at the end (the tab and its final state remain).
-async function runAgentOnCef({ goal, url, match, model }) {
+// Registro de execuções ativas do Agente, pra o botão "Parar" (o painel manda o runId).
+const _agentRuns = new Map(); // runId -> { stop: boolean }
+
+async function runAgentOnCef({ goal, url, match, model, onStep, shouldStop }) {
   let port;
   try { port = cefDebugPort(); }
   catch { return { error: 'Logica Pilot não está aberto (sem porta CDP). Abra o navegador e tente de novo.', status: 503 }; }
@@ -95,7 +98,13 @@ async function runAgentOnCef({ goal, url, match, model }) {
       maxSteps: 16,
       model,
       startUrl: url || undefined,
-      onStep: async (s) => { steps.push({ step: s.step, action: s.action }); await reinject(); },
+      shouldStop,
+      onStep: async (s) => {
+        const compact = { step: s.step, action: s.action, result: typeof s.result === 'string' ? s.result.slice(0, 160) : '' };
+        steps.push(compact);
+        await reinject();               // mantém a seta/overlay vivos após navegações
+        if (onStep) { try { onStep(compact); } catch {} }  // emite o passo pro painel (ao vivo)
+      },
     });
     return { out: { json: { ok: true, goal, success: r.success, result: r.result, steps: r.steps, trace: steps } } };
   } catch (e) {
@@ -167,15 +176,40 @@ function makeServer({ apiKey, model } = {}) {
         return toolResult(res, r.out, q.get('format'));
       }
 
-      // POST /v1/agent/run — run an autonomous goal on a visible "Agente" tab of the
-      // Logica Pilot window (attaches via CEF's DevToolsActivePort). Body: { goal, url? }.
+      // POST /v1/agent/run — roda um objetivo autônomo numa aba "Agente" e faz
+      // STREAMING dos passos AO VIVO via SSE (o painel vê cada ação em tempo real).
+      // Body: { goal, url?, match? }. Responde text/event-stream: start/step/done/error.
       if (req.method === 'POST' && u.pathname === '/v1/agent/run') {
         const body = await readBody(req);
         const goal = body.goal || body.task;
         if (!goal) return send(res, 400, { error: 'passe { goal }' });
-        const r = await runAgentOnCef({ goal, url: body.url, match: body.match, model });
-        if (r.error) return send(res, r.status || 500, { error: r.error });
-        return toolResult(res, r.out, 'json');
+        res.writeHead(200, {
+          'content-type': 'text/event-stream; charset=utf-8',
+          'cache-control': 'no-cache, no-transform',
+          'connection': 'keep-alive',
+          'access-control-allow-origin': '*',
+        });
+        const runId = 'run_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        _agentRuns.set(runId, { stop: false });
+        const sse = (event, data) => { try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {} };
+        sse('start', { runId, goal });
+        const r = await runAgentOnCef({
+          goal, url: body.url, match: body.match, model,
+          onStep: (s) => sse('step', s),
+          shouldStop: () => (_agentRuns.get(runId) || {}).stop,
+        });
+        _agentRuns.delete(runId);
+        if (r.error) sse('error', { error: r.error });
+        else sse('done', r.out.json);
+        return res.end();
+      }
+
+      // POST /v1/agent/stop — para uma execução em andamento. Body: { runId }.
+      if (req.method === 'POST' && u.pathname === '/v1/agent/stop') {
+        const body = await readBody(req);
+        const run = _agentRuns.get(body.runId);
+        if (run) run.stop = true;
+        return send(res, 200, { ok: !!run, stopped: body.runId });
       }
 
       // GET /v1/llm/status — does the brain have a real user key? (the AI panel asks this)
