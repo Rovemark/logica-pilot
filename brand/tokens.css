@@ -1,0 +1,137 @@
+:root {
+  color-scheme: light;
+
+  /* Família Rovemark */
+  --pilot-sovereign-blue: #3455e8;
+  --pilot-sovereign-blue-hover: #2545d4;
+  --pilot-sovereign-blue-active: #1b36b8;
+
+  /* Assinatura Logica Pilot */
+  --pilot-beacon-lime: #c7ff4a;
+  --pilot-beacon-lime-soft: #efffc9;
+  --pilot-beacon-ink: #2f6500;
+  --pilot-sky: #89a7ff;
+
+  /* Neutros */
+  --pilot-graphite-950: #10131a;
+  --pilot-graphite-900: #171b24;
+  --pilot-graphite-800: #252a35;
+  --pilot-graphite-700: #373d49;
+  --pilot-graphite-600: #505866;
+  --pilot-graphite-500: #6a7280;
+  --pilot-graphite-400: #9299a4;
+  --pilot-graphite-300: #bbc0c8;
+  --pilot-graphite-200: #d9dce1;
+  --pilot-graphite-100: #eceef1;
+  --pilot-ivory: #f8f7f2;
+  --pilot-white: #ffffff;
+
+  /* Estados */
+  --pilot-success: #147a50;
+  --pilot-warning: #8a5700;
+  --pilot-danger: #c5393f;
+  --pilot-info: #2853cc;
+
+  /* Papéis semânticos — claro */
+  --pilot-bg: var(--pilot-ivory);
+  --pilot-surface: var(--pilot-white);
+  --pilot-surface-raised: var(--pilot-white);
+  --pilot-surface-muted: #f0f0ec;
+  --pilot-fg: var(--pilot-graphite-950);
+  --pilot-fg-muted: var(--pilot-graphite-600);
+  --pilot-fg-subtle: var(--pilot-graphite-500);
+  --pilot-border: #d4d6d7;
+  --pilot-border-strong: #a8adb4;
+  --pilot-accent: var(--pilot-sovereign-blue);
+  --pilot-accent-hover: var(--pilot-sovereign-blue-hover);
+  --pilot-accent-fg: var(--pilot-white);
+  --pilot-signal: var(--pilot-beacon-lime);
+  --pilot-signal-fg: var(--pilot-graphite-950);
+  --pilot-focus: #1f46e5;
+  --pilot-selection: #dbe3ff;
+
+  /* Forma */
+  --pilot-radius-xs: 4px;
+  --pilot-radius-sm: 8px;
+  --pilot-radius-md: 14px;
+  --pilot-radius-lg: 22px;
+  --pilot-radius-xl: 32px;
+  --pilot-shadow-sm: 0 1px 2px rgb(16 19 26 / 0.08);
+  --pilot-shadow-md: 0 12px 32px rgb(16 19 26 / 0.10);
+  --pilot-shadow-lg: 0 26px 70px rgb(16 19 26 / 0.16);
+
+  /* Tipografia */
+  --pilot-font-sans: "Manrope", "Avenir Next", "Segoe UI", Arial, sans-serif;
+  --pilot-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --pilot-weight-regular: 400;
+  --pilot-weight-medium: 500;
+  --pilot-weight-semibold: 600;
+  --pilot-weight-bold: 700;
+  --pilot-weight-extrabold: 800;
+
+  /* Movimento */
+  --pilot-ease-route: cubic-bezier(0.22, 1, 0.36, 1);
+  --pilot-duration-fast: 140ms;
+  --pilot-duration-base: 240ms;
+  --pilot-duration-slow: 520ms;
+}
+
+[data-theme="dark"],
+.theme-dark {
+  color-scheme: dark;
+  --pilot-bg: #0d1016;
+  --pilot-surface: #151922;
+  --pilot-surface-raised: #1b202b;
+  --pilot-surface-muted: #202631;
+  --pilot-fg: var(--pilot-ivory);
+  --pilot-fg-muted: #b8bec8;
+  --pilot-fg-subtle: #989faa;
+  --pilot-border: #343a46;
+  --pilot-border-strong: #555d6a;
+  --pilot-accent: #8098ff;
+  --pilot-accent-hover: #9aabff;
+  --pilot-accent-fg: #0d1016;
+  --pilot-signal: var(--pilot-beacon-lime);
+  --pilot-signal-fg: #10131a;
+  --pilot-focus: #9aabff;
+  --pilot-selection: #27376e;
+  --pilot-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.28);
+  --pilot-shadow-md: 0 14px 36px rgb(0 0 0 / 0.34);
+  --pilot-shadow-lg: 0 30px 80px rgb(0 0 0 / 0.46);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --pilot-bg: #0d1016;
+    --pilot-surface: #151922;
+    --pilot-surface-raised: #1b202b;
+    --pilot-surface-muted: #202631;
+    --pilot-fg: var(--pilot-ivory);
+    --pilot-fg-muted: #b8bec8;
+    --pilot-fg-subtle: #989faa;
+    --pilot-border: #343a46;
+    --pilot-border-strong: #555d6a;
+    --pilot-accent: #8098ff;
+    --pilot-accent-hover: #9aabff;
+    --pilot-accent-fg: #0d1016;
+    --pilot-signal: var(--pilot-beacon-lime);
+    --pilot-signal-fg: #10131a;
+    --pilot-focus: #9aabff;
+    --pilot-selection: #27376e;
+    --pilot-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.28);
+    --pilot-shadow-md: 0 14px 36px rgb(0 0 0 / 0.34);
+    --pilot-shadow-lg: 0 30px 80px rgb(0 0 0 / 0.46);
+  }
+}
+
+::selection {
+  color: var(--pilot-fg);
+  background: var(--pilot-selection);
+}
+
+:focus-visible {
+  outline: 3px solid var(--pilot-focus);
+  outline-offset: 3px;
+}
+

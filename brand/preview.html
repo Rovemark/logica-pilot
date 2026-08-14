@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Identidade visual e tese de marca do Logica Pilot.">
+  <meta name="theme-color" content="#0d1016">
+  <title>Logica Pilot — Brand System</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233455E8'/%3E%3Cpath d='M9 26V7H17C22 7 25 10 25 15S22 22 17 22H14' fill='none' stroke='white' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='25' cy='15' r='3.5' fill='%23C7FF4A' stroke='%2310131A'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: dark;
+      --blue: #3455e8;
+      --blue-light: #8098ff;
+      --lime: #c7ff4a;
+      --ink: #10131a;
+      --dark: #0d1016;
+      --panel: #151922;
+      --panel-2: #1b202b;
+      --ivory: #f8f7f2;
+      --muted: #b8bec8;
+      --line: #343a46;
+      --sans: "Manrope", "Avenir Next", "Segoe UI", Arial, sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ivory);
+      background: var(--dark);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, a { font: inherit; }
+    a { color: inherit; }
+    svg { display: block; }
+
+    .shell { overflow: hidden; }
+    .wrap { width: min(1180px, calc(100% - 40px)); margin: 0 auto; }
+    .eyebrow {
+      margin: 0;
+      color: var(--lime);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .15em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    .site-header {
+      position: absolute;
+      z-index: 10;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 28px 0;
+    }
+    .nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .nav-logo { width: 250px; height: auto; }
+    .nav-meta { color: #aab1bc; font: 600 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+
+    .hero {
+      position: relative;
+      min-height: 900px;
+      padding: 170px 0 96px;
+      background:
+        radial-gradient(circle at 76% 31%, rgba(52,85,232,.28), transparent 25%),
+        radial-gradient(circle at 82% 40%, rgba(199,255,74,.08), transparent 18%),
+        var(--dark);
+      isolation: isolate;
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      opacity: .16;
+      background-image: linear-gradient(#8098ff 1px, transparent 1px), linear-gradient(90deg, #8098ff 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: linear-gradient(90deg, transparent 30%, #000 78%, transparent);
+    }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(390px, .85fr); gap: 64px; align-items: center; }
+    .hero h1 {
+      max-width: 760px;
+      margin: 26px 0 30px;
+      font-size: clamp(62px, 8vw, 116px);
+      font-weight: 700;
+      letter-spacing: -.065em;
+      line-height: .89;
+    }
+    .hero h1 span { color: var(--blue-light); }
+    .lede { max-width: 700px; margin: 0; color: #c7ccd4; font-size: clamp(18px, 2vw, 22px); line-height: 1.58; }
+    .proofline { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 42px; }
+    .chip { border: 1px solid #3b4250; border-radius: 999px; padding: 10px 14px; color: #dfe2e7; font: 600 12px/1 var(--mono); }
+    .chip.signal { color: var(--ink); border-color: var(--lime); background: var(--lime); }
+
+    .instrument {
+      position: relative;
+      min-height: 570px;
+      border: 1px solid #333a47;
+      border-radius: 30px;
+      overflow: hidden;
+      background: linear-gradient(145deg, rgba(37,42,53,.95), rgba(18,22,30,.9));
+      box-shadow: 0 40px 100px rgba(0,0,0,.42);
+    }
+    .instrument-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid #313744; }
+    .traffic { display: flex; gap: 7px; }
+    .traffic i { width: 7px; height: 7px; border-radius: 50%; background: #59616f; }
+    .traffic i:last-child { background: var(--lime); }
+    .local { color: #9da5b1; font: 600 10px/1 var(--mono); letter-spacing: .1em; }
+    .map { position: relative; padding: 34px 28px; }
+    .map-label { color: #858e9c; font: 600 10px/1 var(--mono); letter-spacing: .13em; text-transform: uppercase; }
+    .intent { position: relative; display: grid; grid-template-columns: 44px 1fr auto; gap: 16px; align-items: center; margin-top: 14px; padding: 18px; border: 1px solid #363d49; border-radius: 14px; background: #191e28; }
+    .intent::after { content: ""; position: absolute; left: 38px; bottom: -15px; width: 2px; height: 15px; background: #3f4755; }
+    .intent:last-of-type::after { display: none; }
+    .idx { color: var(--blue-light); font: 700 12px/1 var(--mono); }
+    .intent strong { display: block; margin-bottom: 5px; font-size: 14px; }
+    .intent small { color: #939ba8; font: 500 11px/1.4 var(--mono); }
+    .status { width: 10px; height: 10px; border: 2px solid #737c89; border-radius: 50%; }
+    .intent.active { border-color: #657ceb; background: #1c2440; }
+    .intent.active .status { border-color: var(--lime); background: var(--lime); box-shadow: 0 0 0 5px rgba(199,255,74,.09); }
+    .route-note { position: absolute; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 10px; color: var(--lime); font: 700 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+    .route-note::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--lime); }
+
+    section { padding: 112px 0; }
+    .section-head { display: grid; grid-template-columns: .7fr 1.3fr; gap: 50px; margin-bottom: 64px; }
+    .section-head h2 { margin: 0; max-width: 760px; font-size: clamp(38px, 5.4vw, 72px); line-height: .98; letter-spacing: -.05em; }
+    .section-copy { margin: 22px 0 0; max-width: 650px; color: #59616d; font-size: 18px; line-height: 1.6; }
+
+    .thesis { color: var(--ink); background: var(--ivory); }
+    .thesis .eyebrow { color: #2f6500; }
+    .claim-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .claim { min-height: 260px; padding: 28px; border: 1px solid #d9dce1; border-radius: 20px; background: #fff; }
+    .claim-num { color: var(--blue); font: 700 12px/1 var(--mono); }
+    .claim h3 { margin: 62px 0 12px; font-size: 24px; letter-spacing: -.025em; }
+    .claim p { margin: 0; color: #5c6470; line-height: 1.6; }
+
+    .proof { position: relative; background: var(--blue); }
+    .proof .wrap { display: grid; grid-template-columns: 1.3fr .7fr; gap: 64px; align-items: end; }
+    .big-number { margin: 0; font-size: clamp(100px, 20vw, 260px); font-weight: 700; line-height: .72; letter-spacing: -.085em; font-variant-numeric: tabular-nums; }
+    .big-number sup { color: var(--lime); font-size: .28em; letter-spacing: -.03em; vertical-align: top; }
+    .proof-copy { max-width: 440px; }
+    .proof-copy h2 { margin: 18px 0; font-size: 36px; line-height: 1.06; letter-spacing: -.035em; }
+    .proof-copy p { margin: 0; color: #e0e5ff; font-size: 18px; line-height: 1.6; }
+
+    .identity { background: #eceee9; color: var(--ink); }
+    .identity .eyebrow, .colors .eyebrow, .themes .eyebrow, .applications .eyebrow, .browser-content .eyebrow { color: #2f6500; }
+    .logo-stage { display: grid; grid-template-columns: 1.4fr .6fr; gap: 18px; }
+    .stage { min-height: 310px; display: flex; align-items: center; justify-content: center; border-radius: 24px; }
+    .stage.light { border: 1px solid #d4d6d7; background: var(--ivory); }
+    .stage.dark { background: var(--dark); }
+    .primary-lockup { width: min(78%, 570px); }
+    .mark-large { width: 152px; }
+    .concept-line { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 18px; }
+    .concept { padding: 22px; border-top: 2px solid #b9bdc4; }
+    .concept b { display: block; margin-bottom: 9px; font-size: 14px; }
+    .concept span { color: #59616d; font-size: 13px; line-height: 1.5; }
+
+    .colors { background: var(--ivory); color: var(--ink); }
+    .swatches { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 14px; }
+    .swatch { min-height: 260px; display: flex; flex-direction: column; justify-content: space-between; padding: 22px; border-radius: 20px; }
+    .swatch b { font-size: 15px; }
+    .swatch code { font: 600 12px/1 var(--mono); }
+    .swatch.blue { color: #fff; background: var(--blue); }
+    .swatch.lime { background: var(--lime); }
+    .swatch.graphite { color: #fff; background: var(--ink); }
+    .swatch.ivory { border: 1px solid #d8dadb; background: #fff; }
+
+    .type-specimen { background: var(--dark); }
+    .display-type { max-width: 1060px; margin: 0; font-size: clamp(62px, 10vw, 150px); font-weight: 700; line-height: .84; letter-spacing: -.07em; }
+    .display-type .blue { color: var(--blue-light); }
+    .type-row { display: grid; grid-template-columns: 160px 1fr; gap: 28px; margin-top: 70px; padding-top: 24px; border-top: 1px solid var(--line); }
+    .type-meta { color: #929aa6; font: 600 11px/1.55 var(--mono); }
+    .type-sample { margin: 0; max-width: 760px; color: #d6dae0; font-size: 20px; line-height: 1.6; }
+
+    .themes { color: var(--ink); background: #dfe2e4; }
+    .theme-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .ui { overflow: hidden; min-height: 560px; border-radius: 26px; box-shadow: 0 20px 60px rgba(16,19,26,.12); }
+    .ui.light { color: var(--ink); background: var(--ivory); }
+    .ui.dark { color: var(--ivory); background: var(--dark); }
+    .ui-top { display: flex; align-items: center; justify-content: space-between; padding: 20px 22px; border-bottom: 1px solid; }
+    .light .ui-top { border-color: #d9dce1; }
+    .dark .ui-top { border-color: #303641; }
+    .mini-logo { width: 36px; height: 36px; }
+    .session { display: flex; align-items: center; gap: 8px; font: 700 10px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase; }
+    .session::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--lime); }
+    .ui-body { padding: 28px 24px; }
+    .ui-label { margin: 0 0 10px; color: #59616d; font: 700 10px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+    .dark .ui-label { color: #8d96a3; }
+    .ui h3 { margin: 0 0 28px; font-size: 28px; letter-spacing: -.035em; }
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .metric { padding: 18px; border: 1px solid; border-radius: 15px; }
+    .light .metric { border-color: #d8dadd; background: #fff; }
+    .dark .metric { border-color: #343a46; background: #171b24; }
+    .metric strong { display: block; margin-bottom: 6px; font-size: 30px; letter-spacing: -.04em; }
+    .metric span { color: #59616d; font: 600 11px/1.4 var(--mono); }
+    .dark .metric span { color: #9ea6b2; }
+    .run { margin-top: 16px; padding: 18px; border-radius: 15px; }
+    .light .run { background: #e8ecff; }
+    .dark .run { background: #1c2440; }
+    .run-line { display: flex; justify-content: space-between; gap: 20px; padding: 11px 0; border-bottom: 1px solid rgba(128,152,255,.24); font: 600 11px/1.3 var(--mono); }
+    .run-line:last-child { border-bottom: 0; }
+    .run-line span:first-child { color: #59616d; }
+    .dark .run-line span:first-child { color: #98a1ae; }
+    .ok { color: #2f6500; }
+    .dark .ok { color: var(--lime); }
+
+    .applications { background: var(--ivory); color: var(--ink); }
+    .app-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 60px; align-items: center; }
+    .app-icon-wrap { display: flex; align-items: center; justify-content: center; min-height: 480px; border-radius: 32px; background: linear-gradient(135deg, #dfe4f8, #f4f4ef); }
+    .app-icon { width: min(58%, 270px); border-radius: 23%; box-shadow: 0 28px 60px rgba(35,52,125,.28), inset 0 0 0 1px rgba(255,255,255,.25); }
+    .browser-demo { overflow: hidden; border: 1px solid #cdd0d5; border-radius: 18px; background: #fff; box-shadow: 0 18px 50px rgba(16,19,26,.12); }
+    .browser-bar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #d8dade; background: #eceef1; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #b9bec6; }
+    .tab { display: flex; align-items: center; gap: 9px; width: 210px; margin-left: 10px; padding: 8px 11px; border-radius: 9px 9px 0 0; background: #fff; font-size: 11px; font-weight: 700; }
+    .fav { width: 18px; height: 18px; }
+    .browser-content { padding: 38px; }
+    .browser-content h3 { max-width: 400px; margin: 18px 0 16px; font-size: 38px; line-height: 1.02; letter-spacing: -.04em; }
+    .browser-content p { max-width: 430px; margin: 0; color: #656d79; font-size: 15px; line-height: 1.6; }
+
+    footer { padding: 42px 0; border-top: 1px solid var(--line); background: var(--dark); }
+    footer .wrap { display: flex; justify-content: space-between; gap: 30px; color: #929aa6; font-size: 12px; }
+    footer b { color: var(--ivory); }
+
+    @media (max-width: 900px) {
+      .hero { min-height: auto; }
+      .hero-grid, .section-head, .proof .wrap, .app-grid { grid-template-columns: 1fr; }
+      .instrument { min-height: 540px; }
+      .claim-grid { grid-template-columns: 1fr; }
+      .claim { min-height: 220px; }
+      .claim h3 { margin-top: 38px; }
+      .logo-stage, .theme-pair { grid-template-columns: 1fr; }
+      .swatches { grid-template-columns: 1fr 1fr; }
+      .concept-line { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 600px) {
+      .wrap { width: min(100% - 28px, 1180px); }
+      .site-header { padding-top: 20px; }
+      .nav-logo { width: 190px; }
+      .nav-meta { display: none; }
+      .hero { padding-top: 135px; }
+      .hero-grid { gap: 46px; }
+      .hero h1 { font-size: 62px; }
+      section { padding: 78px 0; }
+      .section-head { margin-bottom: 42px; }
+      .instrument { min-height: 520px; }
+      .intent { grid-template-columns: 34px 1fr auto; padding: 15px 13px; }
+      .intent small { font-size: 9px; }
+      .swatches, .concept-line { grid-template-columns: 1fr; }
+      .swatch { min-height: 180px; }
+      .type-row { grid-template-columns: 1fr; }
+      .theme-pair { margin-inline: -8px; }
+      .metric-grid { grid-template-columns: 1fr; }
+      .app-icon-wrap { min-height: 360px; }
+      .browser-content { padding: 28px 22px; }
+      footer .wrap { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="site-header">
+      <div class="wrap nav">
+        <svg class="nav-logo" viewBox="0 0 420 64" role="img" aria-label="Logica Pilot">
+          <path d="M18 52V14H34C44.5 14 50 20.5 50 29S44.5 44 34 44H28" fill="none" stroke="#8098FF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="50" cy="29" r="6" fill="#C7FF4A" stroke="#0D1016" stroke-width="2"/>
+          <g fill="none" stroke="#F8F7F2" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M84 16V48H102"/><rect x="112" y="16" width="22" height="32" rx="10.5"/><path d="M166 23C163 18 159 16 154 16C146 16 142 22 142 32S146 48 154 48C159 48 163 46 166 43V34H156"/><path d="M179 16V48"/><path d="M214 21C211 18 208 16 203 16C195 16 191 22 191 32S195 48 203 48C208 48 211 46 214 43"/><path d="M224 48L236 16L248 48M228 39H244"/>
+          </g>
+          <g fill="none" stroke="#8098FF" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"><path d="M278 48V16H290C297 16 301 20 301 26S297 36 290 36H278"/><path d="M314 16V48"/><path d="M328 16V48H346"/><rect x="355" y="16" width="22" height="32" rx="10.5"/><path d="M386 16H414M400 16V48"/></g>
+        </svg>
+        <span class="nav-meta">Brand system / 2026</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div>
+            <p class="eyebrow">Navegação soberana para máquinas</p>
+            <h1>A web,<br><span>sob seu</span><br>comando.</h1>
+            <p class="lede">Um navegador nativo de IA e uma plataforma completa de scraping que entendem páginas por intenção, aprendem cada site e rodam no seu browser — localmente.</p>
+            <div class="proofline">
+              <span class="chip signal">5–185× menos tokens</span>
+              <span class="chip">CDP puro</span>
+              <span class="chip">82 ferramentas</span>
+              <span class="chip">memória local</span>
+            </div>
+          </div>
+          <div class="instrument" aria-label="Mapa semântico de intenções">
+            <div class="instrument-head"><div class="traffic"><i></i><i></i><i></i></div><span class="local">sessão local / ativa</span></div>
+            <div class="map">
+              <span class="map-label">Mapa de intenção — checkout</span>
+              <div class="intent"><span class="idx">[01]</span><div><strong>Identificar sessão</strong><small>browser.authenticated = true</small></div><i class="status"></i></div>
+              <div class="intent active"><span class="idx">[02]</span><div><strong>Encontrar ação principal</strong><small>role=button · intent=continue</small></div><i class="status"></i></div>
+              <div class="intent"><span class="idx">[03]</span><div><strong>Confirmar estado</strong><small>route.memory = learned</small></div><i class="status"></i></div>
+              <div class="intent"><span class="idx">[04]</span><div><strong>Persistir rota</strong><small>site.store = local</small></div><i class="status"></i></div>
+            </div>
+            <div class="route-note">intenção encontrada</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="thesis">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="eyebrow">A tese</p>
+            <div><h2>A página não é uma imagem. É um território.</h2><p class="section-copy">Scrapers veem HTML. Agentes visuais veem pixels. O Pilot vê intenções, relações e alvos — e guarda o caminho para a próxima execução.</p></div>
+          </div>
+          <div class="claim-grid">
+            <article class="claim"><span class="claim-num">[01] PERCEBE</span><h3>Menos ruído.<br>Mais intenção.</h3><p>O mapa semântico a11y + DOM reduz a página ao que uma máquina precisa para decidir e agir.</p></article>
+            <article class="claim"><span class="claim-num">[02] OPERA</span><h3>Seu browser.<br>Sua sessão.</h3><p>CDP puro no browser real, já autenticado. Nenhum contexto precisa subir para um scraper remoto.</p></article>
+            <article class="claim"><span class="claim-num">[03] APRENDE</span><h3>Cada rota vira<br>infraestrutura.</h3><p>Memória por site e auto-conserto transformam execução repetida em vantagem acumulada.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="proof">
+        <div class="wrap">
+          <p class="big-number">5–185<sup>×</sup></p>
+          <div class="proof-copy"><p class="eyebrow">Prova, não promessa</p><h2>Menos tokens que HTML cru.</h2><p>A IA recebe um índice de intenções, não o peso inteiro da página. Mais eficiência no contexto, mais precisão na ação.</p></div>
+        </div>
+      </section>
+
+      <section class="identity">
+        <div class="wrap">
+          <div class="section-head"><p class="eyebrow">Identidade</p><div><h2>Uma rota que aprende.</h2><p class="section-copy">O P não é uma inicial estática. É um percurso contínuo que encontra um beacon — navegador, crawler e memória num único gesto.</p></div></div>
+          <div class="logo-stage">
+            <div class="stage light">
+              <svg class="primary-lockup" viewBox="0 0 420 64" role="img" aria-label="Logo Logica Pilot">
+                <path d="M18 52V14H34C44.5 14 50 20.5 50 29S44.5 44 34 44H28" fill="none" stroke="#3455E8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="50" cy="29" r="6" fill="#C7FF4A" stroke="#10131A" stroke-width="2"/>
+                <g fill="none" stroke="#10131A" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"><path d="M84 16V48H102"/><rect x="112" y="16" width="22" height="32" rx="10.5"/><path d="M166 23C163 18 159 16 154 16C146 16 142 22 142 32S146 48 154 48C159 48 163 46 166 43V34H156"/><path d="M179 16V48"/><path d="M214 21C211 18 208 16 203 16C195 16 191 22 191 32S195 48 203 48C208 48 211 46 214 43"/><path d="M224 48L236 16L248 48M228 39H244"/></g>
+                <g fill="none" stroke="#3455E8" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"><path d="M278 48V16H290C297 16 301 20 301 26S297 36 290 36H278"/><path d="M314 16V48"/><path d="M328 16V48H346"/><rect x="355" y="16" width="22" height="32" rx="10.5"/><path d="M386 16H414M400 16V48"/></g>
+              </svg>
+            </div>
+            <div class="stage dark">
+              <svg class="mark-large" viewBox="0 0 64 64" role="img" aria-label="Símbolo Logica Pilot"><path d="M18 52V14H34C44.5 14 50 20.5 50 29S44.5 44 34 44H28" fill="none" stroke="#8098FF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="50" cy="29" r="6" fill="#C7FF4A" stroke="#0D1016" stroke-width="2"/></svg>
+            </div>
+          </div>
+          <div class="concept-line"><div class="concept"><b>Rota</b><span>Linha contínua: execução persistente.</span></div><div class="concept"><b>Loop</b><span>O site deixa de ser desconhecido.</span></div><div class="concept"><b>Beacon</b><span>Intenção encontrada e validada.</span></div><div class="concept"><b>P</b><span>Um instrumento chamado Pilot.</span></div></div>
+        </div>
+      </section>
+
+      <section class="colors">
+        <div class="wrap">
+          <div class="section-head"><p class="eyebrow">Sistema cromático</p><div><h2>Infraestrutura<br>e sinal.</h2><p class="section-copy">O azul sustenta. O lime aponta. Graphite e Ivory mantêm o território legível.</p></div></div>
+          <div class="swatches"><div class="swatch blue"><b>Sovereign Blue</b><code>#3455E8</code></div><div class="swatch lime"><b>Beacon Lime</b><code>#C7FF4A</code></div><div class="swatch graphite"><b>Graphite 950</b><code>#10131A</code></div><div class="swatch ivory"><b>Ivory</b><code>#F8F7F2</code></div></div>
+        </div>
+      </section>
+
+      <section class="type-specimen">
+        <div class="wrap">
+          <p class="eyebrow">Manrope / voz instrumental</p>
+          <p class="display-type">Não envie <span class="blue">pixels.</span><br>Envie intenção.</p>
+          <div class="type-row"><div class="type-meta">20 / 32<br>REGULAR<br>−1%</div><p class="type-sample">O Pilot lê a página como um mapa de ações. Cada índice reduz ruído, cada rota concluída alimenta memória local e cada nova execução começa mais perto do resultado.</p></div>
+        </div>
+      </section>
+
+      <section class="themes">
+        <div class="wrap">
+          <div class="section-head"><p class="eyebrow">Produto</p><div><h2>Claro e escuro.<br>A mesma hierarquia.</h2><p class="section-copy">O tema muda a luz, não muda o papel das cores: azul é estrutura; lime é estado ativo.</p></div></div>
+          <div class="theme-pair">
+            <article class="ui light">
+              <div class="ui-top"><svg class="mini-logo" viewBox="0 0 64 64" aria-label="Logica Pilot"><path d="M18 52V14H34C44.5 14 50 20.5 50 29S44.5 44 34 44H28" fill="none" stroke="#3455E8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="50" cy="29" r="6" fill="#C7FF4A" stroke="#10131A" stroke-width="2"/></svg><span class="session">local</span></div>
+              <div class="ui-body"><p class="ui-label">Território / github.com</p><h3>Rota aprendida</h3><div class="metric-grid"><div class="metric"><strong>42</strong><span>INTENÇÕES</span></div><div class="metric"><strong>18×</strong><span>MENOS TOKENS</span></div></div><div class="run"><div class="run-line"><span>[01] sessão</span><b class="ok">ativa</b></div><div class="run-line"><span>[02] índice</span><b class="ok">mapeado</b></div><div class="run-line"><span>[03] memória</span><b class="ok">salva</b></div></div></div>
+            </article>
+            <article class="ui dark">
+              <div class="ui-top"><svg class="mini-logo" viewBox="0 0 64 64" aria-label="Logica Pilot"><path d="M18 52V14H34C44.5 14 50 20.5 50 29S44.5 44 34 44H28" fill="none" stroke="#8098FF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="50" cy="29" r="6" fill="#C7FF4A" stroke="#0D1016" stroke-width="2"/></svg><span class="session">local</span></div>
+              <div class="ui-body"><p class="ui-label">Território / github.com</p><h3>Rota aprendida</h3><div class="metric-grid"><div class="metric"><strong>42</strong><span>INTENÇÕES</span></div><div class="metric"><strong>18×</strong><span>MENOS TOKENS</span></div></div><div class="run"><div class="run-line"><span>[01] sessão</span><b class="ok">ativa</b></div><div class="run-line"><span>[02] índice</span><b class="ok">mapeado</b></div><div class="run-line"><span>[03] memória</span><b class="ok">salva</b></div></div></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="applications">
+        <div class="wrap">
+          <div class="section-head"><p class="eyebrow">Aplicações</p><div><h2>Reconhecível<br>em qualquer escala.</h2><p class="section-copy">A rota e o beacon sobrevivem do app icon à aba de 16 px.</p></div></div>
+          <div class="app-grid">
+            <div class="app-icon-wrap"><svg class="app-icon" viewBox="0 0 512 512" role="img" aria-label="Ícone do aplicativo Logica Pilot"><rect width="512" height="512" rx="116" fill="#3455E8"/><path d="M150 406V108H276C358 108 404 158 404 229S358 350 276 350H226" fill="none" stroke="#FFFFFF" stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/><circle cx="404" cy="229" r="48" fill="#C7FF4A" stroke="#10131A" stroke-width="16"/></svg></div>
+            <div class="browser-demo"><div class="browser-bar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><div class="tab"><svg class="fav" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#3455E8"/><path d="M9 26V7H17C22 7 25 10 25 15S22 22 17 22H14" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="25" cy="15" r="3.5" fill="#C7FF4A" stroke="#10131A"/></svg>Logica Pilot</div></div><div class="browser-content"><p class="eyebrow">Browser nativo de IA</p><h3>Seu browser.<br>Sua memória.</h3><p>A sessão continua onde sempre esteve. A diferença é que agora a máquina entende o território e se lembra do caminho.</p></div></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer><div class="wrap"><span><b>Logica Pilot</b> — Navegação soberana para máquinas.</span><span>Uma marca da família Rovemark.</span></div></footer>
+  </div>
+</body>
+</html>

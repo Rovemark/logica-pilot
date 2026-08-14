@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 338 64" role="img" aria-labelledby="title desc">
+  <title id="title">Wordmark Logica Pilot</title>
+  <desc id="desc">Lettering geométrico proprietário em caixa alta.</desc>
+  <g transform="translate(-80 0)">
+    <g fill="none" stroke="#10131A" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M84 16V48H102"/>
+      <rect x="112" y="16" width="22" height="32" rx="10.5"/>
+      <path d="M166 23C163 18 159 16 154 16C146 16 142 22 142 32S146 48 154 48C159 48 163 46 166 43V34H156"/>
+      <path d="M179 16V48"/>
+      <path d="M214 21C211 18 208 16 203 16C195 16 191 22 191 32S195 48 203 48C208 48 211 46 214 43"/>
+      <path d="M224 48L236 16L248 48M228 39H244"/>
+    </g>
+    <g fill="none" stroke="#3455E8" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M278 48V16H290C297 16 301 20 301 26S297 36 290 36H278"/>
+      <path d="M314 16V48"/>
+      <path d="M328 16V48H346"/>
+      <rect x="355" y="16" width="22" height="32" rx="10.5"/>
+      <path d="M386 16H414M400 16V48"/>
+    </g>
+  </g>
+</svg>
