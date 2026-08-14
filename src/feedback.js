@@ -33,9 +33,11 @@ async function injectFeedback(page, {
         ${cursor ? `
         #__lp_cursor {
           position: fixed; z-index: 2147483646; pointer-events: none;
-          width: 20px; height: 20px; border-radius: 50%;
-          border: 2px solid #34C759; background: rgba(52,199,89,0.3);
-          transform: translate(-50%, -50%); transition: all 0.15s ease;
+          width: 36px; height: 36px;
+          background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 26 26'%3E%3Cpath d='M2 2 L2 20 L7 15.5 L10.2 22.5 L13.4 21 L10.2 14.2 L17 14 Z' fill='%233455E8' stroke='white' stroke-width='1.4' stroke-linejoin='round'/%3E%3Ccircle cx='19' cy='6' r='3.2' fill='%23C7FF4A' stroke='%2310131A' stroke-width='1'/%3E%3C/svg%3E") no-repeat center/contain;
+          transform: translate(-3px, -3px);
+          transition: left 0.14s cubic-bezier(.22,.61,.36,1), top 0.14s cubic-bezier(.22,.61,.36,1);
+          filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));
           display: none;
         }
         #__lp_cursor.active { display: block; }
@@ -127,6 +129,10 @@ async function injectFeedback(page, {
         setTimeout(function() { r.remove(); }, 700);
         ` : ''}
       };
+
+      // NOTA: de propósito NÃO escutamos 'mousemove' do documento — isso faria a
+      // seta seguir o mouse FÍSICO do usuário também. A seta é da IA: só se move
+      // quando o agente age (as ações chamam __lp_showCursor/__lp_showRipple).
 
       window.__lp_showKeystroke = function(text) {
         ${keystrokes ? `

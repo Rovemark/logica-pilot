@@ -18,7 +18,7 @@ const DEFAULT_URL =
   process.env.LOGICA_PILOT_LLM_URL ||
   process.env.LOGICAPROXY_URL ||
   'http://127.0.0.1:8317/v1/messages';
-const DEFAULT_MODEL = process.env.LOGICA_PILOT_MODEL || 'claude-sonnet-4-6';
+const DEFAULT_MODEL = process.env.LOGICA_PILOT_MODEL || 'claude-sonnet-5';
 const DEFAULT_KEY =
   process.env.LOGICA_PILOT_KEY ||
   process.env.LOGICAPROXY_API_KEY ||
@@ -150,4 +150,9 @@ function textOf(resp) {
     .trim();
 }
 
-module.exports = { callClaude, firstToolUse, textOf, configure, isConfigured, DEFAULT_MODEL, DEFAULT_URL };
+/** True when a real user key (sk-ant-…) is present — the honest "AI ready" signal. */
+function hasUserKey() {
+  return !!userKey();
+}
+
+module.exports = { callClaude, firstToolUse, textOf, configure, isConfigured, hasUserKey, DEFAULT_MODEL, DEFAULT_URL };

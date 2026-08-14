@@ -25,6 +25,7 @@ const { URL } = require('url');
 const { TOOLS, get } = require('./tools');
 const dataset = require('./dataset');
 const kvs = require('./kvs');
+const llm = require('./llm');
 
 let _pilot = null;
 async function sharedBrowser() {
@@ -53,6 +54,52 @@ async function runTool(name, args, { model } = {}) {
     return { error: e.message, status: 500 };
   } finally {
     if (page) { try { await page.close(); } catch {} }
+  }
+}
+
+// Reads the CEF browser's ephemeral CDP port from its DevToolsActivePort file.
+// This is how we attach EXCLUSIVELY to the Logica Pilot window — never a random
+// port that could belong to the user's real Chrome.
+function cefDebugPort() {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const f = path.join(os.homedir(), 'Library', 'Application Support', 'Logica Pilot', 'DevToolsActivePort');
+  const port = parseInt(String(fs.readFileSync(f, 'utf8')).split('\n')[0].trim(), 10);
+  if (!Number.isInteger(port) || port <= 0) throw new Error('invalid DevToolsActivePort');
+  return port;
+}
+
+// The "Agente" tab: attach to the Logica Pilot window, open a NEW visible tab and
+// drive it autonomously toward `goal` with the feedback overlay ON (the arrow cursor
+// follows every synthetic click). The user watches the AI work live; their real
+// mouse stays free. Detaches at the end (the tab and its final state remain).
+async function runAgentOnCef({ goal, url, model }) {
+  let port;
+  try { port = cefDebugPort(); }
+  catch { return { error: 'Logica Pilot não está aberto (sem porta CDP). Abra o navegador e tente de novo.', status: 503 }; }
+  const { LogicaPilot } = require('./index');
+  const feedback = require('./feedback');
+  const agent = require('./agent');
+  let lp = null;
+  try {
+    lp = new LogicaPilot({ attach: port });
+    await lp.launch();
+    const page = await lp.browser.newPage();
+    const reinject = async () => { try { await feedback.injectFeedback(page, { cursor: true, ripples: true, keystrokes: true, toast: true }); } catch {} };
+    await reinject();
+    const steps = [];
+    const r = await agent.run(page, goal, {
+      maxSteps: 16,
+      model,
+      startUrl: url || undefined,
+      onStep: async (s) => { steps.push({ step: s.step, action: s.action }); await reinject(); },
+    });
+    return { out: { json: { ok: true, goal, success: r.success, result: r.result, steps: r.steps, trace: steps } } };
+  } catch (e) {
+    return { error: e.message, status: 500 };
+  } finally {
+    if (lp) { try { await lp.close(); } catch {} } // detach only — never kills the window
   }
 }
 
@@ -116,6 +163,34 @@ function makeServer({ apiKey, model } = {}) {
         const r = await runTool(tool, args, { model });
         if (r.error) return send(res, r.status || 500, { error: r.error });
         return toolResult(res, r.out, q.get('format'));
+      }
+
+      // POST /v1/agent/run — run an autonomous goal on a visible "Agente" tab of the
+      // Logica Pilot window (attaches via CEF's DevToolsActivePort). Body: { goal, url? }.
+      if (req.method === 'POST' && u.pathname === '/v1/agent/run') {
+        const body = await readBody(req);
+        const goal = body.goal || body.task;
+        if (!goal) return send(res, 400, { error: 'passe { goal }' });
+        const r = await runAgentOnCef({ goal, url: body.url, model });
+        if (r.error) return send(res, r.status || 500, { error: r.error });
+        return toolResult(res, r.out, 'json');
+      }
+
+      // GET /v1/llm/status — does the brain have a real user key? (the AI panel asks this)
+      if (req.method === 'GET' && u.pathname === '/v1/llm/status') {
+        return send(res, 200, { hasKey: llm.hasUserKey(), model: llm.DEFAULT_MODEL });
+      }
+
+      // POST /v1/llm/config — inject the user's Anthropic key/model at runtime (from the panel Settings).
+      // Only defined fields are applied so we never wipe an env-provided model/url with undefined.
+      if (req.method === 'POST' && u.pathname === '/v1/llm/config') {
+        const body = await readBody(req);
+        const cfg = {};
+        if (typeof body.apiKey === 'string') cfg.apiKey = body.apiKey;
+        if (typeof body.model === 'string') cfg.model = body.model;
+        if (typeof body.url === 'string') cfg.url = body.url;
+        llm.configure(cfg);
+        return send(res, 200, { ok: true, hasKey: llm.hasUserKey() });
       }
 
       // GET /v1/tools
