@@ -74,7 +74,7 @@ function cefDebugPort() {
 // drive it autonomously toward `goal` with the feedback overlay ON (the arrow cursor
 // follows every synthetic click). The user watches the AI work live; their real
 // mouse stays free. Detaches at the end (the tab and its final state remain).
-async function runAgentOnCef({ goal, url, model }) {
+async function runAgentOnCef({ goal, url, match, model }) {
   let port;
   try { port = cefDebugPort(); }
   catch { return { error: 'Logica Pilot não está aberto (sem porta CDP). Abra o navegador e tente de novo.', status: 503 }; }
@@ -83,9 +83,11 @@ async function runAgentOnCef({ goal, url, model }) {
   const agent = require('./agent');
   let lp = null;
   try {
-    lp = new LogicaPilot({ attach: port });
+    // `match` = token único da aba que o painel já criou e AGRUPOU ("🤖 Agente").
+    // Anexamos NELA (não criamos outra) pra a aba dirigida ficar dentro do grupo.
+    lp = new LogicaPilot({ attach: port, attachMatch: match || undefined });
     await lp.launch();
-    const page = await lp.browser.newPage();
+    const page = match ? lp.browser.page : await lp.browser.newPage();
     const reinject = async () => { try { await feedback.injectFeedback(page, { cursor: true, ripples: true, keystrokes: true, toast: true }); } catch {} };
     await reinject();
     const steps = [];
@@ -171,7 +173,7 @@ function makeServer({ apiKey, model } = {}) {
         const body = await readBody(req);
         const goal = body.goal || body.task;
         if (!goal) return send(res, 400, { error: 'passe { goal }' });
-        const r = await runAgentOnCef({ goal, url: body.url, model });
+        const r = await runAgentOnCef({ goal, url: body.url, match: body.match, model });
         if (r.error) return send(res, r.status || 500, { error: r.error });
         return toolResult(res, r.out, 'json');
       }
