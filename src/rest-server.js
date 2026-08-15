@@ -290,6 +290,19 @@ function makeServer({ apiKey, model } = {}) {
 /** Start the server. Binds loopback unless an api key is set (then 0.0.0.0). */
 function serve({ port = 8080, apiKey = process.env.LOGICA_PILOT_API_KEY || null, host, model } = {}) {
   const server = makeServer({ apiKey, model });
+  // Ponte WebSocket: páginas chrome:// do Logica Pilot não podem fazer fetch http://
+  // (o Chromium mata o renderer), então o Copiloto fala ws:// com as mesmas tools.
+  try {
+    const { attachWsBridge } = require('./ws-bridge');
+    attachWsBridge(server, {
+      runTool,
+      runAgent: (o) => runAgentOnCef(o),
+      toolCount: TOOLS.length,
+      model,
+    });
+  } catch (e) {
+    if (process.env.LOGICA_PILOT_DEBUG) console.error('ws-bridge:', e.message);
+  }
   const bind = host || (apiKey ? '0.0.0.0' : '127.0.0.1');
   return new Promise((resolve) => {
     server.listen(port, bind, () => resolve({ server, port, host: bind, authenticated: !!apiKey }));
