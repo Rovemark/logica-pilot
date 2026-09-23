@@ -45,12 +45,136 @@ function parseVtt(text) {
   for (const raw of lines) {
     const l = raw.trim();
     if (!l || l === 'WEBVTT' || /^\d+$/.test(l)) continue;
+    // Cabeçalho do arquivo (Kind:, Language:, X-TIMESTAMP-MAP...) não é fala: entrava no
+    // começo da transcrição como se fosse a primeira frase do vídeo.
+    if (/^(Kind|Language|X-TIMESTAMP-MAP|NOTE)\s*:/i.test(l)) continue;
     if (/-->/.test(l)) continue;
     if (/^(NOTE|STYLE|REGION)\b/.test(l)) continue;
     const clean = l.replace(/<[^>]+>/g, '').trim();
     if (clean && out[out.length - 1] !== clean) out.push(clean);
   }
   return out.join(' ');
+}
+
+// O YouTube não expõe <track> nenhum: o player carrega a legenda por conta própria a partir de
+// uma lista que vem embutida em `ytInitialPlayerResponse`. Sem ler essa lista, `analyze` só
+// conseguia devolver um aviso dizendo que a legenda existe em outro lugar.
+const FAIXAS_YOUTUBE = `(() => {
+  try {
+    const r = (window.ytInitialPlayerResponse
+      || JSON.parse((document.body.innerHTML.match(/ytInitialPlayerResponse\\s*=\\s*(\\{.+?\\})\\s*;/) || [])[1] || 'null'));
+    const lista = r && r.captions
+      && r.captions.playerCaptionsTracklistRenderer
+      && r.captions.playerCaptionsTracklistRenderer.captionTracks;
+    if (!lista || !lista.length) return [];
+    return lista.map((c) => ({
+      url: c.baseUrl,
+      lang: c.languageCode || null,
+      label: (c.name && (c.name.simpleText || (c.name.runs || []).map((x) => x.text).join(''))) || null,
+      automatica: c.kind === 'asr',
+    }));
+  } catch (e) { return []; }
+})()`;
+
+// O timedtext devolve XML, não WebVTT. As entidades vêm dobradas (&amp;#39;), então a
+// decodificação roda duas vezes; uma passada só deixa `&#39;` cru no texto.
+function parseTimedtext(xml) {
+  const partes = [];
+  const re = /<text[^>]*>([\s\S]*?)<\/text>/g;
+  let m;
+  while ((m = re.exec(String(xml)))) {
+    const bruto = m[1];
+    const limpo = decodificar(decodificar(bruto))
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (limpo && partes[partes.length - 1] !== limpo) partes.push(limpo);
+  }
+  return partes.join(' ');
+}
+
+function decodificar(s) {
+  return String(s)
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
+// Preferência: legenda escrita por pessoa, no idioma da página; depois a automática. Uma legenda
+// automática em outro idioma é pior que a escrita no idioma certo, e o modelo paga o preço.
+function escolherFaixa(faixas, idiomaDaPagina) {
+  if (!faixas || !faixas.length) return null;
+  const base = String(idiomaDaPagina || '').slice(0, 2).toLowerCase();
+  const casa = (f) => String(f.lang || '').slice(0, 2).toLowerCase() === base;
+  return faixas.find((f) => !f.automatica && casa(f))
+      || faixas.find((f) => !f.automatica)
+      || faixas.find((f) => casa(f))
+      || faixas[0];
+}
+
+// ── ROTA PREFERIDA: yt-dlp ─────────────────────────────────────
+//
+// Medido em 24/08/2026: o `api/timedtext` responde 200 com CORPO VAZIO para toda variante de
+// formato (sem fmt, json3, srv3, vtt, ttml), e o painel de transcrição não abre com clique
+// programático. O YouTube fechou os dois caminhos diretos.
+//
+// O yt-dlp continua entregando porque implementa a negociação de token que o player faz. É
+// dependência externa, e é a escolha certa: um projeto com 154 mil estrelas persegue as
+// mudanças do YouTube em tempo integral, e nós não vamos ganhar essa corrida sozinhos.
+// Sem ele instalado, a via nativa abaixo ainda é tentada e o aviso diz o que instalar.
+function transcricaoYtdlp(url, { timeout = 45000 } = {}) {
+  const { execFile } = require('node:child_process');
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  return new Promise((resolve) => {
+    const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-leg-'));
+    const saida = path.join(pasta, 'leg');
+    const limpar = () => { try { fs.rmSync(pasta, { recursive: true, force: true }); } catch {} };
+    const args = [
+      '--skip-download', '--write-subs', '--write-auto-subs',
+      '--sub-langs', 'pt.*,en.*', '--sub-format', 'vtt',
+      '--no-warnings', '-o', saida, url,
+    ];
+    const filho = execFile('yt-dlp', args, { timeout }, (erro) => {
+      // Erro parcial é comum (um idioma falha, outro baixa). O que vale é: veio arquivo?
+      let arquivos = [];
+      try { arquivos = fs.readdirSync(pasta).filter((f) => f.endsWith('.vtt')); } catch {}
+      if (!arquivos.length) {
+        limpar();
+        const semFerramenta = erro && (erro.code === 'ENOENT' || /ENOENT/.test(String(erro.message)));
+        return resolve({ ok: false, semFerramenta, erro: semFerramenta ? 'yt-dlp não está instalado' : 'yt-dlp não trouxe legenda' });
+      }
+      // Escrita por pessoa ganha da automática, e português ganha do resto.
+      const nota = (f) => (/\.pt/.test(f) ? 0 : 10) + (/auto/i.test(f) ? 5 : 0);
+      arquivos.sort((a, b) => nota(a) - nota(b));
+      const escolhido = arquivos[0];
+      let vtt = '';
+      try { vtt = fs.readFileSync(path.join(pasta, escolhido), 'utf8'); } catch {}
+      limpar();
+      const texto = parseVtt(vtt);
+      if (!texto) return resolve({ ok: false, erro: 'a legenda veio vazia' });
+      const lang = (/\.([a-z]{2}(?:-[A-Za-z]{2,4})?)\.vtt$/.exec(escolhido) || [])[1] || null;
+      return resolve({ ok: true, texto, lang, automatica: /auto/i.test(escolhido), via: 'yt-dlp' });
+    });
+    filho.on('error', () => {});
+  });
+}
+
+async function transcricaoYoutube(page) {
+  const faixas = await page.eval(FAIXAS_YOUTUBE).catch(() => []);
+  if (!faixas || !faixas.length) return null;
+  const idioma = await page.eval('document.documentElement.lang || navigator.language').catch(() => 'pt');
+  const faixa = escolherFaixa(faixas, idioma);
+  if (!faixa || !faixa.url) return null;
+  // Buscar de DENTRO da página: o baseUrl é assinado e o YouTube recusa a chamada de fora.
+  const xml = await page.eval(
+    `fetch(${JSON.stringify(faixa.url)}).then(r=>r.text()).catch(()=>null)`
+  ).catch(() => null);
+  if (!xml) return null;
+  const texto = parseTimedtext(xml);
+  if (!texto) return null;
+  return { texto, lang: faixa.lang, label: faixa.label, automatica: !!faixa.automatica };
 }
 
 async function fetchTranscript(page, trackSrc) {
@@ -94,8 +218,34 @@ async function analyze(page, { describe = false, model, frames = 0, index = 0 } 
     }
     if (transcript) break;
   }
+  // Sem <track>, tentar o caminho do próprio YouTube antes de desistir.
+  // YouTube: yt-dlp primeiro (é o que entrega hoje), via nativa como alternativa.
+  let semYtdlp = false;
+  if (!transcript && probe.platform === 'youtube') {
+    const viaFerramenta = await transcricaoYtdlp(probe.url).catch(() => null);
+    if (viaFerramenta && viaFerramenta.ok) {
+      transcript = viaFerramenta.texto;
+      result.transcriptLang = viaFerramenta.lang;
+      result.transcriptAuto = viaFerramenta.automatica;
+      result.transcriptVia = 'yt-dlp';
+    } else {
+      semYtdlp = !!(viaFerramenta && viaFerramenta.semFerramenta);
+      const yt = await transcricaoYoutube(page).catch(() => null);
+      if (yt) {
+        transcript = yt.texto;
+        result.transcriptLang = yt.lang || yt.label || null;
+        result.transcriptAuto = yt.automatica;
+        result.transcriptVia = 'timedtext';
+      }
+    }
+  }
   if (transcript) result.transcript = transcript;
-  else if (probe.platform === 'youtube') result.transcriptHint = 'YouTube transcript needs the timedtext API or the watch page captions; none exposed inline.';
+  else if (probe.platform === 'youtube') {
+    // Dizer qual é o remédio vale mais que dizer que falhou.
+    result.transcriptHint = semYtdlp
+      ? 'sem legenda: o YouTube fechou o acesso direto e o yt-dlp não está instalado (brew install yt-dlp)'
+      : 'este vídeo do YouTube não tem legenda publicada (nem automática)';
+  }
 
   // Optional keyframe sampling for a vision model.
   if (frames && Number(frames) > 0) {
@@ -138,4 +288,9 @@ async function analyze(page, { describe = false, model, frames = 0, index = 0 } 
   return result;
 }
 
-module.exports = { analyze, sampleFrames, parseVtt };
+module.exports = {
+  analyze, sampleFrames, parseVtt,
+  // Expostos para teste: o parser do timedtext e a escolha de faixa decidem a qualidade da
+  // transcrição, e são a parte que dá pra provar sem abrir um navegador.
+  __teste: { parseTimedtext, escolherFaixa, decodificar },
+};
