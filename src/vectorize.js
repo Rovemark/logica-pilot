@@ -9,7 +9,7 @@
  *               url: 'http://localhost:6333', collection: 'docs' })
  *
  * embed: 'local' (default — deterministic, offline, private; good for tests & lexical
- * fallback) | 'openai' | 'voyage' (real semantic, needs the provider key in env).
+ * fallback) | 'openai'.
  * target: 'qdrant' | 'chroma' | 'pinecone' | 'dry' (returns the upsert plan, no DB).
  *
  * Zero-dependency (crypto + global fetch). Delta sidecar:
@@ -64,12 +64,6 @@ async function providerEmbed(texts, provider, model) {
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error('OPENAI_API_KEY not set');
     const r = await fetch('https://api.openai.com/v1/embeddings', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` }, body: JSON.stringify({ model: model || 'text-embedding-3-small', input: texts }) }).then((x) => x.json());
-    return r.data.map((d) => d.embedding);
-  }
-  if (provider === 'voyage') {
-    const key = process.env.VOYAGE_API_KEY;
-    if (!key) throw new Error('VOYAGE_API_KEY not set');
-    const r = await fetch('https://api.voyageai.com/v1/embeddings', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` }, body: JSON.stringify({ model: model || 'voyage-3', input: texts }) }).then((x) => x.json());
     return r.data.map((d) => d.embedding);
   }
   throw new Error(`unknown embed provider: ${provider}`);

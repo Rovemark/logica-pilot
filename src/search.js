@@ -35,6 +35,35 @@ async function searchBrave(query, limit, key) {
   return ((j.web && j.web.results) || []).slice(0, limit).map((r) => ({ title: r.title, url: r.url }));
 }
 
+// ── BUSCA SEMÂNTICA (Exa) ──────────────────────────────────────
+//
+// Brave e Bing casam PALAVRA. Uma pergunta como "quem já resolveu rate limit de coleta em
+// escala" devolve páginas que contêm essas palavras, não páginas que respondem isso. A Exa
+// indexa por significado, e é o que dá resultado útil para pesquisa aberta.
+//
+// Exige EXA_API_KEY. Sem a chave não há semântica: a busca cai para palavra-chave, e o doctor
+// diz isso em vez de deixar parecer que a qualidade é a mesma.
+async function searchExa(query, limit, key, { type = 'auto' } = {}) {
+  const res = await fetch('https://api.exa.ai/search', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': key },
+    body: JSON.stringify({
+      query,
+      numResults: limit,
+      // 'auto' deixa a Exa escolher entre neural e keyword conforme a pergunta; 'neural'
+      // força significado, e é o que se quer quando a pergunta é aberta.
+      type,
+    }),
+  });
+  if (!res.ok) return [];
+  const j = await res.json();
+  return (j.results || []).slice(0, limit).map((r) => ({
+    title: r.title, url: r.url, published: r.publishedDate || null, author: r.author || null,
+    score: typeof r.score === 'number' ? Number(r.score.toFixed(3)) : null,
+    engine: 'exa',
+  }));
+}
+
 async function searchBing(query, limit) {
   const browser = await Browser.launch({ headless: true });
   try {
@@ -71,12 +100,38 @@ async function searchBing(query, limit) {
  */
 async function search(query, o = {}) {
   const limit = Math.max(1, Math.min(o.limit || 8, 20));
-  const key = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY;
-  if (key) {
-    const r = await searchBrave(query, limit, key).catch(() => []);
+  const exaKey = process.env.EXA_API_KEY;
+  const braveKey = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY;
+
+  // Pedido explícito de semântica não pode cair para palavra-chave sem avisar: o chamador
+  // receberia resultados piores achando que perguntou por significado.
+  if (o.semantic && !exaKey) {
+    throw new Error('busca semântica pedida mas EXA_API_KEY não está configurada');
+  }
+  if (exaKey) {
+    const r = await searchExa(query, limit, exaKey, { type: o.semantic ? 'neural' : 'auto' }).catch(() => []);
+    if (r.length) return r;
+  }
+  if (braveKey) {
+    const r = await searchBrave(query, limit, braveKey).catch(() => []);
     if (r.length) return r;
   }
   return searchBing(query, limit);
 }
 
-module.exports = { search, decodeBing };
+/** Qual motor de busca está de fato disponível agora, e o que falta para o melhor. */
+function estadoDaBusca() {
+  const exa = !!process.env.EXA_API_KEY;
+  const brave = !!(process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY);
+  return {
+    ativo: exa ? 'exa' : brave ? 'brave' : 'bing',
+    semantica: exa,
+    motores: {
+      exa: { disponivel: exa, tipo: 'semântica', receita: exa ? null : 'defina EXA_API_KEY' },
+      brave: { disponivel: brave, tipo: 'palavra-chave', receita: brave ? null : 'defina BRAVE_SEARCH_API_KEY' },
+      bing: { disponivel: true, tipo: 'palavra-chave (raspagem)', receita: null },
+    },
+  };
+}
+
+module.exports = { search, decodeBing, searchExa, estadoDaBusca };
