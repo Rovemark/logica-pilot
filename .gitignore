@@ -17,3 +17,10 @@ docs/REVIEW-FIXES.md
 
 # harness/spikes de validação da migração WebContentsView (scratch, não-produto)
 _wcv-spike/
+
+# Binários compilados das ferramentas nativas (o fonte .swift é versionado)
+tools/lswin
+tools/pilot-key
+tools/pilot-window
+__pycache__/
+*.pyc
