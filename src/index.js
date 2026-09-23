@@ -38,6 +38,7 @@ class LogicaPilot {
       height: this.opts.height,
       binary: this.opts.binary,
       extraArgs: this.opts.extraArgs,
+      userDataDir: this.opts.userDataDir, // persistent profile (inherits session/login from a real profile)
       proxy: this.opts.proxy, // BYO proxy (user:pass@host:port) — was silently dropped before
       location: this.opts.location, // geo/timezone/locale emulation
       proxyPool: this.opts.proxyPool, // named pool → local forwarding proxy w/ per-request rotation

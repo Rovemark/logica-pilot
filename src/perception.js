@@ -39,12 +39,59 @@ function __lp_collect(maxEls, maxChars) {
     return r;
   }
 
+  // O estado que muda a decisão: já marcado, já aberto, já escolhido. `aria-*` tem precedência
+  // porque é o que o autor da página declarou; a propriedade nativa entra quando não há aria.
+  // Devolve string curta (ou vazio) para não inchar o mapa que vai ao modelo.
+  function stateOf(el) {
+    var s = [];
+    var aria = function (nome) { var v = el.getAttribute('aria-' + nome); return v === null ? null : String(v).toLowerCase(); };
+
+    var checked = aria('checked');
+    if (checked === null && typeof el.checked === 'boolean' && (el.type === 'checkbox' || el.type === 'radio')) {
+      checked = el.checked ? 'true' : 'false';
+    }
+    if (checked === 'true') s.push('marcado');
+    else if (checked === 'mixed') s.push('parcial');
+    else if (checked === 'false') s.push('desmarcado');
+
+    var expanded = aria('expanded');
+    if (expanded === 'true') s.push('aberto');
+    else if (expanded === 'false') s.push('fechado');
+
+    var selected = aria('selected');
+    if (selected === null && typeof el.selected === 'boolean' && el.tagName === 'OPTION') {
+      selected = el.selected ? 'true' : 'false';
+    }
+    if (selected === 'true') s.push('selecionado');
+
+    var pressed = aria('pressed');
+    if (pressed === 'true') s.push('pressionado');
+
+    if (aria('current') && aria('current') !== 'false') s.push('atual');
+    if (aria('disabled') === 'true' || el.disabled === true) s.push('desabilitado');
+    if (aria('required') === 'true' || el.required === true) s.push('obrigatório');
+    if (aria('invalid') === 'true') s.push('inválido');
+
+    return s.join(',');
+  }
+
   function labelOf(el) {
     var t = (el.getAttribute('aria-label') || '').trim();
     if (!t) t = (el.getAttribute('placeholder') || '').trim();
     if (!t) {
-      var labelledby = el.getAttribute('aria-labelledby');
-      if (labelledby) { var lb = document.getElementById(labelledby); if (lb) t = (lb.innerText || '').trim(); }
+      // aria-labelledby aceita uma LISTA de ids separada por espaço, e o nome é a
+      // concatenação do texto de cada um. Fazendo getElementById com a string inteira,
+      // "titulo descricao" não achava elemento nenhum e o campo ficava sem nome.
+      var labelledby = (el.getAttribute('aria-labelledby') || '').trim();
+      if (labelledby) {
+        var partes = [];
+        var ids = labelledby.split(/\s+/);
+        for (var k = 0; k < ids.length; k++) {
+          var lb = document.getElementById(ids[k]);
+          if (lb) { var txt = (lb.innerText || lb.textContent || '').trim(); if (txt) partes.push(txt); }
+        }
+        t = partes.join(' ').replace(/\s+/g, ' ').trim();
+      }
     }
     if (!t) t = ((el.innerText || el.textContent || '').trim()).replace(/\s+/g, ' ');
     if (!t) t = (el.getAttribute('title') || el.getAttribute('alt') || '').trim();
@@ -70,6 +117,10 @@ function __lp_collect(maxEls, maxChars) {
       value: (el.value != null ? String(el.value) : '').slice(0, 80),
       placeholder: el.getAttribute('placeholder') || '',
       href: (el.getAttribute('href') || '').slice(0, 80),
+      // ESTADO. Sem isto a lista dizia o que existe mas não como está, e o agente clicava de
+      // novo no que já estava marcado, ou abria de novo o menu já aberto: em toggle, agir duas
+      // vezes DESFAZ. Vem do atributo aria quando há, e da propriedade real quando não há.
+      state: stateOf(el),
       cx: Math.round(r.left + r.width / 2),
       cy: Math.round(r.top + r.height / 2),
       inView: (r.top >= 0 && r.top < innerHeight)
@@ -248,6 +299,9 @@ function format(snap) {
     const extra = [];
     if (el.placeholder && el.placeholder !== desc) extra.push(`ph="${el.placeholder}"`);
     if (el.value && el.tag === 'input') extra.push(`val="${el.value}"`);
+    // O estado entra no que o modelo LÊ. Coletar "marcado/aberto" e não mostrar deixaria a
+    // informação morta no snapshot: o agente continuaria clicando no que já está marcado.
+    if (el.state) extra.push(`(${el.state})`);
     elLines.push(`[${el.id}]${el.inView ? '' : '~'} ${kind} "${desc}"${extra.length ? ' ' + extra.join(' ') : ''}`);
   }
 

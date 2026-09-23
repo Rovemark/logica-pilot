@@ -16,8 +16,32 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // pisca o clique — movida SÓ pelas ações do agente, nunca pelo mouse físico do usuário.
 let _fb = null;
 function fb() { if (_fb === null) { try { _fb = require('./feedback'); } catch { _fb = {}; } } return _fb; }
+// A seta da IA fica LIGADA por padrão. Antes, `showCursor` fazia
+// `if (window.__lp_showCursor) …`: sem o overlay injetado a chamada não fazia nada, EM
+// SILÊNCIO, e a seta só aparecia para quem soubesse chamar a ferramenta `feedback` antes.
+// Ninguém sabia. Agora a primeira ação da página injeta o overlay sozinha.
+//
+// A injeção é por PÁGINA e some na navegação (o overlay vive no documento), por isso a
+// verificação é a cada ponto e não uma vez por sessão: depois de um goto o overlay não existe
+// mais, e sem reinjetar a seta sumiria no meio da tarefa.
+// Desligar: LOGICA_PILOT_SEM_CURSOR=1 (render em lote, onde ninguém está olhando).
+async function garantirOverlay(page) {
+  if (process.env.LOGICA_PILOT_SEM_CURSOR === '1') return false;
+  const f = fb();
+  if (!f.injectFeedback) return false;
+  try {
+    const jaTem = await page.eval('typeof window.__lp_showCursor === "function"').catch(() => false);
+    if (jaTem) return true;
+    // keystrokes ligado: ver a seta clicar e o campo preencher sozinho sem nada mostrando o que
+    // foi digitado deixa metade do trabalho invisível.
+    await f.injectFeedback(page, { cursor: true, ripples: true, keystrokes: true, toast: true, glow: true });
+    return true;
+  } catch { return false; }
+}
+
 async function signalPoint(page, x, y, { ripple = true, glide = 140 } = {}) {
   const f = fb();
+  await garantirOverlay(page);
   try { if (f.showCursor) await f.showCursor(page, x, y); } catch {}
   if (glide) await sleep(glide);           // deixa a seta deslizar (transição CSS) antes do clique
   if (ripple) { try { if (f.showRipple) await f.showRipple(page, x, y); } catch {} }
@@ -122,6 +146,9 @@ async function type(page, id, text, submit = false) {
       `return {mac:/Mac/i.test((navigator.platform||'')+' '+(navigator.userAgent||''))};})()`,
   );
   if (!info) return `index [${id}] not found for typing`;
+  // Digitar também precisa do overlay: sem ele o texto aparecia no campo sem nada indicando
+  // que foi a IA que digitou.
+  await garantirOverlay(page);
   try { const f = fb(); if (f.showKeystroke && text) await f.showKeystroke(page, String(text)); } catch {}
 
   const fieldLen = () => page.eval(

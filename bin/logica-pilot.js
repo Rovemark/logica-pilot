@@ -118,7 +118,12 @@ function cmdBrowser(args) {
   // (without app APIs). We clear it so it launches as a browser.
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(electronBin, [appMain, ...(args.url ? ['--url', args.url] : [])], { stdio: 'inherit', env });
+  const passthru = [];
+  if (args.url) passthru.push('--url', args.url);
+  if (args['task-file']) passthru.push('--task-file', args['task-file']);
+  if (args.task) passthru.push('--task', args.task);
+  if (args['task-url']) passthru.push('--task-url', args['task-url']);
+  const child = spawn(electronBin, [appMain, ...passthru], { stdio: 'inherit', env });
   child.on('exit', (code) => process.exit(code || 0));
 }
 

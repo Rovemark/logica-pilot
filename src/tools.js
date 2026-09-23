@@ -56,6 +56,8 @@ const video = require('./video');
 const proxyPool = require('./proxy-pool');
 const persist = require('./persist');
 const httpEngine = require('./http-engine');
+const reader = require('./reader');
+const feeds = require('./feeds');
 const requestQueue = require('./request-queue');
 const kvs = require('./kvs');
 const fingerprintLib = require('./fingerprint');
@@ -147,6 +149,17 @@ async function ensureUrl(page, a) {
 // at a fraction of the cost. engine:'browser' (default) navigates normally. Returns
 // the http response meta (or null for the browser path) so callers can read status.
 async function ensureContent(page, a) {
+  // Degrau mais barato: o leitor devolve a página já em texto, sem subir navegador. Só serve
+  // para LER; qualquer coisa que precise de sessão ou clique tem que descer para o browser.
+  if (a && a.engine === 'reader' && a.url) {
+    const r = await reader.fetchReader(a.url, { markdown: a.markdown !== false });
+    if (!r.ok) {
+      // Falhar calado aqui devolveria a página anterior como se fosse esta.
+      throw new Error(`leitor: ${r.error}`);
+    }
+    await httpEngine.loadHtml(page, `<html><head><title>${String(r.title || '').replace(/</g, '&lt;')}</title></head><body><pre>${String(r.text).replace(/</g, '&lt;')}</pre></body></html>`, r.url);
+    return { engine: 'reader', status: r.status, finalUrl: r.url, chars: r.chars };
+  }
   if (a && a.engine === 'http' && a.url) {
     const r = await httpEngine.httpFetch(a.url, { proxy: a.proxy, cookies: a.cookies, fingerprint: a.fingerprint });
     await httpEngine.loadHtml(page, r.body, r.url);
@@ -232,7 +245,7 @@ const TOOLS = [
         offset: { type: 'number', description: 'start position for pagination' },
         maxAge: { type: 'number', description: 'ms: reuse a cached read this fresh (0 = always live)' },
         redactPII: { type: 'boolean', description: 'mask emails, phones, CPF/CNPJ, cards (Luhn), IPs — deterministic, local' },
-        engine: { type: 'string', enum: ['browser', 'http', 'adaptive'], description: 'browser (default, full CDP) · http (raw fetch, 10-50x cheaper, no JS) · adaptive (try http, auto-escalate to browser on JS-shell/anti-bot; caches per-host verdict).' },
+        engine: { type: 'string', enum: ['browser', 'http', 'adaptive', 'reader'], description: 'browser (default, full CDP) · http (raw fetch, 10-50x cheaper, no JS) · adaptive (try http, auto-escalate to browser on JS-shell/anti-bot; caches per-host verdict) · reader (cheapest: r.jina.ai returns clean text, no browser, read-only).' },
         proxy: { type: 'string', description: 'http/adaptive engine — user:pass@host:port' },
       },
     },
@@ -830,11 +843,43 @@ const TOOLS = [
     },
   },
   {
+    name: 'rss', group: 'multi-agent', pageless: true, primary: 'url',
+    description: 'Read an RSS/Atom feed as structured items (title, url, published, author, summary). Given a SITE url instead, finds the feed the page advertises. No browser needed.',
+    input: {
+      properties: {
+        url: { type: 'string', description: 'feed URL, or a site URL to discover its feed' },
+        limit: { type: 'number', description: 'max items (default 20)' },
+      },
+      required: ['url'],
+    },
+    run: async (a) => {
+      const r = await feeds.lerFeed(a.url, { limit: Math.max(1, Math.min(200, Number(a.limit) || 20)) });
+      if (!r.ok) return { json: r, error: r.error };
+      return { json: r };
+    },
+  },
+  {
+    name: 'reader', group: 'perception', pageless: true, primary: 'url',
+    description: 'Cheapest read: returns the page as clean text/Markdown with no browser at all. Good for articles, docs and public pages. Cannot log in or click — use read for those.',
+    input: {
+      properties: {
+        url: { type: 'string' },
+        markdown: { type: 'boolean', description: 'Markdown instead of plain text (default true)' },
+      },
+      required: ['url'],
+    },
+    run: async (a) => {
+      const r = await reader.fetchReader(a.url, { markdown: a.markdown !== false });
+      if (!r.ok) return { json: r, error: r.error };
+      return { json: r };
+    },
+  },
+  {
     name: 'search', group: 'multi-agent', pageless: true, primary: 'query',
-    description: 'Search the web and return result URLs (title + url). content:true also READS the top results in parallel and attaches their text — search with full content in one call.',
-    input: { properties: { query: { type: 'string' }, limit: { type: 'number' }, content: { type: 'boolean', description: 'fetch and attach the text of each result' } }, required: ['query'] },
+    description: 'Search the web and return result URLs (title + url). semantic:true searches by MEANING (Exa) instead of keywords — better for open questions; needs EXA_API_KEY and fails loudly without it. content:true also READS the top results in parallel and attaches their text.',
+    input: { properties: { query: { type: 'string' }, limit: { type: 'number' }, semantic: { type: 'boolean', description: 'search by meaning (Exa) instead of keyword match' }, content: { type: 'boolean', description: 'fetch and attach the text of each result' } }, required: ['query'] },
     run: async (a, ctx) => {
-      const results = await search(a.query, { limit: a.limit });
+      const results = await search(a.query, { limit: a.limit, semantic: a.semantic });
       if (!a.content || !results.length) return { json: results };
       const top = results.slice(0, Math.min(results.length, 6));
       const r = await fanout({ urls: top.map((x) => x.url), mode: 'read', concurrency: 4, onEvent: ctx.onEvent });
@@ -1008,14 +1053,19 @@ const TOOLS = [
   },
   {
     name: 'tabs', group: 'browser', primary: 'action',
-    description: 'Multi-tab & iframe management (action: list|new|switch|close|frames). Drive multiple tabs in the same browser.',
-    input: { properties: { action: { type: 'string', enum: ['list', 'new', 'switch', 'close', 'frames'] }, url: { type: 'string' }, targetId: { type: 'string' } } },
+    description: 'Multi-tab & iframe management (action: list|new|switch|close|frames). Drive multiple tabs in the same browser. On new, agente:true marks the tab as AI work — Logica Pilot puts it in the "🤖 Agente" tab group so the user can tell your tabs from theirs.',
+    input: { properties: { action: { type: 'string', enum: ['list', 'new', 'switch', 'close', 'frames'] }, url: { type: 'string' }, targetId: { type: 'string' }, agente: { type: 'boolean', description: 'mark the new tab as the AI working tab (Logica Pilot groups it under "🤖 Agente")' } } },
     run: async (a, ctx) => {
       const conn = ctx.page && ctx.page._c;
       const browser = ctx.pilot && ctx.pilot.browser;
       if (a.action === 'frames') return { json: await tabs.listFrames(ctx.page) };
       if (a.action === 'list') return { json: await tabs.listTabs(conn) };
-      if (a.action === 'new') { const p = await tabs.newTab(browser, a.url); return { json: { targetId: p && p.targetId, url: a.url || 'about:blank' } }; }
+      if (a.action === 'new') {
+        // `agente:true` faz a aba nascer marcada: no Logica Pilot ela cai no grupo "🤖 Agente",
+        // separada das abas da pessoa. Em outro Chromium a marca é ignorada.
+        const p = await tabs.newTab(browser, a.url, { agente: !!a.agente });
+        return { json: { targetId: p && p.targetId, url: a.url || 'about:blank', agente: !!a.agente } };
+      }
       if (a.action === 'switch') { await tabs.switchTab(conn, a.targetId); return { json: { switched: a.targetId } }; }
       if (a.action === 'close') { await tabs.closeTab(conn, a.targetId); return { json: { closed: a.targetId } }; }
       return { json: { error: 'unknown action' } };
@@ -1134,7 +1184,7 @@ const TOOLS = [
   {
     name: 'vectorize', group: 'http', primary: 'dataset', pageless: true,
     description: 'Scrape → RAG bridge (Apify vector-DB integrations): chunk + embed + upsert a dataset into a vector DB, INCREMENTALLY (recurring crawls only re-embed changed rows). embed: local (offline/private, default) | openai | voyage. target: qdrant | chroma | pinecone | dry (plan only). Zero-dep recursive chunker + sha256 delta.',
-    input: { properties: { dataset: { type: 'string' }, embed: { type: 'string', enum: ['local', 'openai', 'voyage'] }, target: { type: 'string', enum: ['dry', 'qdrant', 'chroma', 'pinecone'] }, url: { type: 'string' }, collection: { type: 'string' }, apiKey: { type: 'string' }, model: { type: 'string' }, dataFields: { type: 'array', items: { type: 'string' } }, metadataFields: { type: 'array', items: { type: 'string' } }, chunkSize: { type: 'number' }, overlap: { type: 'number' }, dim: { type: 'number' } }, required: ['dataset'] },
+    input: { properties: { dataset: { type: 'string' }, embed: { type: 'string', enum: ['local', 'openai'] }, target: { type: 'string', enum: ['dry', 'qdrant', 'chroma', 'pinecone'] }, url: { type: 'string' }, collection: { type: 'string' }, apiKey: { type: 'string' }, model: { type: 'string' }, dataFields: { type: 'array', items: { type: 'string' } }, metadataFields: { type: 'array', items: { type: 'string' } }, chunkSize: { type: 'number' }, overlap: { type: 'number' }, dim: { type: 'number' } }, required: ['dataset'] },
     run: async (a) => ({ json: await vectorizeLib.vectorize({ dataset: a.dataset, embed: a.embed || 'local', target: a.target || 'dry', url: a.url, collection: a.collection, apiKey: a.apiKey, model: a.model, dataFields: a.dataFields, metadataFields: a.metadataFields, chunkSize: a.chunkSize != null ? Number(a.chunkSize) : 1000, overlap: a.overlap != null ? Number(a.overlap) : 150, dim: a.dim != null ? Number(a.dim) : 256 }) }),
   },
   {

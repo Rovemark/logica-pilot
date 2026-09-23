@@ -32,8 +32,8 @@ async function listTabs(conn) {
  * @param {object} browser - Browser instance
  * @param {string} [url] - URL to navigate to
  */
-async function newTab(browser, url) {
-  const page = await browser.newPage();
+async function newTab(browser, url, { agente = false } = {}) {
+  const page = await browser.newPage({ agente });
   if (url) await page.goto(url);
   return page;
 }

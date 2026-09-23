@@ -27,7 +27,11 @@ In the element list, "[n]" is the index you act on; a "~" right after it means t
 
 RULES:
 - Act by intent using the ELEMENT'S INDEX — never invent indices that aren't on the list.
+- If you SEE a button/target in the screenshot but it has NO index in the list (common inside canvases, flow-builders, custom widgets), use "click_at" with the x,y pixel coordinates you read off the screenshot. Do NOT keep hunting for an index that isn't there — click_at the coordinate instead.
 - If the target is not visible, use "scroll" to search for it before giving up.
+- To REPLACE the text of a field, just use "type" on it — it auto-clears (select-all + delete) and replaces the whole content. Don't click a field many times or append; one focus + "type" is enough. If the tool result warns the text didn't replace, clear it and retry.
+- If a side panel / editor is open and covering the canvas, CLOSE it first (press Escape, or click an empty canvas area) before clicking nodes behind it.
+- If "type" keeps APPENDING instead of replacing (some rich editors — Lexical/Draft/Slate — resist clearing and pile text up), stop retrying: DELETE the whole block/node and recreate it fresh — a new empty field accepts text cleanly.
 - To search/find: use "type" in the right field with submit=true (sends Enter).
 - After navigating/clicking, the next page read already reflects the result — observe before acting again.
 - Do not repeat the same action if it clearly didn't work; try a different approach.
@@ -58,6 +62,32 @@ const TOOLS = [
         reason: { type: 'string' },
       },
       required: ['index'],
+    },
+  },
+  {
+    name: 'click_at',
+    description: 'Click at pixel coordinates (x,y) in the screenshot you see. Use ONLY when the target is visible in the screenshot but has NO index in the element list (e.g. buttons/nodes inside a canvas or custom widget). Read the x,y straight off the image.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        x: { type: 'integer', description: 'Horizontal pixel in the screenshot.' },
+        y: { type: 'integer', description: 'Vertical pixel in the screenshot.' },
+        reason: { type: 'string' },
+      },
+      required: ['x', 'y'],
+    },
+  },
+  {
+    name: 'click_text',
+    description: 'Click an element by its VISIBLE TEXT (case-insensitive, matches the smallest element containing it). Prefer this over click_at for buttons, cards, options and chip "×" whose coordinates/indices are unreliable — e.g. a "Todas as publicações" card or a keyword chip. Give the exact label you read on screen.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Visible text of the target (or a distinctive substring).' },
+        exact: { type: 'boolean', description: 'Require an exact full-text match instead of contains.' },
+        reason: { type: 'string' },
+      },
+      required: ['text'],
     },
   },
   {
@@ -226,6 +256,8 @@ async function execAction(page, name, input) {
   switch (name) {
     case 'navigate': return actions.navigate(page, input.url);
     case 'click': return actions.click(page, input.index);
+    case 'click_at': return actions.clickAt(page, input.x, input.y);
+    case 'click_text': return actions.clickText(page, input.text, { exact: !!input.exact });
     case 'type': return actions.type(page, input.index, input.text, !!input.submit);
     case 'press': return actions.pressKey(page, input.key);
     case 'scroll': return actions.scroll(page, input.direction, input.amount || 600);
@@ -242,6 +274,12 @@ async function execAction(page, name, input) {
  * @param {object} opts  { maxSteps, vision, model, startUrl, onStep }
  * @returns {Promise<{success:boolean, result:string, steps:number, trace:Array}>}
  */
+// Lightweight signature of the perception: if identical between steps, the screen didn't change (no-op action).
+function _sig(fmt) {
+  let h = 0; for (let i = 0; i < fmt.length; i++) h = ((h * 31 + fmt.charCodeAt(i)) >>> 0);
+  return h;
+}
+
 async function run(page, objective, opts = {}) {
   const maxSteps = opts.maxSteps || 25;
   const visionMode = !!opts.vision;
@@ -265,6 +303,7 @@ async function run(page, objective, opts = {}) {
   const history = [];
   const trace = [];
   let pendingToolResult = null;
+  let prevSig = null, stale = 0, lastAction = null;
 
   for (let step = 1; step <= maxSteps; step++) {
     if (typeof opts.shouldStop === 'function' && opts.shouldStop()) {
@@ -280,7 +319,16 @@ async function run(page, objective, opts = {}) {
       step === 1
         ? `OBJECTIVE: ${objective}\n\n--- STEP 1/${maxSteps} ---\n`
         : `--- STEP ${step}/${maxSteps} ---\n`;
-    content.push({ type: 'text', text: header + perception.format(snap) });
+    const fmt = perception.format(snap);
+    content.push({ type: 'text', text: header + fmt });
+
+    // Loop detection: if the screen didn't change since the last action, it had no effect.
+    const sig = _sig(fmt);
+    if (prevSig !== null && sig === prevSig) stale++; else stale = 0;
+    prevSig = sig;
+    if (stale >= 1 && lastAction) {
+      content.push({ type: 'text', text: `⚠️ The screen did NOT change since your last action (${lastAction}) — it had NO effect. Do NOT repeat the same action. Re-read the WHOLE screen and try something DIFFERENT: scroll until the element appears, close any popup/modal (press Escape or click OUTSIDE it), or pick a DIFFERENT element (another index).${stale >= 2 ? ' You have been stuck for several steps — change strategy COMPLETELY; stop insisting on the same path.' : ''}` });
+    }
 
     if (useVision) {
       await perception.mark(page);
@@ -345,6 +393,7 @@ async function run(page, objective, opts = {}) {
 
     onStep({ step, action: tool.name, input: tool.input, result, usage: resp.usage });
     trace.push({ step, action: tool.name, input: tool.input, result });
+    lastAction = `${tool.name}[${tool.input.index ?? tool.input.direction ?? tool.input.key ?? tool.input.url ?? ''}]`;
 
     pendingToolResult = {
       type: 'tool_result',
