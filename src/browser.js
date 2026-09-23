@@ -106,12 +106,37 @@ function resolveBrowserBinary() {
   const plat = process.platform;
   const candidates = [];
 
+  // Automação não deve acordar o perfil pessoal do cliente. No macOS, abrir o Google Chrome
+  // instalado como primeira opção pode acionar o Keychain do perfil real ("Chaves não
+  // encontradas") mesmo quando a aba é headless. Preferimos o Chromium isolado já distribuído
+  // pelo Playwright; Chrome/Edge pessoais ficam apenas como fallback. O perfil continua sendo
+  // temporário e os flags abaixo usam um Keychain simulado, portanto cookies e senhas do cliente
+  // nunca entram neste processo.
+  const pwRoots = {
+    darwin: path.join(os.homedir(), 'Library/Caches/ms-playwright'),
+    win32: path.join(os.homedir(), 'AppData/Local/ms-playwright'),
+    linux: path.join(os.homedir(), '.cache/ms-playwright'),
+  };
+  const playwrightRoot = pwRoots[plat] || pwRoots.linux;
+  const playwrightNames = ['Chromium', 'chrome', 'chrome-headless-shell', 'headless_shell'];
+  const playwrightHits = walkFind(playwrightRoot, playwrightNames, 5).filter((p) => {
+    try {
+      fs.accessSync(p, fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  playwrightHits.sort((a, b) => (a.includes('headless') ? 1 : 0) - (b.includes('headless') ? 1 : 0));
+  if (playwrightHits[0]) return playwrightHits[0];
+
   if (plat === 'darwin') {
     candidates.push(
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
       '/Applications/Chromium.app/Contents/MacOS/Chromium',
       '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
       '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
     );
   } else if (plat === 'win32') {
@@ -139,26 +164,6 @@ function resolveBrowserBinary() {
       if (fs.existsSync(c)) return c;
     } catch {}
   }
-
-  // Fallback: reuse binary already downloaded by Playwright (binary only, not the library)
-  const pwRoots = {
-    darwin: path.join(os.homedir(), 'Library/Caches/ms-playwright'),
-    win32: path.join(os.homedir(), 'AppData/Local/ms-playwright'),
-    linux: path.join(os.homedir(), '.cache/ms-playwright'),
-  };
-  const root = pwRoots[plat] || pwRoots.linux;
-  const names = ['Chromium', 'chrome', 'chrome-headless-shell', 'headless_shell'];
-  const hits = walkFind(root, names, 5).filter((p) => {
-    try {
-      fs.accessSync(p, fs.constants.X_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-  // prefer full browser (headful-capable) over headless-shell
-  hits.sort((a, b) => (a.includes('headless') ? 1 : 0) - (b.includes('headless') ? 1 : 0));
-  if (hits[0]) return hits[0];
 
   return null;
 }
@@ -382,8 +387,17 @@ class Browser {
     return browser;
   }
 
-  async newPage() {
-    const { targetId } = await this._conn.send('Target.createTarget', { url: 'about:blank' });
+  /**
+   * Abre uma aba nova.
+   * @param {object} [opts] { agente: true } marca a aba como trabalho da IA. No Logica Pilot
+   *   (o fork), o navegador vê o marcador e joga a aba no grupo "🤖 Agente"; em qualquer outro
+   *   Chromium o fragmento é inofensivo e a aba abre normal.
+   */
+  async newPage({ agente = false } = {}) {
+    // O marcador vai no FRAGMENTO da URL inicial: ele nasce com a aba, sobrevive à navegação
+    // seguinte no histórico de entrada, e não altera o endereço que o site recebe.
+    const inicial = agente ? 'about:blank#lp-agente' : 'about:blank';
+    const { targetId } = await this._conn.send('Target.createTarget', { url: inicial });
     const { sessionId } = await this._conn.send('Target.attachToTarget', {
       targetId,
       flatten: true,
