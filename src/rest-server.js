@@ -64,10 +64,46 @@ function cefDebugPort() {
   const fs = require('fs');
   const os = require('os');
   const path = require('path');
-  const f = path.join(os.homedir(), 'Library', 'Application Support', 'Logica Pilot', 'DevToolsActivePort');
+  // O fork nos entrega o caminho exato por env (StartLogicaMotor, no C++) —
+  // é o único que acerta quando o browser roda com --user-data-dir próprio.
+  // O caminho fixo fica de reserva pra era CEF e pra execução avulsa do motor.
+  const f = process.env.LOGICA_PILOT_CDP_PORTFILE ||
+      path.join(os.homedir(), 'Library', 'Application Support', 'Logica Pilot',
+                'DevToolsActivePort');
   const port = parseInt(String(fs.readFileSync(f, 'utf8')).split('\n')[0].trim(), 10);
   if (!Number.isInteger(port) || port <= 0) throw new Error('invalid DevToolsActivePort');
   return port;
+}
+
+// Qual aba o usuário está OLHANDO. O painel do Copiloto é ele próprio uma
+// página, então perguntar "qual é a minha URL" de dentro dele devolve o próprio
+// painel — foi o que fez o Copiloto responder "não consigo ler esta aba".
+// A aba ativa é a única `page` http(s) com visibilityState 'visible'.
+async function abaAtiva() {
+  const { CDPWebSocket, httpGetJSON } = require('./cdp-ws.js');
+  const port = cefDebugPort();
+  const alvos = await httpGetJSON(`http://127.0.0.1:${port}/json/list`);
+  const paginas = (alvos || []).filter(
+      (t) => t.type === 'page' && /^https?:/i.test(t.url || ''));
+  for (const t of paginas) {
+    let cli = null;
+    try {
+      cli = await CDPWebSocket.connect(t.webSocketDebuggerUrl);
+      const r = await cli.send('Runtime.evaluate', {
+        expression: 'document.visibilityState', returnByValue: true });
+      if (r && r.result && r.result.value === 'visible') {
+        return { url: t.url, title: t.title || '' };
+      }
+    } catch {
+      // aba morrendo ou sem debugger: segue pras outras
+    } finally {
+      try { cli && cli.close(); } catch {}
+    }
+  }
+  // Nenhuma visível (janela minimizada, só páginas internas abertas): devolve a
+  // primeira http(s) que existir, e nada se o navegador só tem página interna.
+  return paginas.length ? { url: paginas[0].url, title: paginas[0].title || '' }
+                        : null;
 }
 
 // The "Agente" tab: attach to the Logica Pilot window, open a NEW visible tab and
@@ -212,6 +248,17 @@ function makeServer({ apiKey, model } = {}) {
         return send(res, 200, { ok: !!run, stopped: body.runId });
       }
 
+      // GET /v1/tabs/active — qual aba o usuário está olhando. Mesmo dado que a
+      // op `activetab` da ponte WS entrega ao painel; aqui pro CLI e pra poder
+      // conferir de fora que o motor enxerga o navegador.
+      if (req.method === 'GET' && u.pathname === '/v1/tabs/active') {
+        try {
+          return send(res, 200, { ok: true, tab: await abaAtiva() });
+        } catch (e) {
+          return send(res, 200, { ok: false, error: e.message });
+        }
+      }
+
       // GET /v1/llm/status — does the brain have a real user key? (the AI panel asks this)
       if (req.method === 'GET' && u.pathname === '/v1/llm/status') {
         // "pronto" = tem chave do usuário OU aponta pro Router (assinatura) via env.
@@ -299,6 +346,12 @@ function serve({ port = 8080, apiKey = process.env.LOGICA_PILOT_API_KEY || null,
       runAgent: (o) => runAgentOnCef(o),
       toolCount: TOOLS.length,
       model,
+      abaAtiva,
+      llmStatus: () => {
+        const router = !!process.env.LOGICA_PILOT_LLM_URL;
+        return { hasKey: llm.hasUserKey(), router,
+                 ready: llm.hasUserKey() || router, model: llm.DEFAULT_MODEL };
+      },
     });
   } catch (e) {
     if (process.env.LOGICA_PILOT_DEBUG) console.error('ws-bridge:', e.message);

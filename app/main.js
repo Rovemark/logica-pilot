@@ -1619,7 +1619,45 @@ app.whenReady().then(() => {
     broadcast('theme:native-updated', { shouldUseDarkColors: nativeTheme.shouldUseDarkColors });
   });
 
-  createWindow();
+  // ── --task mode (CLI-driven): the AI drives the autonomous agent on the target tab, no UI.
+  // Grabs the webContents that navigates to the target URL (works for <webview> and WebContentsView).
+  const _taskFile = argValue('--task-file');
+  const CLI_TASK = _taskFile ? (() => { try { return require('fs').readFileSync(_taskFile, 'utf8').trim(); } catch { return null; } })() : argValue('--task');
+  const CLI_MATCH = argValue('--task-url') || argValue('--url') || '';
+  let _taskWc = null;
+  if (CLI_TASK) {
+    const host = (() => { try { return new URL(CLI_MATCH).host; } catch { return CLI_MATCH; } })();
+    app.on('web-contents-created', (_e, wc) => {
+      const grab = () => { try { const u = wc.getURL() || ''; if (host && u.includes(host)) _taskWc = wc; } catch {} };
+      wc.on('did-navigate', grab); wc.on('did-navigate-in-page', grab); wc.on('did-finish-load', grab);
+    });
+  }
+
+  createWindow(CLI_MATCH ? { initialUrl: CLI_MATCH } : {});
+
+  if (CLI_TASK) {
+    (async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      for (let i = 0; i < 180 && !(_taskWc && !_taskWc.isDestroyed() && !_taskWc.isLoading()); i++) await sleep(1000);
+      if (!_taskWc || _taskWc.isDestroyed()) { console.error('[TASK] target tab not found (host=%s)', CLI_MATCH); return; }
+      await sleep(2500); // let the SPA settle
+      console.log('[TASK] agent starting at', _taskWc.getURL());
+      const SHOTS = process.env.LOGICA_PILOT_SHOTS; // dir to save a screenshot per step (external visibility)
+      if (SHOTS) { try { fs.mkdirSync(SHOTS, { recursive: true }); } catch {} }
+      let _sn = 0;
+      try {
+        const page = new ElectronPage(_taskWc);
+        const res = await agent.run(page, CLI_TASK, {
+          vision: true, maxSteps: Number(process.env.LOGICA_PILOT_MAXSTEPS || 50), language: 'Brazilian Portuguese',
+          onStep: (s) => {
+            try { console.log('[STEP]', JSON.stringify({ a: s.action, i: typeof s.input === 'string' ? s.input.slice(0, 140) : s.input, r: s.result && String(s.result).slice(0, 140) })); } catch {}
+            if (SHOTS) { const n = _sn++; actions.screenshot(page).then((b) => fs.writeFileSync(`${SHOTS}/step-${String(n).padStart(2, '0')}.jpg`, Buffer.from(b, 'base64'))).catch(() => {}); }
+          },
+        });
+        console.log('[TASK:DONE]', JSON.stringify(res).slice(0, 1200));
+      } catch (e) { console.error('[TASK:ERR]', e.message); }
+    })();
+  }
 });
 
 /** Active window for menu (focused) or first available.

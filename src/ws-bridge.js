@@ -107,6 +107,25 @@ function attachWsBridge(server, deps = {}) {
         try {
           if (req_.op === 'health') {
             send({ id, ok: true, data: { ok: true, tools: deps.toolCount || 0, bridge: 'ws' } });
+          } else if (req_.op === 'conta') {
+            // Conta Rovemark. A página `chrome://conta` não alcança a
+            // plataforma por conta própria — quem fala com ela é o motor.
+            const conta = require('./rovemark-conta.js');
+            const acao = req_.acao || 'status';
+            const r = acao === 'entrar' ? await conta.entrar(req_.dados || {})
+                    : acao === 'sair'   ? await conta.sair()
+                    :                     await conta.status();
+            send({ id, ok: true, data: r });
+          } else if (req_.op === 'activetab') {
+            // O painel não consegue saber qual aba o usuário olha — ele é uma
+            // página como as outras. Quem enxerga o navegador inteiro é o motor.
+            const t = deps.abaAtiva ? await deps.abaAtiva() : null;
+            send({ id, ok: true, data: t });
+          } else if (req_.op === 'llmstatus') {
+            // Espelha o /v1/llm/status do REST. O painel é WebUI e não pode
+            // falar http:// — sem esta op ele não descobre que o Router está
+            // ativo e mostra "falta chave" mesmo com a assinatura funcionando.
+            send({ id, ok: true, data: deps.llmStatus ? deps.llmStatus() : { ready: false } });
           } else if (req_.op === 'tool') {
             const r = await deps.runTool(req_.name, req_.args || {}, { model: deps.model });
             if (r && r.error) send({ id, ok: false, error: r.error });
